@@ -794,6 +794,22 @@ export default function AdminTransactionsPage() {
                                                                     <RefreshCw className={cn("w-4 h-4", syncingId === tx.id && "animate-spin")} />
                                                                 </Button>
                                                             )}
+                                                            {tx.status === 'failed' && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg mr-1.5"
+                                                                    onClick={() => handleReprocess(tx.id)}
+                                                                    disabled={reprocessingId === tx.id}
+                                                                    title="Reprocess Order"
+                                                                >
+                                                                    {reprocessingId === tx.id ? (
+                                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                                    ) : (
+                                                                        <RotateCcw className="w-4 h-4" />
+                                                                    )}
+                                                                </Button>
+                                                            )}
                                                             <DropdownMenu>
                                                                 <DropdownMenuTrigger asChild>
                                                                     <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-accent rounded-lg">
@@ -826,6 +842,7 @@ export default function AdminTransactionsPage() {
                                                             </DropdownMenu>
                                                         </div>
                                                     </td>
+
                                                 )}
                                             </tr>
                                         );

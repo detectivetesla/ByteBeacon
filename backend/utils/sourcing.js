@@ -89,8 +89,9 @@ const placeDataOrderUnified = async ({ network, dataAmount, recipientPhone, tran
         if (!fulfillment.apiResponse) {
             fulfillment.apiResponse = {};
         }
-        // Explicitly inject the provider name to the apiResponse metadata
+        // Explicitly inject the provider name and template to the apiResponse metadata
         fulfillment.apiResponse.provider = provider.slug;
+        fulfillment.apiResponse.template = providerTemplate;
     }
     return fulfillment;
 };
@@ -148,12 +149,13 @@ const extractProviderIdUnified = (apiResponse, fallbackId, targetPhone, provider
         }
     } catch (e) {}
 
-    // Find provider metadata in response
+    // Find provider metadata and template in response
     const providerSlug = providerName || data?.provider || (data?.portal02_webhook ? 'portal02' : (data?.datahouse_webhook ? 'datahouse' : null));
+    const providerTemplate = data?.template || (providerSlug === 'portal02' ? 'portal02' : 'datahouse');
 
-    if (providerSlug === 'portal02') {
+    if (providerTemplate === 'portal02') {
         return portal02.extractProviderId(apiResponse, fallbackId, targetPhone);
-    } else if (providerSlug === 'datahouse') {
+    } else if (providerTemplate === 'datahouse') {
         return datahouse.extractProviderId(apiResponse, fallbackId, targetPhone);
     } else {
         // Fallback: try both extractors
@@ -170,3 +172,4 @@ module.exports = {
     checkBalance: checkBalanceUnified,
     extractProviderId: extractProviderIdUnified
 };
+
