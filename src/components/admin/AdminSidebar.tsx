@@ -1,0 +1,211 @@
+import { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+    LayoutDashboard,
+    BarChart3,
+    Users,
+    ShoppingCart,
+    Database,
+    UserCog,
+    Receipt,
+    Percent,
+    Wifi,
+    Settings,
+    Code,
+    Mail,
+    LogOut,
+    ChevronDown,
+    ChevronLeft,
+    X,
+    Activity
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { PremiumIcon, PremiumIconVariant } from '../ui/PremiumIcon';
+
+interface AdminSidebarProps {
+    isCollapsed: boolean;
+    adminName: string;
+    onClose?: () => void;
+    isMobile?: boolean;
+}
+
+interface NavItem {
+    icon: React.ElementType;
+    label: string;
+    href: string;
+    variant: PremiumIconVariant;
+}
+
+interface NavSection {
+    title: string;
+    items: NavItem[];
+}
+
+const navSections: NavSection[] = [
+    {
+        title: 'GENERAL',
+        items: [
+            { icon: LayoutDashboard, label: 'Dashboard', href: '/admin', variant: 'violet' },
+            { icon: BarChart3, label: 'Analytics', href: '/admin/analytics', variant: 'emerald' },
+        ]
+    },
+    {
+        title: 'MANAGEMENT',
+        items: [
+            { icon: Users, label: 'Users', href: '/admin/users', variant: 'amber' },
+            { icon: ShoppingCart, label: 'Orders', href: '/admin/orders', variant: 'rose' },
+            { icon: Database, label: 'Data Plans', href: '/admin/data-plans', variant: 'blue' },
+            { icon: UserCog, label: 'Resellers/Agents', href: '/admin/agents', variant: 'indigo' },
+        ]
+    },
+    {
+        title: 'FINANCE',
+        items: [
+            { icon: Receipt, label: 'Transactions', href: '/admin/transactions', variant: 'cyan' },
+            { icon: Percent, label: 'Discounts', href: '/admin/discounts', variant: 'amber' },
+        ]
+    },
+    {
+        title: 'SYSTEM',
+        items: [
+            { icon: Activity, label: 'Activity Logs', href: '/admin/activity-logs', variant: 'rose' },
+            { icon: Wifi, label: 'Networks', href: '/admin/networks', variant: 'blue' },
+            { icon: Settings, label: 'Services', href: '/admin/services', variant: 'violet' },
+            { icon: Code, label: 'API Settings', href: '/admin/api', variant: 'emerald' },
+        ]
+    },
+    {
+        title: 'COMMUNICATION',
+        items: [
+            { icon: Mail, label: 'Send Email', href: '/admin/email', variant: 'indigo' },
+            { icon: Settings, label: 'Settings', href: '/admin/settings', variant: 'amber' },
+        ]
+    }
+];
+
+export default function AdminSidebar({ isCollapsed, adminName, onClose, isMobile }: AdminSidebarProps) {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { signOut } = useAuth();
+
+    const handleSignOut = async () => {
+        await signOut();
+        navigate('/');
+    };
+
+    const isActive = (href: string) => {
+        if (href === '/admin') {
+            return location.pathname === '/admin';
+        }
+        return location.pathname.startsWith(href);
+    };
+
+    const handleNavClick = () => {
+        if (isMobile && onClose) {
+            onClose();
+        }
+    };
+
+    return (
+        <aside
+            className={cn(
+                "fixed left-0 top-0 z-40 h-screen bg-background border-r border-border",
+                "transition-all duration-300 flex flex-col",
+                isCollapsed ? "w-16" : "w-64"
+            )}
+        >
+            {/* Logo Header */}
+            <div className="flex items-center justify-between p-4 border-b border-border">
+                <div className="flex items-center gap-2">
+                    <img
+                        src="/logo.png"
+                        alt="ByteBeacon"
+                        className={cn(
+                            "object-contain transition-all duration-300",
+                            isCollapsed ? "h-9 w-9" : "h-10 w-auto"
+                        )}
+                    />
+                    {!isCollapsed && (
+                        <p className="text-xs text-muted-foreground">Super Admin</p>
+                    )}
+                </div>
+                {!isCollapsed && (
+                    <button className="text-muted-foreground hover:text-foreground transition-colors">
+                        <ChevronLeft className="w-5 h-5" />
+                    </button>
+                )}
+                {isMobile && onClose && (
+                    <button onClick={onClose} className="p-1 rounded hover:bg-accent transition-colors lg:hidden">
+                        <X className="w-5 h-5 text-muted-foreground" />
+                    </button>
+                )}
+            </div>
+
+            {/* Navigation */}
+            <nav className="flex-1 overflow-y-auto py-4 px-2">
+                {navSections.map((section) => (
+                    <div key={section.title} className="mb-4">
+                        {!isCollapsed && (
+                            <p className="px-3 mb-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-wider">
+                                {section.title}
+                            </p>
+                        )}
+                        <div className="space-y-1">
+                            {section.items.map((item) => (
+                                <Link
+                                    key={item.href}
+                                    to={item.href}
+                                    onClick={handleNavClick}
+                                    className={cn(
+                                        "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium group/item",
+                                        "transition-all duration-300 ease-in-out",
+                                        isActive(item.href)
+                                            ? "bg-primary/10 text-primary shadow-sm border border-primary/20"
+                                            : "text-muted-foreground hover:text-primary hover:bg-primary/5 hover:translate-x-1",
+                                        isCollapsed && "justify-center px-1"
+                                    )}
+                                >
+                                    <PremiumIcon
+                                        icon={item.icon}
+                                        variant={item.variant}
+                                        showBackground={isActive(item.href)}
+                                        size="sm"
+                                        className={cn(
+                                            "transition-all duration-300",
+                                            !isActive(item.href) && "group-hover:translate-x-1"
+                                        )}
+                                    />
+                                    {!isCollapsed && (
+                                        <span className="relative flex-1">
+                                            {item.label}
+                                            {isActive(item.href) && (
+                                                <div className="absolute -left-12 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-primary rounded-full" />
+                                            )}
+                                        </span>
+                                    )}
+                                </Link>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </nav>
+
+            {/* Logout Button */}
+            <div className="p-2 border-t border-border">
+                <button
+                    onClick={handleSignOut}
+                    className={cn(
+                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
+                        "transition-all duration-200 ease-in-out",
+                        "text-red-500 hover:bg-red-500/10",
+                        isCollapsed && "justify-center px-2"
+                    )}
+                >
+                    <LogOut className="w-5 h-5 flex-shrink-0" />
+                    {!isCollapsed && <span>Logout</span>}
+                </button>
+            </div>
+        </aside>
+    );
+}

@@ -1,0 +1,698 @@
+import { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Eye, EyeOff, Loader2, ArrowLeft, ExternalLink, DollarSign, Check, Wifi, X } from 'lucide-react';
+import { z } from 'zod';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+
+const signUpSchema = z.object({
+  firstName: z.string().min(2, 'First name must be at least 2 characters'),
+  lastName: z.string().min(2, 'Last name must be at least 2 characters'),
+  email: z.string().email('Invalid email address'),
+  phone: z.string().min(9, 'Phone number must be at least 9 digits').max(15),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
+const signInSchema = z.object({
+  emailOrPhone: z.string().min(1, 'Email or phone is required'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+export default function Auth() {
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    emailOrPhone: '',
+    phone: '',
+    countryCode: '+233',
+    password: '',
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+
+  const { signUp, signIn, signInWithGoogle, resetPassword } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  // Check URL params for signup mode
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('signup') === 'true') {
+      setIsSignUp(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+      setIsDarkMode(true);
+      document.documentElement.classList.add('dark');
+    }
+  }, []);
+
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+    if (isDarkMode) {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    } else {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrors({});
+    setLoading(true);
+
+    try {
+      if (isSignUp) {
+        const result = signUpSchema.safeParse(formData);
+        if (!result.success) {
+          const fieldErrors: Record<string, string> = {};
+          result.error.errors.forEach(err => {
+            if (err.path[0]) {
+              fieldErrors[err.path[0].toString()] = err.message;
+            }
+          });
+          setErrors(fieldErrors);
+          setLoading(false);
+          return;
+        }
+
+        if (!agreedToTerms) {
+          toast({
+            title: 'Terms required',
+            description: 'Please agree to the Terms & Conditions to continue.',
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
+        }
+
+        const fullName = `${formData.firstName} ${formData.lastName}`;
+        const fullPhone = `${formData.countryCode}${formData.phone}`;
+
+        const { error } = await signUp(formData.email, formData.password, fullName, fullPhone);
+        if (error) {
+          toast({
+            title: 'Sign up failed',
+            description: error.message,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Account created!',
+            description: 'Registration successful! Please sign in with your credentials.',
+          });
+          setIsSignUp(false);
+          // Pre-fill email for convenience but clear password for security
+          setFormData(prev => ({
+            ...prev,
+            emailOrPhone: formData.email,
+            password: '' // Explicitly clear password
+          }));
+        }
+      } else {
+        const result = signInSchema.safeParse(formData);
+        if (!result.success) {
+          const fieldErrors: Record<string, string> = {};
+          result.error.errors.forEach(err => {
+            if (err.path[0]) {
+              fieldErrors[err.path[0].toString()] = err.message;
+            }
+          });
+          setErrors(fieldErrors);
+          setLoading(false);
+          return;
+        }
+
+        const { error } = await signIn(formData.emailOrPhone, formData.password);
+        if (error) {
+          toast({
+            title: 'Sign in failed',
+            description: error.message,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Welcome back!',
+            description: 'You have successfully signed in.',
+          });
+          navigate('/dashboard');
+        }
+      }
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Something went wrong. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    try {
+      const { error } = await signInWithGoogle();
+      if (error) {
+        toast({
+          title: 'Google Sign-In Failed',
+          description: error.message,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Welcome back!',
+          description: 'Successfully signed in with Google.',
+        });
+        navigate('/dashboard');
+      }
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Something went wrong with Google sign-in.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!forgotPasswordEmail) {
+      toast({
+        title: 'Email required',
+        description: 'Please enter your email address.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setForgotPasswordLoading(true);
+    try {
+      const { data, error } = await resetPassword(forgotPasswordEmail);
+      if (error) {
+        toast({
+          title: 'Reset Failed',
+          description: (error as any).response?.data?.debug || error.message,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Reset Email Status',
+          description: (data as any)?.debug ? `Status: ${(data as any).debug}` : 'Check your email for password reset instructions.',
+        });
+        if (!(data as any)?.debug?.includes('Error')) {
+          setShowForgotPassword(false);
+          setForgotPasswordEmail('');
+        }
+      }
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Something went wrong. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setForgotPasswordLoading(false);
+    }
+  };
+
+  const switchMode = () => {
+    setIsSignUp(!isSignUp);
+    setErrors({});
+    setFormData({
+      firstName: '',
+      lastName: '',
+      email: '',
+      emailOrPhone: '',
+      phone: '',
+      countryCode: '+233',
+      password: '',
+    });
+  };
+
+  // Left panel features based on mode
+  const signUpFeatures = [
+    { icon: ExternalLink, label: 'Free to Join' },
+    { icon: DollarSign, label: 'Save 30%' },
+    { icon: Check, label: 'Reliable' },
+  ];
+
+  const signInFeatures = [
+    { icon: DollarSign, label: 'Save 30%' },
+    { icon: Check, label: 'Reliable' },
+    { icon: Wifi, label: 'All Networks' },
+  ];
+
+  const features = isSignUp ? signUpFeatures : signInFeatures;
+
+  return (
+    <div className="min-h-screen flex">
+      {/* Left Panel - Custom Background Image */}
+      <div
+        className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center p-12 relative overflow-hidden bg-emerald-950"
+        style={{
+          backgroundImage: 'url("/auth-welcome-bg.png")',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      >
+        {/* Overlay for better text readability */}
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-teal-500/10 pointer-events-none"></div>
+
+        <div className="relative z-10 text-center max-w-md">
+          {/* Logo */}
+          <div className="flex items-center justify-center mb-10">
+            <img
+              src="/logo.png"
+              alt="ByteBeacon"
+              className="h-28 w-auto drop-shadow-[0_0_15px_rgba(255,255,255,0.4)]"
+            />
+          </div>
+
+          {/* Headline */}
+          <h1 className="text-white font-display text-4xl md:text-5xl font-bold mb-4 drop-shadow-lg">
+            {isSignUp ? 'Start Saving Today' : 'Welcome Back!'}
+          </h1>
+
+          {/* Description */}
+          <p className="text-white/90 text-lg mb-10 drop-shadow-md">
+            {isSignUp
+              ? 'Create a free account and get data bundles at up to 30% cheaper than direct.'
+              : 'Sign in to access your account and continue saving on data bundles.'}
+          </p>
+
+          {/* Features */}
+          <div className="flex justify-center gap-8">
+            {features.map((feature, index) => (
+              <div key={index} className="flex flex-col items-center gap-2 bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3">
+                <feature.icon className="w-6 h-6 text-white drop-shadow" />
+                <span className="text-white text-sm font-medium drop-shadow">{feature.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Right Panel - Form */}
+      <div className="w-full lg:w-1/2 flex flex-col bg-background">
+        {/* Mobile Header with background image */}
+        <div
+          className="lg:hidden p-8 text-center relative bg-emerald-950 transition-all duration-500 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.5)]"
+          style={{
+            backgroundImage: 'url("/auth-welcome-bg.png")',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-teal-500/10 pointer-events-none"></div>
+          <div className="relative z-10">
+            <div className="flex items-center justify-center mb-6">
+              <img
+                src="/logo.png"
+                alt="ByteBeacon"
+                className="h-20 w-auto drop-shadow-[0_0_12px_rgba(255,255,255,0.4)]"
+              />
+            </div>
+            <h2 className="text-white font-display text-2xl font-bold drop-shadow-lg">
+              {isSignUp ? 'Start Saving Today' : 'Welcome Back!'}
+            </h2>
+          </div>
+        </div>
+
+        {/* Form Container */}
+        <div className="flex-1 flex flex-col justify-center p-6 sm:p-8 lg:p-12 max-w-md mx-auto w-full">
+          {/* Header with toggles */}
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="font-display text-3xl font-bold text-foreground">
+                {isSignUp ? 'Create Account' : 'Sign In'}
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                {isSignUp ? 'Join in under a minute' : 'Access your account'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Dark Mode Toggle */}
+              <button
+                onClick={toggleDarkMode}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${isDarkMode
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-amber-400 text-amber-900'
+                  }`}
+              >
+                {isDarkMode ? 'NIGHT' : 'DAY'}
+                <span className="ml-1">●</span>
+              </button>
+              {/* Home Button */}
+              <Link
+                to="/"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full border border-border text-sm font-medium hover:bg-muted transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Home
+              </Link>
+            </div>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {isSignUp ? (
+              <>
+                {/* First Name & Last Name Row */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName" className="text-sm font-medium">First Name</Label>
+                    <Input
+                      id="firstName"
+                      placeholder="John"
+                      value={formData.firstName}
+                      onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                      className={`bg-muted/50 border-border ${errors.firstName ? 'border-destructive' : ''}`}
+                    />
+                    {errors.firstName && (
+                      <p className="text-xs text-destructive">{errors.firstName}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lastName" className="text-sm font-medium">Last Name</Label>
+                    <Input
+                      id="lastName"
+                      placeholder="Doe"
+                      value={formData.lastName}
+                      onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                      className={`bg-muted/50 border-border ${errors.lastName ? 'border-destructive' : ''}`}
+                    />
+                    {errors.lastName && (
+                      <p className="text-xs text-destructive">{errors.lastName}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Phone Number with Country Code */}
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-sm font-medium">Phone Number</Label>
+                  <div className="flex gap-2">
+                    <Select value={formData.countryCode} onValueChange={(value) => setFormData(prev => ({ ...prev, countryCode: value }))}>
+                      <SelectTrigger className="w-24 bg-muted/50 border-border">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-border">
+                        <SelectItem value="+233" className="hover:bg-accent focus:bg-accent">+233</SelectItem>
+                        <SelectItem value="+234" className="hover:bg-accent focus:bg-accent">+234</SelectItem>
+                        <SelectItem value="+254" className="hover:bg-accent focus:bg-accent">+254</SelectItem>
+                        <SelectItem value="+1" className="hover:bg-accent focus:bg-accent">+1</SelectItem>
+                        <SelectItem value="+44" className="hover:bg-accent focus:bg-accent">+44</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="241234567"
+                      value={formData.phone}
+                      onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                      className={`flex-1 bg-muted/50 border-border ${errors.phone ? 'border-destructive' : ''}`}
+                    />
+                  </div>
+                  {errors.phone && (
+                    <p className="text-xs text-destructive">{errors.phone}</p>
+                  )}
+                </div>
+
+                {/* Email */}
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-sm font-medium">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={formData.email}
+                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                    className={`bg-muted/50 border-border ${errors.email ? 'border-destructive' : ''}`}
+                  />
+                  {errors.email && (
+                    <p className="text-xs text-destructive">{errors.email}</p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Email or Phone for Sign In */}
+                <div className="space-y-2">
+                  <Label htmlFor="emailOrPhone" className="text-sm font-medium">Email or Phone</Label>
+                  <Input
+                    id="emailOrPhone"
+                    placeholder="Enter email or phone"
+                    value={formData.emailOrPhone}
+                    onChange={(e) => setFormData(prev => ({ ...prev, emailOrPhone: e.target.value }))}
+                    className={`bg-muted/50 border-border ${errors.emailOrPhone ? 'border-destructive' : ''}`}
+                  />
+                  {errors.emailOrPhone && (
+                    <p className="text-xs text-destructive">{errors.emailOrPhone}</p>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Password */}
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder={isSignUp ? 'Min 6 characters' : 'Enter password'}
+                  value={formData.password}
+                  onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                  className={`bg-muted/50 border-border pr-10 ${errors.password ? 'border-destructive' : ''}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+              {errors.password && (
+                <p className="text-xs text-destructive">{errors.password}</p>
+              )}
+            </div>
+
+            {/* Terms (Sign Up) or Remember Me (Sign In) */}
+            {isSignUp ? (
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="terms"
+                  checked={agreedToTerms}
+                  onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
+                />
+                <Label htmlFor="terms" className="text-sm text-muted-foreground cursor-pointer">
+                  I agree to{' '}
+                  <Link to="/terms-of-service" className="text-primary hover:underline">Terms of Service</Link>
+                  {' '}and{' '}
+                  <Link to="/privacy-policy" className="text-primary hover:underline">Privacy Policy</Link>
+                </Label>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="remember"
+                    checked={rememberMe}
+                    onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                  />
+                  <Label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">
+                    Remember me
+                  </Label>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const input = formData.emailOrPhone;
+                    if (!input) {
+                      setErrors({ emailOrPhone: 'Please enter your email or phone first' });
+                      toast({
+                        title: 'Email or Phone required',
+                        description: 'Please enter your email or phone to reset your password.',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    // Check if input looks like an email
+                    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input);
+                    if (isEmail) {
+                      setForgotPasswordEmail(input);
+                    }
+                    setShowForgotPassword(true);
+                  }}
+                  className="text-sm text-primary hover:underline"
+                >
+                  Forgot?
+                </button>
+              </div>
+            )}
+
+            {/* Submit Button */}
+            <Button
+              type="submit"
+              className="w-full py-6 text-base font-semibold"
+              size="lg"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  {isSignUp ? 'Creating account...' : 'Signing in...'}
+                </>
+              ) : (
+                isSignUp ? 'Create Account' : 'Sign In'
+              )}
+            </Button>
+          </form>
+
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border"></div>
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-background px-4 text-sm text-muted-foreground">or</span>
+            </div>
+          </div>
+
+          {/* Google Sign In */}
+          {/* Hidden container for Google Identity Services */}
+          <div id="google-signin-button" className="hidden"></div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full py-6 text-base font-medium gap-2"
+            onClick={handleGoogleSignIn}
+            disabled={loading}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+              />
+            </svg>
+            {loading ? 'Connecting...' : 'Continue with Google'}
+          </Button>
+
+          {/* Switch Mode Link */}
+          <p className="text-center mt-6 text-sm text-muted-foreground">
+            {isSignUp ? 'Have an account?' : "Don't have an account?"}{' '}
+            <button
+              type="button"
+              onClick={switchMode}
+              className="text-primary font-semibold hover:underline"
+            >
+              {isSignUp ? 'Sign In' : 'Create one'}
+            </button>
+          </p>
+        </div>
+      </div>
+
+      {/* Forgot Password Modal */}
+      <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Reset Password</DialogTitle>
+            <DialogDescription>
+              Enter your email address and we'll send you a link to reset your password.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleForgotPassword} className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label htmlFor="forgotEmail">Email Address</Label>
+              <Input
+                id="forgotEmail"
+                type="email"
+                placeholder="you@example.com"
+                value={forgotPasswordEmail}
+                onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                required
+                readOnly
+                className="bg-muted/50 cursor-not-allowed opacity-80"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowForgotPassword(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1"
+                disabled={forgotPasswordLoading}
+              >
+                {forgotPasswordLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Sending...
+                  </>
+                ) : (
+                  'Send Reset Link'
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
