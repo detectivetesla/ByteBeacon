@@ -480,26 +480,148 @@ const activateSourcingProvider = async (req, res) => {
 const testSourcingProvider = async (req, res) => {
     try {
         const { id } = req.params;
-        const [existing] = await pool.execute("SELECT slug FROM sourcing_providers WHERE id = ?::uuid", [id]);
+        const [existing] = await pool.execute(
+            "SELECT slug, base_url, api_key, provider_type, config FROM sourcing_providers WHERE id = ?::uuid", [id]
+        );
         if (existing.length === 0) {
             return res.status(404).json({ error: 'Provider not found' });
         }
-        
-        const providerSlug = existing[0].slug;
-        const sourcing = require('../utils/sourcing');
-        const result = await sourcing.checkBalance(providerSlug);
-        
-        if (result && result.success) {
-            res.json({
-                success: true,
-                message: 'Connection successful',
-                balance: result.balance,
-                currency: result.currency || 'GHS'
+
+        const provider = existing[0];
+        const baseUrl = (provider.base_url || '').replace(/\/$/, '');
+        const apiKey = provider.api_key || '';
+
+        if (!baseUrl || !apiKey) {
+            return res.status(400).json({ success: false, error: 'Base URL or API Key is empty. Please configure them first.' });
+        }
+
+        // For builtin providers (datahouse, portal02), use the existing sourcing module
+        if (provider.slug === 'datahouse' || provider.slug === 'portal02') {
+            const sourcing = require('../utils/sourcing');
+            const result = await sourcing.checkBalance(provider.slug);
+            if (result && result.success) {
+                return res.json({ success: true, message: 'Connection successful', balance: result.balance, currency: result.currency || 'GHS' });
+            } else {
+                return res.status(400).json({ success: false, error: result?.error || 'Connection failed. Please check your API Key and URL.' });
+            }
+        }
+
+        // For custom providers, try multiple common balance/user endpoints
+        const httpModule = baseUrl.startsWith('http:') ? require('http') : require('https');
+        const endpointsToTry = [
+            '/agent/wallet/balance',
+            '/wallet/balance',
+            '/balance',
+            '/user',
+            '/me',
+            '/account',
+            '/agent/balance',
+            ''  // root endpoint
+        ];
+
+        const makeTestRequest = (url, key) => {
+            return new Promise((resolve) => {
+                try {
+                    const urlObj = new URL(url);
+                    const options = {
+                        hostname: urlObj.hostname,
+                        port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+                        path: urlObj.pathname + (urlObj.search || ''),
+                        method: 'GET',
+                        headers: {
+                            'x-api-key': key,
+                            'Authorization': key.startsWith('Bearer ') ? key : `Bearer ${key}`,
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                        },
+                        timeout: 10000,
+                    };
+
+                    const request = httpModule.request(options, (response) => {
+                        let data = '';
+                        response.on('data', chunk => data += chunk);
+                        response.on('end', () => {
+                            let jsonData = null;
+                            try { jsonData = data ? JSON.parse(data) : null; } catch (e) {}
+                            resolve({ status: response.statusCode, data: jsonData, raw: data.substring(0, 500) });
+                        });
+                    });
+
+                    request.on('timeout', () => { request.destroy(); resolve({ status: 408, data: null, raw: 'timeout' }); });
+                    request.on('error', (err) => resolve({ status: 0, data: null, raw: err.message }));
+                    request.end();
+                } catch (err) {
+                    resolve({ status: 0, data: null, raw: err.message });
+                }
+            });
+        };
+
+        console.log(`🔌 Testing custom provider "${provider.slug}" at ${baseUrl}`);
+
+        let bestResult = null;
+        let serverReachable = false;
+
+        for (const endpoint of endpointsToTry) {
+            const fullUrl = baseUrl + endpoint;
+            console.log(`   Testing: ${fullUrl}`);
+            const result = await makeTestRequest(fullUrl, apiKey);
+            console.log(`   Response: HTTP ${result.status}`);
+
+            // Any response (even 401/403/404) proves the server is reachable
+            if (result.status > 0 && result.status !== 408) {
+                serverReachable = true;
+            }
+
+            // A 2xx with a JSON body containing balance/success is ideal
+            if (result.status >= 200 && result.status < 300 && result.data) {
+                const d = result.data;
+                const balance = d.balance ?? d.data?.balance ?? d.wallet?.balance ?? d.data?.wallet?.balance ?? null;
+                if (balance !== null || d.success === true || d.status === 'success' || d.user || d.account) {
+                    bestResult = {
+                        success: true,
+                        message: `Connection successful via ${endpoint || '/'}`,
+                        balance: balance !== null ? parseFloat(balance) : undefined,
+                        currency: d.currency || d.data?.currency || 'GHS',
+                        endpoint: endpoint || '/'
+                    };
+                    break;
+                }
+                // Even a plain 200 with any JSON is a good sign
+                if (!bestResult) {
+                    bestResult = {
+                        success: true,
+                        message: `Server responded OK at ${endpoint || '/'}`,
+                        endpoint: endpoint || '/'
+                    };
+                }
+            }
+
+            // 401/403 means server is reachable but key might be wrong
+            if (result.status === 401 || result.status === 403) {
+                if (!bestResult) {
+                    bestResult = {
+                        success: false,
+                        error: `Server reached at ${endpoint || '/'} but returned ${result.status} — API key may be invalid or expired.`,
+                        serverReachable: true
+                    };
+                }
+            }
+        }
+
+        if (bestResult && bestResult.success) {
+            return res.json(bestResult);
+        } else if (serverReachable && bestResult) {
+            return res.status(400).json(bestResult);
+        } else if (serverReachable) {
+            return res.status(400).json({
+                success: false,
+                error: 'Server is reachable but no compatible balance endpoint was found. The API may use a different format.',
+                serverReachable: true
             });
         } else {
-            res.status(400).json({
+            return res.status(400).json({
                 success: false,
-                error: result?.error || 'Connection failed. Please check your API Key and URL.'
+                error: 'Could not connect to server. Please verify the Base URL is correct and the server is online.'
             });
         }
     } catch (error) {
