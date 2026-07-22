@@ -72,6 +72,8 @@ export default function AdminOrdersPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [networkFilter, setNetworkFilter] = useState<string>('all');
+    const [updating, setUpdating] = useState<string | null>(null);
     const [reprocessingId, setReprocessingId] = useState<string | null>(null);
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');

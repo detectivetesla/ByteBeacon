@@ -2,11 +2,10 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://zlcdhksjnaglrlkcrujr.supabase.co';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpsY2Roa3NqbmFnbHJsa2NydWpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDY3Mzk4NDAsImV4cCI6MjAyMjMxNTg0MH0.placeholder';
 
 // Handle missing keys gracefully to prevent white screen crashes
-// We export the supabase client only if the keys are provided.
 export const supabase = (SUPABASE_URL && SUPABASE_ANON_KEY)
   ? createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
@@ -16,7 +15,3 @@ export const supabase = (SUPABASE_URL && SUPABASE_ANON_KEY)
     }
   })
   : null;
-
-if (!supabase) {
-  console.warn('⚠️ Supabase environment variables (VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY) are missing. Real-time features and database interactions will not work.');
-}
