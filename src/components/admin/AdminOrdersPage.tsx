@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { adminService } from '@/services';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -68,6 +68,7 @@ interface Order {
 export default function AdminOrdersPage() {
     const { toast } = useToast();
     const location = useLocation();
+    const navigate = useNavigate();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -493,7 +494,11 @@ export default function AdminOrdersPage() {
                                     key={status}
                                     variant={statusFilter === status ? 'default' : 'outline'}
                                     size="sm"
-                                    onClick={() => { setStatusFilter(status); if (status !== 'all') setNetworkFilter('all'); }}
+                                    onClick={() => {
+                                        setStatusFilter(status);
+                                        if (status !== 'all') setNetworkFilter('all');
+                                        navigate(`/admin/orders/${status}`);
+                                    }}
                                     className="capitalize rounded-lg px-3 text-xs border-border/50 font-semibold"
                                 >
                                     {status}
@@ -512,7 +517,10 @@ export default function AdminOrdersPage() {
                                     key={net.id}
                                     variant={networkFilter === net.id ? 'default' : 'outline'}
                                     size="sm"
-                                    onClick={() => setNetworkFilter(net.id)}
+                                    onClick={() => {
+                                        setNetworkFilter(net.id);
+                                        navigate(`/admin/orders/${net.id}`);
+                                    }}
                                     className="rounded-lg px-3 text-xs border-border/50 font-semibold"
                                 >
                                     {net.label}
