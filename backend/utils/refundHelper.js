@@ -93,7 +93,7 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
 
             // Insert into refunds table (ONLY included when transaction commits successfully)
             const refundId = uuidv4();
-            const noteText = `Refund for failed order #${transactionId.slice(0, 8)} (${reason})`;
+            const noteText = `Refund for failed order #${transactionId.slice(0, 8)} [${transactionId}] (${reason})`;
             await connection.execute(
                 'INSERT INTO refunds (id, user_id, amount_ghc, notes) VALUES (?::uuid, ?::uuid, ?, ?)',
                 [refundId, targetUserId, refundAmount, noteText]

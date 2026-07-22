@@ -2129,77 +2129,63 @@ const reprocessTransaction = async (req, res) => {
 
         const amount = parseFloat(tx.amount_ghc);
 
-        // 2. Check if a refund was previously issued; if so, re-debit the wallet
-        let wasRefunded = false;
-
+        // 2. ALWAYS deduct from wallet before reprocessing.
+        // The original order already failed, and the user was auto-refunded,
+        // so their wallet has the money back. We must re-debit before retrying.
+        // Even if the refund record is somehow missing, we still deduct to prevent
+        // the user from getting a second free refund if the retry also fails.
         if (tx.user_id) {
-            const [existingRefunds] = await connection.execute(
-                "SELECT id FROM refunds WHERE notes LIKE ?",
-                [`%${id}%`]
+            // Lock and check user wallet
+            const [profileRows] = await connection.execute(
+                'SELECT wallet_balance FROM profiles WHERE id = ?::uuid FOR UPDATE',
+                [tx.user_id]
             );
-            wasRefunded = existingRefunds.length > 0;
+            const currentBalance = profileRows.length > 0 ? parseFloat(profileRows[0].wallet_balance) : 0;
+
+            if (currentBalance < amount) {
+                await connection.rollback();
+                connection.release();
+                return res.status(400).json({
+                    error: `Insufficient wallet balance. Customer has ₵${currentBalance.toFixed(2)} but order costs ₵${amount.toFixed(2)}. Cannot reprocess.`
+                });
+            }
+
+            // Debit wallet for the retry
+            await connection.execute(
+                'UPDATE profiles SET wallet_balance = wallet_balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
+                [amount, tx.user_id]
+            );
+            await connection.execute(
+                'UPDATE users SET wallet_balance = wallet_balance - ?, updated_at = CURRENT_TIMESTAMP WHERE uuid = ?::uuid',
+                [amount, tx.user_id]
+            );
         } else if (tx.partner_id) {
-            const [existingLedger] = await connection.execute(
-                "SELECT id FROM partner_ledger WHERE reference = ?::uuid AND type = 'refund'",
-                [id]
+            // Lock and check partner wallet
+            const [partnerRows] = await connection.execute(
+                'SELECT wallet_balance, credit_enabled, allow_unlimited_purchases FROM partners WHERE id = ?::uuid FOR UPDATE',
+                [tx.partner_id]
             );
-            wasRefunded = existingLedger.length > 0;
-        }
 
-        if (wasRefunded) {
-            if (tx.user_id) {
-                // Lock and check user wallet
-                const [profileRows] = await connection.execute(
-                    'SELECT wallet_balance FROM profiles WHERE id = ?::uuid FOR UPDATE',
-                    [tx.user_id]
-                );
-                const currentBalance = profileRows.length > 0 ? parseFloat(profileRows[0].wallet_balance) : 0;
-
-                if (currentBalance < amount) {
-                    await connection.rollback();
-                    connection.release();
-                    return res.status(400).json({
-                        error: `Insufficient wallet balance. Customer has ₵${currentBalance.toFixed(2)} but order costs ₵${amount.toFixed(2)}. Cannot re-debit.`
-                    });
-                }
-
-                // Re-debit wallet
-                await connection.execute(
-                    'UPDATE profiles SET wallet_balance = wallet_balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
-                    [amount, tx.user_id]
-                );
-                await connection.execute(
-                    'UPDATE users SET wallet_balance = wallet_balance - ?, updated_at = CURRENT_TIMESTAMP WHERE uuid = ?::uuid',
-                    [amount, tx.user_id]
-                );
-            } else if (tx.partner_id) {
-                // Lock and check partner wallet
-                const [partnerRows] = await connection.execute(
-                    'SELECT wallet_balance, credit_enabled, allow_unlimited_purchases FROM partners WHERE id = ?::uuid FOR UPDATE',
-                    [tx.partner_id]
-                );
-
-                if (partnerRows.length > 0) {
-                    const partner = partnerRows[0];
-                    if (partner.allow_unlimited_purchases || partner.credit_enabled) {
-                        await connection.execute(
-                            'UPDATE partners SET outstanding_balance = outstanding_balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
-                            [amount, tx.partner_id]
-                        );
-                    } else {
-                        const partnerBalance = parseFloat(partner.wallet_balance);
-                        if (partnerBalance < amount) {
-                            await connection.rollback();
-                            connection.release();
-                            return res.status(400).json({
-                                error: `Insufficient partner wallet balance. Partner has ₵${partnerBalance.toFixed(2)} but order costs ₵${amount.toFixed(2)}.`
-                            });
-                        }
-                        await connection.execute(
-                            'UPDATE partners SET wallet_balance = wallet_balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
-                            [amount, tx.partner_id]
-                        );
+            if (partnerRows.length > 0) {
+                const partner = partnerRows[0];
+                if (partner.allow_unlimited_purchases || partner.credit_enabled) {
+                    await connection.execute(
+                        'UPDATE partners SET outstanding_balance = outstanding_balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
+                        [amount, tx.partner_id]
+                    );
+                } else {
+                    const partnerBalance = parseFloat(partner.wallet_balance);
+                    if (partnerBalance < amount) {
+                        await connection.rollback();
+                        connection.release();
+                        return res.status(400).json({
+                            error: `Insufficient partner wallet balance. Partner has ₵${partnerBalance.toFixed(2)} but order costs ₵${amount.toFixed(2)}.`
+                        });
                     }
+                    await connection.execute(
+                        'UPDATE partners SET wallet_balance = wallet_balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
+                        [amount, tx.partner_id]
+                    );
                 }
             }
         }
@@ -2221,7 +2207,7 @@ const reprocessTransaction = async (req, res) => {
         connection.release();
 
         // 4. Log activity
-        logActivity(req.user.id, 'ADMIN_REPROCESS', `Admin reprocessed failed transaction ${id.slice(0, 8)}`, { transactionId: id, wasRefunded }, req.ip);
+        logActivity(req.user.id, 'ADMIN_REPROCESS', `Admin reprocessed failed transaction ${id.slice(0, 8)}`, { transactionId: id, amountDebited: amount }, req.ip);
 
         // 5. Emit real-time update
         const io = req.app.get('io');
@@ -2233,7 +2219,7 @@ const reprocessTransaction = async (req, res) => {
         const { processOrderQueue } = require('../services/orderQueue.service');
         processOrderQueue(io).catch(err => console.error('Queue trigger error after reprocess:', err));
 
-        res.json({ message: 'Transaction requeued for processing successfully.', status: 'processing', wasRefunded });
+        res.json({ message: `Transaction requeued for processing. ₵${amount.toFixed(2)} deducted from wallet.`, status: 'processing', amountDebited: amount });
 
     } catch (err) {
         if (connection) {
