@@ -81,25 +81,26 @@ export default function AdminOrdersPage() {
 
     // Sync status & network filter from route path
     useEffect(() => {
-        if (location.pathname.endsWith('/mtn')) {
+        const path = location.pathname.toLowerCase();
+        if (path.endsWith('/mtn')) {
             setNetworkFilter('mtn');
             setStatusFilter('all');
-        } else if (location.pathname.endsWith('/at')) {
+        } else if (path.endsWith('/at')) {
             setNetworkFilter('at');
             setStatusFilter('all');
-        } else if (location.pathname.endsWith('/telecel')) {
+        } else if (path.endsWith('/telecel')) {
             setNetworkFilter('telecel');
             setStatusFilter('all');
-        } else if (location.pathname.endsWith('/processing')) {
+        } else if (path.endsWith('/processing')) {
             setStatusFilter('processing');
             setNetworkFilter('all');
-        } else if (location.pathname.endsWith('/completed')) {
+        } else if (path.endsWith('/completed')) {
             setStatusFilter('completed');
             setNetworkFilter('all');
-        } else if (location.pathname.endsWith('/failed')) {
+        } else if (path.endsWith('/failed')) {
             setStatusFilter('failed');
             setNetworkFilter('all');
-        } else {
+        } else if (path.endsWith('/all')) {
             setStatusFilter('all');
             setNetworkFilter('all');
         }
@@ -118,6 +119,8 @@ export default function AdminOrdersPage() {
             prefix = '0' + cleanPhone.slice(3, 5);
         } else if (cleanPhone.startsWith('0')) {
             prefix = cleanPhone.slice(0, 3);
+        } else if (cleanPhone.length >= 9) {
+            prefix = '0' + cleanPhone.slice(0, 2);
         }
 
         if (['024', '054', '055', '059', '025', '053'].includes(prefix)) return 'mtn';

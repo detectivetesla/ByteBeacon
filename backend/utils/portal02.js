@@ -48,6 +48,7 @@ const makePortal02Request = (method, path, apiKey, body = null, baseUrl = null) 
             method: method,
             headers: {
                 'x-api-key': apiKey,
+                'Authorization': apiKey ? (apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`) : '',
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
             },

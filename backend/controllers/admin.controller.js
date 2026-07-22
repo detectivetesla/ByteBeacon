@@ -1172,6 +1172,7 @@ const getActivityLogs = async (req, res) => {
 };
 
 // Get detailed user info (profile, transactions, activity logs)
+// Get detailed user info (profile, transactions, activity logs)
 const getUserDetails = async (req, res) => {
     try {
         const { id } = req.params;
@@ -1180,10 +1181,10 @@ const getUserDetails = async (req, res) => {
         const [profiles] = await pool.execute(
             `SELECT u.uuid as id, u.email, u.name as backup_name, u.phone as backup_phone, 
                     p.full_name, p.phone as profile_phone, p.wallet_balance, p.created_at,
-                    COALESCE(ur.role, 'customer') as role
+                    COALESCE(ur.role::text, u.role::text, 'customer') as role
              FROM users u
-             LEFT JOIN profiles p ON u.uuid = p.id
-             LEFT JOIN user_roles ur ON u.uuid = ur.user_id
+             LEFT JOIN profiles p ON u.uuid = p.id::uuid
+             LEFT JOIN user_roles ur ON u.uuid = ur.user_id::uuid
              WHERE u.uuid = ?::uuid`,
             [id]
         );
@@ -1194,65 +1195,85 @@ const getUserDetails = async (req, res) => {
 
         const user = profiles[0];
 
-        // Get user transactions
-        const [transactions] = await pool.execute(
-            `SELECT t.id, t.recipient_phone, t.amount_ghc, t.status, t.created_at,
-                    db.network, db.data_amount
-             FROM transactions t
-             LEFT JOIN data_bundles db ON t.bundle_id = db.id
-             WHERE t.user_id = ?::uuid
-             ORDER BY t.created_at DESC
-             LIMIT 50`,
-            [id]
-        );
+        let transactions = [];
+        try {
+            const [txRows] = await pool.execute(
+                `SELECT t.id, t.recipient_phone, t.amount_ghc, t.status, t.created_at,
+                        db.network, db.data_amount
+                 FROM transactions t
+                 LEFT JOIN data_bundles db ON t.bundle_id = db.id::uuid
+                 WHERE t.user_id = ?::uuid
+                 ORDER BY t.created_at DESC
+                 LIMIT 50`,
+                [id]
+            );
+            transactions = txRows;
+        } catch (txErr) {
+            console.error('getUserDetails transactions error:', txErr);
+        }
 
-        // Get user activity logs
-        const [activityLogs] = await pool.execute(
-            `SELECT id, action, description, metadata, ip_address, created_at
-             FROM activity_logs
-             WHERE user_id = ?::uuid
-             ORDER BY created_at DESC
-             LIMIT 50`,
-            [id]
-        );
+        let activityLogs = [];
+        try {
+            const [logRows] = await pool.execute(
+                `SELECT id, action, description, metadata, ip_address, created_at
+                 FROM activity_logs
+                 WHERE user_id = ?::uuid
+                 ORDER BY created_at DESC
+                 LIMIT 50`,
+                [id]
+            );
+            activityLogs = logRows;
+        } catch (logErr) {
+            console.error('getUserDetails activityLogs error:', logErr);
+        }
 
-        // Get user deposits
-        const [deposits] = await pool.execute(
-            `SELECT id, amount_ghc, reference, status, created_at
-             FROM deposits
-             WHERE user_id = ?::uuid
-             ORDER BY created_at DESC
-             LIMIT 20`,
-            [id]
-        );
+        let deposits = [];
+        try {
+            const [depRows] = await pool.execute(
+                `SELECT id, amount_ghc, reference, status, created_at
+                 FROM deposits
+                 WHERE user_id = ?::uuid
+                 ORDER BY created_at DESC
+                 LIMIT 20`,
+                [id]
+            );
+            deposits = depRows;
+        } catch (depErr) {
+            console.error('getUserDetails deposits error:', depErr);
+        }
 
-        // Get order statistics
-        const [stats] = await pool.execute(
-            `SELECT 
-                COUNT(*) as "totalOrders",
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as "completedOrders",
-                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as "failedOrders",
-                SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as "pendingOrders",
-                SUM(amount_ghc) as "totalSpent"
-             FROM transactions
-             WHERE user_id = ?::uuid`,
-            [id]
-        );
+        let statsData = {};
+        try {
+            const [statRows] = await pool.execute(
+                `SELECT 
+                    COUNT(*) as "totalOrders",
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as "completedOrders",
+                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as "failedOrders",
+                    SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as "pendingOrders",
+                    SUM(amount_ghc) as "totalSpent"
+                 FROM transactions
+                 WHERE user_id = ?::uuid`,
+                [id]
+            );
+            if (statRows.length > 0) statsData = statRows[0];
+        } catch (statErr) {
+            console.error('getUserDetails stats error:', statErr);
+        }
 
         const resultJson = {
             user: {
                 id: user.id,
-                fullName: user.full_name || user.backup_name,
+                fullName: user.full_name || user.backup_name || 'User',
                 email: user.email,
-                phone: user.profile_phone || user.backup_phone,
+                phone: user.profile_phone || user.backup_phone || '',
                 walletBalance: parseFloat(user.wallet_balance) || 0,
-                role: user.role,
+                role: user.role || 'customer',
                 createdAt: user.created_at
             },
             transactions: transactions.map(t => ({
                 id: t.id,
                 recipientPhone: t.recipient_phone,
-                amount: parseFloat(t.amount_ghc),
+                amount: parseFloat(t.amount_ghc || 0),
                 status: t.status,
                 network: t.network || 'N/A',
                 dataAmount: t.data_amount || 'N/A',
@@ -1262,74 +1283,83 @@ const getUserDetails = async (req, res) => {
                 id: log.id,
                 action: log.action,
                 description: log.description,
-                metadata: log.metadata, // Postgres driver already parses JSONB
+                metadata: log.metadata,
                 ipAddress: log.ip_address,
                 createdAt: log.created_at
             })),
             deposits: deposits.map(d => ({
                 id: d.id,
-                amount: parseFloat(d.amount_ghc),
+                amount: parseFloat(d.amount_ghc || 0),
                 reference: d.reference,
                 status: d.status,
                 createdAt: d.created_at
             })),
             stats: {
-                totalOrders: parseInt(stats[0]?.totalOrders) || 0,
-                completedOrders: parseInt(stats[0]?.completedOrders) || 0,
-                failedOrders: parseInt(stats[0]?.failedOrders) || 0,
-                pendingOrders: parseInt(stats[0]?.pendingOrders) || 0,
-                totalSpent: parseFloat(stats[0]?.totalSpent) || 0
-            }
+                totalOrders: parseInt(statsData.totalOrders) || 0,
+                completedOrders: parseInt(statsData.completedOrders) || 0,
+                failedOrders: parseInt(statsData.failedOrders) || 0,
+                pendingOrders: parseInt(statsData.pendingOrders) || 0,
+                totalSpent: parseFloat(statsData.totalSpent) || 0,
+                dailySpent: 0,
+                dailyOrders: 0,
+                dailyRefunds: 0,
+                totalRefunds: 0
+            },
+            refunds: []
         };
 
-        // Query daily stats (orders and spent)
-        const [[dailyStats]] = await pool.execute(
-            `SELECT 
-                COUNT(*)::integer as "dailyOrders",
-                COALESCE(SUM(CASE WHEN status = 'completed' THEN amount_ghc ELSE 0 END), 0) as "dailySpent"
-             FROM transactions
-             WHERE user_id = ?::uuid AND created_at >= CURRENT_DATE`,
-            [id]
-        );
+        try {
+            const [dailyRows] = await pool.execute(
+                `SELECT 
+                    COUNT(*)::integer as "dailyOrders",
+                    COALESCE(SUM(CASE WHEN status = 'completed' THEN amount_ghc ELSE 0 END), 0) as "dailySpent"
+                 FROM transactions
+                 WHERE user_id = ?::uuid AND created_at >= CURRENT_DATE`,
+                [id]
+            );
+            if (dailyRows && dailyRows.length > 0) {
+                resultJson.stats.dailySpent = parseFloat(dailyRows[0].dailySpent) || 0;
+                resultJson.stats.dailyOrders = parseInt(dailyRows[0].dailyOrders) || 0;
+            }
+        } catch (dailyErr) {}
 
-        // Query refund stats (daily refunds and total refunds)
-        const [[refundStats]] = await pool.execute(
-            `SELECT 
-                COALESCE(SUM(amount_ghc), 0) as "totalRefunds",
-                COALESCE(SUM(CASE WHEN created_at >= CURRENT_DATE THEN amount_ghc ELSE 0 END), 0) as "dailyRefunds"
-             FROM refunds
-             WHERE user_id = ?::uuid`,
-            [id]
-        );
+        try {
+            const [refundRows] = await pool.execute(
+                `SELECT 
+                    COALESCE(SUM(amount_ghc), 0) as "totalRefunds",
+                    COALESCE(SUM(CASE WHEN created_at >= CURRENT_DATE THEN amount_ghc ELSE 0 END), 0) as "dailyRefunds"
+                 FROM refunds
+                 WHERE user_id = ?::uuid`,
+                [id]
+            );
+            if (refundRows && refundRows.length > 0) {
+                resultJson.stats.dailyRefunds = parseFloat(refundRows[0].dailyRefunds) || 0;
+                resultJson.stats.totalRefunds = parseFloat(refundRows[0].totalRefunds) || 0;
+            }
+        } catch (refErr) {}
 
-        // Fetch user refunds list
-        const [refundsList] = await pool.execute(
-            `SELECT id, amount_ghc, notes, created_at
-             FROM refunds
-             WHERE user_id = ?::uuid
-             ORDER BY created_at DESC
-             LIMIT 50`,
-            [id]
-        );
-
-        // Append to result
-        resultJson.refunds = refundsList.map(r => ({
-            id: r.id,
-            amount: parseFloat(r.amount_ghc) || 0,
-            notes: r.notes || 'No description',
-            createdAt: r.created_at
-        }));
-
-        resultJson.stats.dailySpent = parseFloat(dailyStats?.dailySpent) || 0;
-        resultJson.stats.dailyOrders = parseInt(dailyStats?.dailyOrders) || 0;
-        resultJson.stats.dailyRefunds = parseFloat(refundStats?.dailyRefunds) || 0;
-        resultJson.stats.totalRefunds = parseFloat(refundStats?.totalRefunds) || 0;
+        try {
+            const [refundsList] = await pool.execute(
+                `SELECT id, amount_ghc, notes, created_at
+                 FROM refunds
+                 WHERE user_id = ?::uuid
+                 ORDER BY created_at DESC
+                 LIMIT 50`,
+                [id]
+            );
+            resultJson.refunds = refundsList.map(r => ({
+                id: r.id,
+                amount: parseFloat(r.amount_ghc || 0),
+                notes: r.notes || 'No description',
+                createdAt: r.created_at
+            }));
+        } catch (refListErr) {}
 
         res.json(resultJson);
 
     } catch (error) {
         console.error('Get user details error:', error);
-        res.status(500).json({ error: 'Failed to get user details' });
+        res.status(500).json({ error: 'Failed to get user details: ' + error.message });
     }
 };
 
