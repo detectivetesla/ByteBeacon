@@ -45,7 +45,9 @@ import {
     Download,
     FileSpreadsheet,
     FileText,
-    FileCode
+    FileCode,
+    Shield,
+    ShieldCheck
 } from 'lucide-react';
 import { exportTransactions, exportActivityLogs, exportDeposits } from '@/lib/export';
 import {
