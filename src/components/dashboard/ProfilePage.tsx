@@ -469,8 +469,19 @@ export default function ProfilePage() {
                         </CardHeader>
                         <CardContent>
                             {activityLoading ? (
-                                <div className="flex items-center justify-center py-6">
-                                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                                <div className="space-y-3">
+                                    {[1, 2, 3].map(i => (
+                                        <div key={i} className="flex items-center justify-between p-3 bg-muted/20 rounded-xl">
+                                            <div className="flex items-center gap-3">
+                                                <Skeleton className="w-8 h-8 rounded-lg" />
+                                                <div className="space-y-1">
+                                                    <Skeleton className="h-4 w-36" />
+                                                    <Skeleton className="h-3 w-24" />
+                                                </div>
+                                            </div>
+                                            <Skeleton className="h-3 w-16" />
+                                        </div>
+                                    ))}
                                 </div>
                             ) : activityLogs.length === 0 ? (
                                 <div className="text-center py-6 text-muted-foreground text-sm">

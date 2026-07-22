@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -90,8 +91,23 @@ export default function PartnerConsole() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center p-12">
-                <Loader2 className="w-10 h-10 animate-spin text-cyan-500" />
+            <div className="max-w-6xl mx-auto space-y-6">
+                <div className="flex justify-between items-center">
+                    <div className="space-y-2">
+                        <Skeleton className="h-8 w-64 bg-slate-800" />
+                        <Skeleton className="h-4 w-96 bg-slate-800" />
+                    </div>
+                    <Skeleton className="h-8 w-28 bg-slate-800 rounded-full" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Skeleton className="h-24 bg-slate-900 rounded-xl" />
+                    <Skeleton className="h-24 bg-slate-900 rounded-xl" />
+                    <Skeleton className="h-24 bg-slate-900 rounded-xl" />
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <Skeleton className="h-80 col-span-1 bg-slate-900 rounded-xl" />
+                    <Skeleton className="h-80 col-span-2 bg-slate-900 rounded-xl" />
+                </div>
             </div>
         );
     }

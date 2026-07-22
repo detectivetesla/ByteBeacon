@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     Dialog,
@@ -187,8 +188,22 @@ export default function AdminUserDetailPage() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center py-20">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                    <Skeleton className="h-9 w-24 rounded-xl" />
+                    <Skeleton className="h-8 w-48 rounded-lg" />
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <Skeleton className="h-64 rounded-2xl col-span-1" />
+                    <Skeleton className="h-64 rounded-2xl col-span-2" />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Skeleton className="h-24 rounded-xl" />
+                    <Skeleton className="h-24 rounded-xl" />
+                    <Skeleton className="h-24 rounded-xl" />
+                    <Skeleton className="h-24 rounded-xl" />
+                </div>
+                <Skeleton className="h-96 w-full rounded-2xl" />
             </div>
         );
     }

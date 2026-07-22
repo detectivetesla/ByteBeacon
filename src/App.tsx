@@ -20,7 +20,7 @@ import DeveloperPortal from "./pages/DeveloperPortal";
 import { useState, useEffect } from "react";
 import { adminService } from "./services/admin.service";
 import { useAuth } from "./contexts/AuthContext";
-import { Loader2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const queryClient = new QueryClient();
 
@@ -80,8 +80,16 @@ const AppWithMaintenance = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0f172a]">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      <div className="min-h-screen bg-[#0f172a] p-6 space-y-6 flex flex-col justify-center items-center">
+        <div className="w-full max-w-md space-y-4">
+          <Skeleton className="h-12 w-12 rounded-2xl mx-auto bg-slate-800" />
+          <Skeleton className="h-6 w-48 mx-auto bg-slate-800" />
+          <Skeleton className="h-4 w-64 mx-auto bg-slate-800" />
+          <div className="pt-4 space-y-3">
+            <Skeleton className="h-10 w-full rounded-xl bg-slate-800" />
+            <Skeleton className="h-10 w-full rounded-xl bg-slate-800" />
+          </div>
+        </div>
       </div>
     );
   }

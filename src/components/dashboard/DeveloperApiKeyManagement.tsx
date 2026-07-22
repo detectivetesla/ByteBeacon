@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
 import { userService } from '@/services/user.service';
 import {
     Key, Eye, EyeOff, Clipboard, Check, Trash2, Plus, Loader2,
@@ -228,9 +229,10 @@ export default function DeveloperApiKeyManagement() {
                 </div>
 
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center p-16 gap-3">
-                        <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
-                        <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Fetching credentials...</span>
+                    <div className="space-y-4 p-4">
+                        <Skeleton className="h-12 w-full rounded-xl bg-slate-900" />
+                        <Skeleton className="h-12 w-full rounded-xl bg-slate-900" />
+                        <Skeleton className="h-12 w-full rounded-xl bg-slate-900" />
                     </div>
                 ) : keys.length === 0 ? (
                     <div className="text-center p-16 space-y-4 border border-dashed border-white/5 rounded-2xl bg-slate-900/10">
