@@ -277,9 +277,9 @@ const getAllTransactions = async (req, res) => {
                    COALESCE(p.full_name, u.name) as user_name, 
                    COALESCE(p.email, u.email) as user_email
             FROM transactions t
-            LEFT JOIN data_bundles d ON t.bundle_id = d.id::uuid
-            LEFT JOIN users u ON t.user_id = u.uuid::uuid
-            LEFT JOIN profiles p ON t.user_id = p.id::uuid
+            LEFT JOIN data_bundles d ON t.bundle_id::text = d.id::text
+            LEFT JOIN users u ON t.user_id::text = u.uuid::text
+            LEFT JOIN profiles p ON t.user_id::text = p.id::text
             WHERE 1=1
         `;
         const params = [];

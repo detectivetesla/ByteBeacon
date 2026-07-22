@@ -683,6 +683,9 @@ export default function AdminOrdersPage() {
                                 ) : (
                                     processedOrders.map((order, index) => {
                                         const displayId = `ORD-${order.serialId || order.id.slice(0, 7).toUpperCase()}`;
+                                        const detectedNet = getNetworkFromOrder(order.network, order.recipient_phone);
+                                        const netLabel = (order.network && order.network !== 'N/A') ? order.network : (detectedNet !== 'unknown' ? detectedNet.toUpperCase() : 'N/A');
+
                                         return (
                                             <tr 
                                                 key={order.id} 
@@ -707,9 +710,9 @@ export default function AdminOrdersPage() {
                                                     <td className="p-4 text-sm">
                                                         <span className={cn(
                                                             "px-2.5 py-0.5 rounded text-[11px] font-bold uppercase",
-                                                            getNetworkBadge(order.network)
+                                                            getNetworkBadge(netLabel)
                                                         )}>
-                                                            {order.network}
+                                                            {netLabel}
                                                         </span>
                                                     </td>
                                                 )}

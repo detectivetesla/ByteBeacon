@@ -202,7 +202,12 @@ export default function AdminUserDetailPage() {
         );
     }
 
-    const { user, transactions, activityLogs, deposits, stats, refunds = [] } = data;
+    const user = data?.user || { id: id || '', fullName: 'Unknown', email: '', phone: '', walletBalance: 0, role: 'customer' };
+    const transactions = data?.transactions || [];
+    const activityLogs = data?.activityLogs || [];
+    const deposits = data?.deposits || [];
+    const stats = data?.stats || { totalOrders: 0, completedOrders: 0, failedOrders: 0, pendingOrders: 0, totalSpent: 0, dailySpent: 0, dailyOrders: 0, dailyRefunds: 0, totalRefunds: 0 };
+    const refunds = data?.refunds || [];
 
     const filteredTransactions = transactions.filter(tx => {
         if (!tx.createdAt) return true;
