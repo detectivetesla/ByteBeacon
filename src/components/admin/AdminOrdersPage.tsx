@@ -982,6 +982,7 @@ export default function AdminOrdersPage() {
                                             Mark Failed
                                         </Button>
                                     </>
+                                )}
                                 {selectedOrder.status === 'failed' && (
                                     <Button
                                         size="sm"
