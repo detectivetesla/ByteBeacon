@@ -2078,9 +2078,10 @@ const reprocessTransaction = async (req, res) => {
                     d.network, d.data_amount, t.recipient_phone
              FROM transactions t
              LEFT JOIN data_bundles d ON t.bundle_id = d.id::uuid
-             WHERE t.id = ?::uuid FOR UPDATE`,
+             WHERE t.id = ?::uuid FOR UPDATE OF t`,
             [id]
         );
+
 
         if (txRows.length === 0) {
             await connection.rollback();
