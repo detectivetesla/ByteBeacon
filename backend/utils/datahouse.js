@@ -319,13 +319,35 @@ const checkBalance = async (apiKey, baseUrl = null) => {
     }
 
     try {
-        const response = await makeDatahouseRequest('GET', '/agent/wallet/balance', datahouseApiKey, null, baseUrl);
-        console.log('💰 Datahouse balance:', response.data);
+        const endpoints = ['/agent/wallet/balance', '/wallet/balance', '/agent/balance', '/balance'];
+        let lastError = null;
+
+        for (const endpoint of endpoints) {
+            const response = await makeDatahouseRequest('GET', endpoint, datahouseApiKey, null, baseUrl);
+            console.log(`💰 Datahouse balance (${endpoint}):`, response.status, response.data);
+
+            if (response.ok && response.data) {
+                const d = response.data;
+                const rawBalance = d.balance ?? d.data?.balance ?? d.wallet_balance ?? d.data?.wallet_balance ?? d.amount ?? null;
+                const isSuccessful = d.success === true || d.status === 'success' || d.status === 200 || response.status === 200;
+
+                if (isSuccessful || rawBalance !== null) {
+                    return {
+                        success: true,
+                        balance: rawBalance !== null ? parseFloat(rawBalance) : 0,
+                        currency: d.currency || d.data?.currency || 'GHS'
+                    };
+                }
+            }
+
+            if (response.data) {
+                lastError = response.data.error?.message || response.data.message || response.data.error || lastError;
+            }
+        }
 
         return {
-            success: response.data?.success || false,
-            balance: response.data?.data?.balance || 0,
-            currency: response.data?.data?.currency || 'GHS'
+            success: false,
+            error: lastError || 'Connection failed. Please check your API Key and URL.'
         };
     } catch (error) {
         console.error('❌ Datahouse balance check error:', error);
