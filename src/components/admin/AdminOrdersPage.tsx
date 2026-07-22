@@ -71,23 +71,38 @@ export default function AdminOrdersPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [networkFilter, setNetworkFilter] = useState<string>('all');
     const [updating, setUpdating] = useState<string | null>(null);
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
-    // Sync status filter from route path (e.g., /admin/orders/all, /admin/orders/processing, etc.)
+    // Sync status & network filter from route path
     useEffect(() => {
-        if (location.pathname.endsWith('/processing')) {
+        if (location.pathname.endsWith('/mtn')) {
+            setNetworkFilter('mtn');
+            setStatusFilter('all');
+        } else if (location.pathname.endsWith('/at')) {
+            setNetworkFilter('at');
+            setStatusFilter('all');
+        } else if (location.pathname.endsWith('/telecel')) {
+            setNetworkFilter('telecel');
+            setStatusFilter('all');
+        } else if (location.pathname.endsWith('/processing')) {
             setStatusFilter('processing');
+            setNetworkFilter('all');
         } else if (location.pathname.endsWith('/completed')) {
             setStatusFilter('completed');
+            setNetworkFilter('all');
         } else if (location.pathname.endsWith('/failed')) {
             setStatusFilter('failed');
+            setNetworkFilter('all');
         } else if (location.pathname.endsWith('/all')) {
             setStatusFilter('all');
+            setNetworkFilter('all');
         }
     }, [location.pathname]);
+
 
     // Sorting state
     const [sortConfig, setSortConfig] = useState<{ key: keyof Order; direction: 'ascending' | 'descending' } | null>({
@@ -205,6 +220,18 @@ export default function AdminOrdersPage() {
 
             const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
 
+            let matchesNetwork = true;
+            if (networkFilter !== 'all') {
+                const net = (order.network || '').toUpperCase();
+                if (networkFilter === 'mtn') {
+                    matchesNetwork = net.includes('MTN');
+                } else if (networkFilter === 'at') {
+                    matchesNetwork = net.includes('AT') || net.includes('AIRTEL') || net.includes('TIGO');
+                } else if (networkFilter === 'telecel') {
+                    matchesNetwork = net.includes('TELECEL') || net.includes('VODA');
+                }
+            }
+
             let matchesDate = true;
             if (order.created_at) {
                 const orderDate = new Date(order.created_at);
@@ -220,8 +247,9 @@ export default function AdminOrdersPage() {
                 }
             }
 
-            return matchesSearch && matchesStatus && matchesDate;
+            return matchesSearch && matchesStatus && matchesNetwork && matchesDate;
         });
+
 
         if (sortConfig !== null) {
             result.sort((a, b) => {
@@ -319,6 +347,10 @@ export default function AdminOrdersPage() {
     ];
 
     const getPageTitle = () => {
+        if (networkFilter === 'mtn') return 'MTN Network Orders';
+        if (networkFilter === 'at') return 'AT (AirtelTigo) Network Orders';
+        if (networkFilter === 'telecel') return 'Telecel Network Orders';
+
         switch (statusFilter) {
             case 'processing':
                 return 'Processing Orders';
@@ -331,6 +363,7 @@ export default function AdminOrdersPage() {
                 return 'All System Orders';
         }
     };
+
 
     const handleExport = (format: 'excel' | 'csv' | 'json' = 'csv') => {
         if (processedOrders.length === 0) {
@@ -409,19 +442,40 @@ export default function AdminOrdersPage() {
                                 className="pl-9 bg-accent/40 border-border/50 text-foreground"
                             />
                         </div>
-                        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar">
+                        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar items-center">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mr-1">Status:</span>
                             {['all', 'processing', 'completed', 'failed'].map((status) => (
                                 <Button
                                     key={status}
                                     variant={statusFilter === status ? 'default' : 'outline'}
                                     size="sm"
-                                    onClick={() => setStatusFilter(status)}
-                                    className="capitalize rounded-lg px-4 border-border/50 font-semibold"
+                                    onClick={() => { setStatusFilter(status); if (status !== 'all') setNetworkFilter('all'); }}
+                                    className="capitalize rounded-lg px-3 text-xs border-border/50 font-semibold"
                                 >
                                     {status}
                                 </Button>
                             ))}
                         </div>
+                        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar items-center border-l border-border/60 pl-3">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mr-1">Network:</span>
+                            {[
+                                { id: 'all', label: 'All' },
+                                { id: 'mtn', label: 'MTN' },
+                                { id: 'at', label: 'AT' },
+                                { id: 'telecel', label: 'Telecel' }
+                            ].map((net) => (
+                                <Button
+                                    key={net.id}
+                                    variant={networkFilter === net.id ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => setNetworkFilter(net.id)}
+                                    className="rounded-lg px-3 text-xs border-border/50 font-semibold"
+                                >
+                                    {net.label}
+                                </Button>
+                            ))}
+                        </div>
+
                     </div>
 
                     {/* Date filter & Columns selection */}

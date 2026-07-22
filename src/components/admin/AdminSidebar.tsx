@@ -67,11 +67,12 @@ const navSections: NavSection[] = [
                 variant: 'rose',
                 subItems: [
                     { label: 'All Orders', href: '/admin/orders/all' },
-                    { label: 'Processing', href: '/admin/orders/processing' },
-                    { label: 'Completed', href: '/admin/orders/completed' },
-                    { label: 'Failed', href: '/admin/orders/failed' }
+                    { label: 'MTN Orders', href: '/admin/orders/mtn' },
+                    { label: 'AT Orders', href: '/admin/orders/at' },
+                    { label: 'Telecel Orders', href: '/admin/orders/telecel' }
                 ]
             },
+
             { icon: Database, label: 'Data Plans', href: '/admin/data-plans', variant: 'blue' },
             { icon: UserCog, label: 'Resellers/Agents', href: '/admin/agents', variant: 'indigo' },
         ]
