@@ -80,32 +80,22 @@ export default function AdminOrdersPage() {
     const [endDate, setEndDate] = useState<string>('');
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
-    // Sync status & network filter from route path
-    useEffect(() => {
+    // Parse route-based active filters synchronously from location.pathname
+    const activeNetworkFilter = useMemo(() => {
         const path = location.pathname.toLowerCase();
-        if (path.endsWith('/mtn')) {
-            setNetworkFilter('mtn');
-            setStatusFilter('all');
-        } else if (path.endsWith('/at')) {
-            setNetworkFilter('at');
-            setStatusFilter('all');
-        } else if (path.endsWith('/telecel')) {
-            setNetworkFilter('telecel');
-            setStatusFilter('all');
-        } else if (path.endsWith('/processing')) {
-            setStatusFilter('processing');
-            setNetworkFilter('all');
-        } else if (path.endsWith('/completed')) {
-            setStatusFilter('completed');
-            setNetworkFilter('all');
-        } else if (path.endsWith('/failed')) {
-            setStatusFilter('failed');
-            setNetworkFilter('all');
-        } else if (path.endsWith('/all')) {
-            setStatusFilter('all');
-            setNetworkFilter('all');
-        }
-    }, [location.pathname]);
+        if (path.includes('/mtn')) return 'mtn';
+        if (path.includes('/at')) return 'at';
+        if (path.includes('/telecel')) return 'telecel';
+        return networkFilter;
+    }, [location.pathname, networkFilter]);
+
+    const activeStatusFilter = useMemo(() => {
+        const path = location.pathname.toLowerCase();
+        if (path.includes('/processing')) return 'processing';
+        if (path.includes('/completed')) return 'completed';
+        if (path.includes('/failed')) return 'failed';
+        return statusFilter;
+    }, [location.pathname, statusFilter]);
 
     // Smart network classifier (checks network field + recipient phone number prefix fallback)
     const getNetworkFromOrder = (networkStr: string, phoneStr: string): 'mtn' | 'at' | 'telecel' | 'unknown' => {
@@ -269,12 +259,12 @@ export default function AdminOrdersPage() {
                 displayId.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (order.sourceProvider && order.sourceProvider.toLowerCase().includes(searchTerm.toLowerCase()));
 
-            const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+            const matchesStatus = activeStatusFilter === 'all' || order.status === activeStatusFilter;
 
             let matchesNetwork = true;
-            if (networkFilter !== 'all') {
+            if (activeNetworkFilter !== 'all') {
                 const detectedNet = getNetworkFromOrder(order.network, order.recipient_phone);
-                matchesNetwork = (detectedNet === networkFilter);
+                matchesNetwork = (detectedNet === activeNetworkFilter);
             }
 
             let matchesDate = true;
@@ -314,7 +304,7 @@ export default function AdminOrdersPage() {
             });
         }
         return result;
-    }, [orders, searchTerm, statusFilter, startDate, endDate, sortConfig]);
+    }, [orders, searchTerm, activeStatusFilter, activeNetworkFilter, startDate, endDate, sortConfig]);
 
     const getStatusIcon = (status: string) => {
         switch (status) {
@@ -392,11 +382,11 @@ export default function AdminOrdersPage() {
     ];
 
     const getPageTitle = () => {
-        if (networkFilter === 'mtn') return 'MTN Network Orders';
-        if (networkFilter === 'at') return 'AT (AirtelTigo) Network Orders';
-        if (networkFilter === 'telecel') return 'Telecel Network Orders';
+        if (activeNetworkFilter === 'mtn') return 'MTN Network Orders';
+        if (activeNetworkFilter === 'at') return 'AT (AirtelTigo) Network Orders';
+        if (activeNetworkFilter === 'telecel') return 'Telecel Network Orders';
 
-        switch (statusFilter) {
+        switch (activeStatusFilter) {
             case 'processing':
                 return 'Processing Orders';
             case 'completed':
@@ -492,7 +482,7 @@ export default function AdminOrdersPage() {
                             {['all', 'processing', 'completed', 'failed'].map((status) => (
                                 <Button
                                     key={status}
-                                    variant={statusFilter === status ? 'default' : 'outline'}
+                                    variant={activeStatusFilter === status ? 'default' : 'outline'}
                                     size="sm"
                                     onClick={() => {
                                         setStatusFilter(status);
@@ -515,7 +505,7 @@ export default function AdminOrdersPage() {
                             ].map((net) => (
                                 <Button
                                     key={net.id}
-                                    variant={networkFilter === net.id ? 'default' : 'outline'}
+                                    variant={activeNetworkFilter === net.id ? 'default' : 'outline'}
                                     size="sm"
                                     onClick={() => {
                                         setNetworkFilter(net.id);
