@@ -121,13 +121,16 @@ export const adminService = {
     },
 
     // Transactions
-    getTransactions: async (params?: { status?: string }): Promise<AdminTransaction[]> => {
+    getTransactions: async (params?: { status?: string; limit?: number; offset?: number }): Promise<AdminTransaction[]> => {
         const queryParams = new URLSearchParams();
         if (params?.status) queryParams.append('status', params.status);
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        if (params?.offset) queryParams.append('offset', params.offset.toString());
 
         const query = queryParams.toString();
         return api.get<AdminTransaction[]>(`/admin/transactions${query ? `?${query}` : ''}`);
     },
+
 
     updateTransactionStatus: async (id: string, status: string): Promise<{ message: string }> => {
         return api.put(`/admin/transactions/${id}/status`, { status });

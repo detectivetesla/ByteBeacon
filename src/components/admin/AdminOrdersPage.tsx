@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { adminService } from '@/services';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -65,6 +66,7 @@ interface Order {
 
 export default function AdminOrdersPage() {
     const { toast } = useToast();
+    const location = useLocation();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -73,6 +75,19 @@ export default function AdminOrdersPage() {
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+    // Sync status filter from route path (e.g., /admin/orders/all, /admin/orders/processing, etc.)
+    useEffect(() => {
+        if (location.pathname.endsWith('/processing')) {
+            setStatusFilter('processing');
+        } else if (location.pathname.endsWith('/completed')) {
+            setStatusFilter('completed');
+        } else if (location.pathname.endsWith('/failed')) {
+            setStatusFilter('failed');
+        } else if (location.pathname.endsWith('/all')) {
+            setStatusFilter('all');
+        }
+    }, [location.pathname]);
 
     // Sorting state
     const [sortConfig, setSortConfig] = useState<{ key: keyof Order; direction: 'ascending' | 'descending' } | null>({
@@ -105,7 +120,8 @@ export default function AdminOrdersPage() {
     const fetchOrders = async () => {
         setLoading(true);
         try {
-            const data = await adminService.getTransactions({});
+            // Fetch all orders with a large limit so no records are omitted
+            const data = await adminService.getTransactions({ limit: 5000 });
             const ordersFormatted = data.map(order => ({
                 id: order.id,
                 user_id: '',
@@ -138,6 +154,7 @@ export default function AdminOrdersPage() {
             setLoading(false);
         }
     };
+
 
     const updateOrderStatus = async (orderId: string, newStatus: 'processing' | 'completed' | 'failed') => {
         setUpdating(orderId);
@@ -301,6 +318,20 @@ export default function AdminOrdersPage() {
         { id: 'updated', label: 'Updated' }
     ];
 
+    const getPageTitle = () => {
+        switch (statusFilter) {
+            case 'processing':
+                return 'Processing Orders';
+            case 'completed':
+                return 'Completed Orders';
+            case 'failed':
+                return 'Failed Orders';
+            case 'all':
+            default:
+                return 'All System Orders';
+        }
+    };
+
     const handleExport = (format: 'excel' | 'csv' | 'json' = 'csv') => {
         if (processedOrders.length === 0) {
             toast({ title: 'No Data', description: 'No orders available to export.', variant: 'destructive' });
@@ -318,10 +349,11 @@ export default function AdminOrdersPage() {
                 <div className="flex items-center gap-3">
                     <ShoppingCart className="w-8 h-8 text-primary" />
                     <div>
-                        <h1 className="text-3xl font-display font-black tracking-tight text-foreground">Admin Orders</h1>
-                        <p className="text-muted-foreground font-medium">Manage and audit all system transactions</p>
+                        <h1 className="text-3xl font-display font-black tracking-tight text-foreground">{getPageTitle()}</h1>
+                        <p className="text-muted-foreground font-medium">Manage and audit all system data bundle orders ({processedOrders.length} records)</p>
                     </div>
                 </div>
+
                 <div className="flex items-center gap-3 self-start sm:self-auto">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>

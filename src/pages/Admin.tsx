@@ -50,6 +50,11 @@ export default function Admin() {
         <Route path="/users" element={<AdminUsersPage />} />
         <Route path="/users/:id" element={<AdminUserDetailPage />} />
         <Route path="/orders" element={<AdminOrdersPage />} />
+        <Route path="/orders/all" element={<AdminOrdersPage />} />
+        <Route path="/orders/processing" element={<AdminOrdersPage />} />
+        <Route path="/orders/completed" element={<AdminOrdersPage />} />
+        <Route path="/orders/failed" element={<AdminOrdersPage />} />
+
         <Route path="/data-plans" element={<AdminDataPlansPage />} />
         <Route path="/agents" element={<AdminAgentsPage />} />
         <Route path="/transactions" element={<AdminTransactionsPage />} />

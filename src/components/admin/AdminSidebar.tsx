@@ -30,11 +30,17 @@ interface AdminSidebarProps {
     isMobile?: boolean;
 }
 
+interface NavSubItem {
+    label: string;
+    href: string;
+}
+
 interface NavItem {
     icon: React.ElementType;
     label: string;
     href: string;
     variant: PremiumIconVariant;
+    subItems?: NavSubItem[];
 }
 
 interface NavSection {
@@ -54,7 +60,18 @@ const navSections: NavSection[] = [
         title: 'MANAGEMENT',
         items: [
             { icon: Users, label: 'Users', href: '/admin/users', variant: 'amber' },
-            { icon: ShoppingCart, label: 'Orders', href: '/admin/orders', variant: 'rose' },
+            { 
+                icon: ShoppingCart, 
+                label: 'Orders', 
+                href: '/admin/orders', 
+                variant: 'rose',
+                subItems: [
+                    { label: 'All Orders', href: '/admin/orders/all' },
+                    { label: 'Processing', href: '/admin/orders/processing' },
+                    { label: 'Completed', href: '/admin/orders/completed' },
+                    { label: 'Failed', href: '/admin/orders/failed' }
+                ]
+            },
             { icon: Database, label: 'Data Plans', href: '/admin/data-plans', variant: 'blue' },
             { icon: UserCog, label: 'Resellers/Agents', href: '/admin/agents', variant: 'indigo' },
         ]
@@ -88,6 +105,9 @@ export default function AdminSidebar({ isCollapsed, adminName, onClose, isMobile
     const location = useLocation();
     const navigate = useNavigate();
     const { signOut } = useAuth();
+    const [expanded, setExpanded] = useState<Record<string, boolean>>({
+        'Orders': true
+    });
 
     const handleSignOut = async () => {
         await signOut();
@@ -99,6 +119,10 @@ export default function AdminSidebar({ isCollapsed, adminName, onClose, isMobile
             return location.pathname === '/admin';
         }
         return location.pathname.startsWith(href);
+    };
+
+    const toggleExpand = (label: string) => {
+        setExpanded(prev => ({ ...prev, [label]: !prev[label] }));
     };
 
     const handleNavClick = () => {
@@ -152,40 +176,102 @@ export default function AdminSidebar({ isCollapsed, adminName, onClose, isMobile
                             </p>
                         )}
                         <div className="space-y-1">
-                            {section.items.map((item) => (
-                                <Link
-                                    key={item.href}
-                                    to={item.href}
-                                    onClick={handleNavClick}
-                                    className={cn(
-                                        "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium group/item",
-                                        "transition-all duration-300 ease-in-out",
-                                        isActive(item.href)
-                                            ? "bg-primary/10 text-primary shadow-sm border border-primary/20"
-                                            : "text-muted-foreground hover:text-primary hover:bg-primary/5 hover:translate-x-1",
-                                        isCollapsed && "justify-center px-1"
-                                    )}
-                                >
-                                    <PremiumIcon
-                                        icon={item.icon}
-                                        variant={item.variant}
-                                        showBackground={isActive(item.href)}
-                                        size="sm"
-                                        className={cn(
-                                            "transition-all duration-300",
-                                            !isActive(item.href) && "group-hover:translate-x-1"
+                            {section.items.map((item) => {
+                                const hasSubItems = item.subItems && item.subItems.length > 0;
+                                const isItemActive = isActive(item.href);
+
+                                return (
+                                    <div key={item.label} className="space-y-1">
+                                        {hasSubItems ? (
+                                            <>
+                                                <button
+                                                    onClick={() => toggleExpand(item.label)}
+                                                    className={cn(
+                                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium group/item",
+                                                        "transition-all duration-300 ease-in-out",
+                                                        isItemActive
+                                                            ? "bg-primary/10 text-primary border border-primary/20"
+                                                            : "text-muted-foreground hover:text-primary hover:bg-primary/5",
+                                                        isCollapsed && "justify-center px-1"
+                                                    )}
+                                                >
+                                                    <PremiumIcon
+                                                        icon={item.icon}
+                                                        variant={item.variant}
+                                                        showBackground={isItemActive}
+                                                        size="sm"
+                                                    />
+                                                    {!isCollapsed && (
+                                                        <>
+                                                            <span className="flex-1 text-left">{item.label}</span>
+                                                            <ChevronDown 
+                                                                className={cn(
+                                                                    "w-4 h-4 transition-transform duration-200 text-muted-foreground/75 group-hover/item:text-primary",
+                                                                    expanded[item.label] && "rotate-180 text-primary"
+                                                                )} 
+                                                            />
+                                                        </>
+                                                    )}
+                                                </button>
+                                                {!isCollapsed && expanded[item.label] && (
+                                                    <div className="pl-6 space-y-1 mt-1 border-l border-border/60 ml-5">
+                                                        {item.subItems?.map((sub) => {
+                                                            const isSubActive = location.pathname === sub.href;
+                                                            return (
+                                                                <Link
+                                                                    key={sub.href}
+                                                                    to={sub.href}
+                                                                    onClick={handleNavClick}
+                                                                    className={cn(
+                                                                        "block px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200",
+                                                                        isSubActive
+                                                                            ? "text-primary bg-primary/10 shadow-sm border border-primary/25"
+                                                                            : "text-muted-foreground hover:text-primary hover:bg-primary/5"
+                                                                    )}
+                                                                >
+                                                                    {sub.label}
+                                                                </Link>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <Link
+                                                to={item.href}
+                                                onClick={handleNavClick}
+                                                className={cn(
+                                                    "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium group/item",
+                                                    "transition-all duration-300 ease-in-out",
+                                                    isItemActive
+                                                        ? "bg-primary/10 text-primary shadow-sm border border-primary/20"
+                                                        : "text-muted-foreground hover:text-primary hover:bg-primary/5 hover:translate-x-1",
+                                                    isCollapsed && "justify-center px-1"
+                                                )}
+                                            >
+                                                <PremiumIcon
+                                                    icon={item.icon}
+                                                    variant={item.variant}
+                                                    showBackground={isItemActive}
+                                                    size="sm"
+                                                    className={cn(
+                                                        "transition-all duration-300",
+                                                        !isItemActive && "group-hover:translate-x-1"
+                                                    )}
+                                                />
+                                                {!isCollapsed && (
+                                                    <span className="relative flex-1">
+                                                        {item.label}
+                                                        {isItemActive && (
+                                                            <div className="absolute -left-12 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-primary rounded-full" />
+                                                        )}
+                                                    </span>
+                                                )}
+                                            </Link>
                                         )}
-                                    />
-                                    {!isCollapsed && (
-                                        <span className="relative flex-1">
-                                            {item.label}
-                                            {isActive(item.href) && (
-                                                <div className="absolute -left-12 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-primary rounded-full" />
-                                            )}
-                                        </span>
-                                    )}
-                                </Link>
-                            ))}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 ))}
@@ -209,3 +295,4 @@ export default function AdminSidebar({ isCollapsed, adminName, onClose, isMobile
         </aside>
     );
 }
+
