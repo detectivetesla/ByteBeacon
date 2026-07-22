@@ -319,7 +319,7 @@ const checkBalance = async (apiKey, baseUrl = null) => {
     }
 
     try {
-        const endpoints = ['/agent/wallet/balance', '/wallet/balance', '/agent/balance', '/balance'];
+        const endpoints = ['/agent/wallet/balance', '/agent/me', '/wallet/balance', '/agent/balance', '/balance'];
         let lastError = null;
 
         for (const endpoint of endpoints) {
@@ -328,7 +328,7 @@ const checkBalance = async (apiKey, baseUrl = null) => {
 
             if (response.ok && response.data) {
                 const d = response.data;
-                const rawBalance = d.balance ?? d.data?.balance ?? d.wallet_balance ?? d.data?.wallet_balance ?? d.amount ?? null;
+                const rawBalance = d.balance ?? d.data?.balance ?? d.wallet_balance ?? d.data?.wallet_balance ?? d.amount ?? d.data?.amount ?? null;
                 const isSuccessful = d.success === true || d.status === 'success' || d.status === 200 || response.status === 200;
 
                 if (isSuccessful || rawBalance !== null) {
@@ -340,8 +340,32 @@ const checkBalance = async (apiKey, baseUrl = null) => {
                 }
             }
 
+            // Extract error message properly
+            let errMsg = null;
             if (response.data) {
-                lastError = response.data.error?.message || response.data.message || response.data.error || lastError;
+                const errObj = response.data.error;
+                if (typeof errObj === 'string') {
+                    errMsg = errObj;
+                } else if (errObj && typeof errObj === 'object') {
+                    errMsg = errObj.message || errObj.code || JSON.stringify(errObj);
+                } else if (response.data.message) {
+                    errMsg = response.data.message;
+                }
+            }
+
+            // If authentication or agent authorization failed, stop checking non-existent endpoints
+            if (response.status === 401 || response.status === 403) {
+                return {
+                    success: false,
+                    error: errMsg || (response.status === 403 ? 'Agent is not active or access forbidden.' : 'Invalid API Key.')
+                };
+            }
+
+            // Save non-404 errors as priority
+            if (errMsg && response.status !== 404) {
+                lastError = errMsg;
+            } else if (!lastError && errMsg) {
+                lastError = errMsg;
             }
         }
 

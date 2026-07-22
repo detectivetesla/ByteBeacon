@@ -495,10 +495,12 @@ const testSourcingProvider = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Base URL or API Key is empty. Please configure them first.' });
         }
 
-        // For builtin providers (datahouse, portal02), use the existing sourcing module
+        // For builtin providers (datahouse, portal02), use the provider specific checkBalance method
         if (provider.slug === 'datahouse' || provider.slug === 'portal02') {
-            const sourcing = require('../utils/sourcing');
-            const result = await sourcing.checkBalance(provider.slug);
+            const result = provider.slug === 'portal02'
+                ? await require('../utils/portal02').checkBalance(apiKey, baseUrl)
+                : await require('../utils/datahouse').checkBalance(apiKey, baseUrl);
+
             if (result && result.success) {
                 return res.json({ success: true, message: 'Connection successful', balance: result.balance, currency: result.currency || 'GHS' });
             } else {
