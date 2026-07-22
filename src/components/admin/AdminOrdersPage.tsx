@@ -38,7 +38,8 @@ import {
     Download,
     FileSpreadsheet,
     FileText,
-    FileCode
+    FileCode,
+    RotateCcw
 } from 'lucide-react';
 import { exportOrders } from '@/lib/export';
 import { cn } from '@/lib/utils';
@@ -71,8 +72,7 @@ export default function AdminOrdersPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
-    const [networkFilter, setNetworkFilter] = useState<string>('all');
-    const [updating, setUpdating] = useState<string | null>(null);
+    const [reprocessingId, setReprocessingId] = useState<string | null>(null);
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -97,11 +97,56 @@ export default function AdminOrdersPage() {
         } else if (location.pathname.endsWith('/failed')) {
             setStatusFilter('failed');
             setNetworkFilter('all');
-        } else if (location.pathname.endsWith('/all')) {
+        } else {
             setStatusFilter('all');
             setNetworkFilter('all');
         }
     }, [location.pathname]);
+
+    // Smart network classifier (checks network field + recipient phone number prefix fallback)
+    const getNetworkFromOrder = (networkStr: string, phoneStr: string): 'mtn' | 'at' | 'telecel' | 'unknown' => {
+        const net = (networkStr || '').toUpperCase();
+        if (net.includes('MTN')) return 'mtn';
+        if (net.includes('AT') || net.includes('AIRTEL') || net.includes('TIGO')) return 'at';
+        if (net.includes('TELECEL') || net.includes('VODA')) return 'telecel';
+
+        const cleanPhone = (phoneStr || '').replace(/\D/g, '');
+        let prefix = '';
+        if (cleanPhone.startsWith('233')) {
+            prefix = '0' + cleanPhone.slice(3, 5);
+        } else if (cleanPhone.startsWith('0')) {
+            prefix = cleanPhone.slice(0, 3);
+        }
+
+        if (['024', '054', '055', '059', '025', '053'].includes(prefix)) return 'mtn';
+        if (['020', '050'].includes(prefix)) return 'telecel';
+        if (['027', '057', '026', '056'].includes(prefix)) return 'at';
+
+        return 'unknown';
+    };
+
+    const handleReprocessOrder = async (id: string) => {
+        setReprocessingId(id);
+        try {
+            const result = await adminService.reprocessTransaction(id);
+            toast({
+                title: 'Reprocess Initiated',
+                description: result.message || 'Order has been requeued for processing.'
+            });
+            fetchOrders();
+            if (selectedOrder && selectedOrder.id === id) {
+                setSelectedOrder(prev => prev ? { ...prev, status: 'processing' } : null);
+            }
+        } catch (err: any) {
+            toast({
+                title: 'Reprocess Failed',
+                description: err?.response?.data?.error || err?.message || 'Failed to reprocess order.',
+                variant: 'destructive'
+            });
+        } finally {
+            setReprocessingId(null);
+        }
+    };
 
 
     // Sorting state
@@ -222,14 +267,8 @@ export default function AdminOrdersPage() {
 
             let matchesNetwork = true;
             if (networkFilter !== 'all') {
-                const net = (order.network || '').toUpperCase();
-                if (networkFilter === 'mtn') {
-                    matchesNetwork = net.includes('MTN');
-                } else if (networkFilter === 'at') {
-                    matchesNetwork = net.includes('AT') || net.includes('AIRTEL') || net.includes('TIGO');
-                } else if (networkFilter === 'telecel') {
-                    matchesNetwork = net.includes('TELECEL') || net.includes('VODA');
-                }
+                const detectedNet = getNetworkFromOrder(order.network, order.recipient_phone);
+                matchesNetwork = (detectedNet === networkFilter);
             }
 
             let matchesDate = true;
@@ -749,6 +788,23 @@ export default function AdminOrdersPage() {
                                                                     </Button>
                                                                 </div>
                                                             )}
+                                                            {order.status === 'failed' && (
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => handleReprocessOrder(order.id)}
+                                                                    disabled={reprocessingId === order.id}
+                                                                    className="h-7 text-xs border-amber-500/50 text-amber-400 hover:bg-amber-500/10 gap-1 mr-1"
+                                                                    title="Reprocess failed order"
+                                                                >
+                                                                    {reprocessingId === order.id ? (
+                                                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                                    ) : (
+                                                                        <RotateCcw className="w-3.5 h-3.5" />
+                                                                    )}
+                                                                    Reprocess
+                                                                </Button>
+                                                            )}
                                                             <DropdownMenu>
                                                                 <DropdownMenuTrigger asChild>
                                                                     <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-accent rounded-lg">
@@ -763,6 +819,16 @@ export default function AdminOrdersPage() {
                                                                         <Eye className="w-3.5 h-3.5" />
                                                                         View Details
                                                                     </DropdownMenuItem>
+                                                                    {order.status === 'failed' && (
+                                                                        <DropdownMenuItem 
+                                                                            onClick={() => handleReprocessOrder(order.id)}
+                                                                            disabled={reprocessingId === order.id}
+                                                                            className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer text-amber-400 focus:text-amber-400"
+                                                                        >
+                                                                            <RotateCcw className="w-3.5 h-3.5" />
+                                                                            Reprocess Order
+                                                                        </DropdownMenuItem>
+                                                                    )}
                                                                 </DropdownMenuContent>
                                                             </DropdownMenu>
                                                         </div>
@@ -916,6 +982,20 @@ export default function AdminOrdersPage() {
                                             Mark Failed
                                         </Button>
                                     </>
+                                {selectedOrder.status === 'failed' && (
+                                    <Button
+                                        size="sm"
+                                        onClick={() => handleReprocessOrder(selectedOrder.id)}
+                                        disabled={reprocessingId === selectedOrder.id}
+                                        className="bg-amber-500 hover:bg-amber-600 text-black font-bold flex items-center gap-1.5"
+                                    >
+                                        {reprocessingId === selectedOrder.id ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <RotateCcw className="w-4 h-4" />
+                                        )}
+                                        Reprocess Order
+                                    </Button>
                                 )}
                             </div>
                             <Button 

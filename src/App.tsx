@@ -29,8 +29,14 @@ const AppWithMaintenance = () => {
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Admin Security: Check for secret access code
+  // Admin Security: Check for secret access code (persisted per session)
   const [hasSecretAccess, setHasSecretAccess] = useState(() => {
+    // 1. Check sessionStorage (persists across redirects within the same tab)
+    if (sessionStorage.getItem('adminSecretAccess') === 'true') {
+      return true;
+    }
+
+    // 2. Check URL query parameter
     const params = new URLSearchParams(window.location.search);
     const secretFromUrl = params.get('secret');
     // Also check for standalone secret (e.g. ?martin2005)
@@ -38,8 +44,14 @@ const AppWithMaintenance = () => {
 
     const systemSecret = import.meta.env.VITE_ADMIN_SECRET_CODE || 'martin2005';
 
-    return (secretFromUrl === systemSecret || firstParam === systemSecret);
+    const hasSecret = (secretFromUrl === systemSecret || firstParam === systemSecret);
+    if (hasSecret) {
+      sessionStorage.setItem('adminSecretAccess', 'true');
+    }
+
+    return hasSecret;
   });
+
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -104,7 +116,7 @@ const AppWithMaintenance = () => {
         <Route path="/dashboard/*" element={<Dashboard />} />
         <Route
           path="/admin/login"
-          element={hasSecretAccess ? <AdminLoginPage /> : <Navigate to="/" replace />}
+          element={(hasSecretAccess || role === 'admin') ? <AdminLoginPage /> : <Navigate to="/" replace />}
         />
         <Route path="/admin/*" element={<Admin />} />
         <Route path="/payment-callback" element={<PaymentCallback />} />
