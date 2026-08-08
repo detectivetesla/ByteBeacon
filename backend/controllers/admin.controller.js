@@ -2294,13 +2294,14 @@ const getAllAgentStores = async (req, res) => {
             FROM agent_stores s
             LEFT JOIN users u ON s.user_id = u.uuid
             LEFT JOIN profiles p ON s.user_id = p.id
+            LEFT JOIN agent_wallets w ON s.user_id = w.agent_id
             ORDER BY s.created_at DESC
         `);
 
         res.json(stores);
     } catch (error) {
         console.error('Error getting all agent stores:', error);
-        res.status(500).json({ error: 'Failed to fetch agent stores' });
+        res.status(500).json({ error: 'Failed to fetch agent stores: ' + error.message });
     }
 };
 
