@@ -15,7 +15,8 @@ import {
     UserPlus,
     Code,
     BookOpen,
-    Key
+    Key,
+    Store
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PremiumIcon, PremiumIconVariant } from '../ui/PremiumIcon';
@@ -42,6 +43,7 @@ interface NavItem {
 const getNavItems = (userRole: string | null | undefined): NavItem[] => {
     const baseItems: NavItem[] = [
         { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard', variant: 'violet' },
+        { icon: Store, label: 'Agent Store', href: '/dashboard/agent-store', variant: 'emerald' },
         { icon: Wallet, label: 'Wallet', href: '/dashboard/wallet', variant: 'emerald' },
         {
             icon: Package,
@@ -85,7 +87,7 @@ const getNavItems = (userRole: string | null | undefined): NavItem[] => {
     } else {
         baseItems.push({
             icon: UserPlus,
-            label: 'Apply for Agency',
+            label: 'Apply for Super Agency',
             href: '/dashboard/apply-agent',
             variant: 'violet',
         });
@@ -183,13 +185,8 @@ export default function Sidebar({ isCollapsed, userName, userEmail, userRole, on
                             <p className="font-semibold text-sm truncate">{userName || 'User'}</p>
                             <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
                             {(userRole === 'agent' || userRole === 'superagent') && (
-                                <span className={cn(
-                                    "inline-block mt-1 px-2 py-0.5 text-xs font-semibold rounded uppercase tracking-wider",
-                                    userRole === 'superagent'
-                                        ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white"
-                                        : "bg-primary/20 text-primary"
-                                )}>
-                                    {userRole === 'superagent' ? 'SuperAgent' : 'Agent'}
+                                <span className="inline-block mt-1 px-2 py-0.5 text-xs font-semibold rounded uppercase tracking-wider bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
+                                    SuperAgent
                                 </span>
                             )}
                         </div>

@@ -45,7 +45,14 @@ const {
     updatePartner,
     adjustPartnerBalance,
     reprocessTransaction,
-    massReprocessFailedTransactions
+    massReprocessFailedTransactions,
+    getAllAgentStores,
+    updateAgentStoreReviewStatus,
+    manualActivateAgentStore,
+    getAllAgentWithdrawals,
+    updateAgentWithdrawalStatus,
+    getAgentPricingRules,
+    updateAgentPricingRules
 } = require('../controllers/admin.controller');
 const { 
     updateMaintenanceStatus, 
@@ -137,5 +144,14 @@ router.get('/partners', getAllPartners);
 router.get('/partners/:id', getPartnerDetails);
 router.put('/partners/:id', updatePartner);
 router.post('/partners/:id/adjust-balance', adjustPartnerBalance);
+
+// Agent Store & Reseller Marketplace Management
+router.get('/agent-stores', getAllAgentStores);
+router.put('/agent-stores/:id/review', updateAgentStoreReviewStatus);
+router.post('/agent-stores/:id/activate-manual', manualActivateAgentStore);
+router.get('/agent-stores/withdrawals', getAllAgentWithdrawals);
+router.put('/agent-stores/withdrawals/:id', updateAgentWithdrawalStatus);
+router.get('/agent-stores/pricing-rules', getAgentPricingRules);
+router.put('/agent-stores/pricing-rules', updateAgentPricingRules);
 
 module.exports = router;

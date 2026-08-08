@@ -10,12 +10,24 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, UserPlus, CheckCircle, Clock, Users, DollarSign, Code, Sparkles, ShieldCheck, Zap, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/services';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2, UserPlus, CheckCircle, Clock, DollarSign, Code, Sparkles, ShieldCheck, Zap, AlertTriangle } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
 export default function ApplyAgentPage() {
     const { user } = useAuth();
     const { toast } = useToast();
     const [loading, setLoading] = useState(false);
     const [submitted, setSubmitted] = useState(false);
-    const [requestType, setRequestType] = useState<'agent' | 'superagent'>('agent');
+    const [requestType, setRequestType] = useState<'agent' | 'superagent'>('superagent');
     const [formData, setFormData] = useState({
         businessName: '',
         reason: '',
@@ -79,37 +91,6 @@ export default function ApplyAgentPage() {
         }
     };
 
-    const sendAdminNotification = async () => {
-        // This would typically call an Edge Function to send email
-        // For now, we'll log it
-        console.log('Email notification would be sent to: nomotsumartin@gmail.com');
-        console.log('User requesting agentship:', user?.email);
-    };
-
-    const agentBenefits = [
-        {
-            icon: DollarSign,
-            title: 'Discounted Prices',
-            description: 'Get 10-15% off on all data bundles',
-            color: 'text-emerald-500',
-            bgColor: 'bg-emerald-500/10'
-        },
-        {
-            icon: Code,
-            title: 'Developer API',
-            description: 'Access our API for automated purchases',
-            color: 'text-blue-500',
-            bgColor: 'bg-blue-500/10'
-        },
-        {
-            icon: Users,
-            title: 'Reseller Tools',
-            description: 'Tools to manage your customers',
-            color: 'text-amber-500',
-            bgColor: 'bg-amber-500/10'
-        },
-    ];
-
     const superAgentBenefits = [
         {
             icon: Code,
@@ -134,14 +115,14 @@ export default function ApplyAgentPage() {
         },
         {
             icon: Zap,
-            title: 'Early Bird Beta',
-            description: 'Apply for free during the pre-launch phase',
-            color: 'text-amber-500',
-            bgColor: 'bg-amber-500/10'
+            title: 'Top Reseller Discounts',
+            description: 'Unlock maximum pricing tier on all network data bundles',
+            color: 'text-emerald-500',
+            bgColor: 'bg-emerald-500/10'
         }
     ];
 
-    const benefits = requestType === 'superagent' ? superAgentBenefits : agentBenefits;
+    const benefits = superAgentBenefits;
 
     if (submitted) {
         return (
@@ -157,7 +138,7 @@ export default function ApplyAgentPage() {
                             Application Submitted!
                         </h2>
                         <p className="text-muted-foreground mb-8 max-w-md mx-auto text-lg leading-relaxed">
-                            Your <span className="text-foreground font-bold italic uppercase">{requestType}</span> application is now in our queue. Our team will review your credentials and get back to you within <span className="text-foreground font-bold italic">24-48 hours</span>.
+                            Your <span className="text-foreground font-bold italic uppercase">SuperAgent</span> application is now in our queue. Our team will review your credentials and activate your profile within <span className="text-foreground font-bold italic">24-48 hours</span>.
                         </p>
                         <div className="flex items-center justify-center gap-3 py-3 px-6 bg-emerald-500/5 rounded-full border border-emerald-500/20 w-fit mx-auto animate-pulse">
                             <Clock className="w-5 h-5 text-emerald-500" />
@@ -171,7 +152,7 @@ export default function ApplyAgentPage() {
 
     return (
         <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
-            {/* Header & Tabs */}
+            {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-border/50 pb-6">
                 <div className="flex items-center gap-6">
                     <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20">
@@ -179,45 +160,20 @@ export default function ApplyAgentPage() {
                     </div>
                     <div>
                         <h1 className="text-3xl md:text-4xl font-display font-bold text-foreground tracking-tight">
-                            Apply for Agency
+                            Apply for Super Agency
                         </h1>
                         <p className="text-muted-foreground font-medium mt-1">
-                            Unlock elite privileges, reseller pricing, and developer tools.
+                            Unlock elite SuperAgent privileges, reseller pricing, white-labeled portals, and developer tools.
                         </p>
                     </div>
                 </div>
 
-                {/* Sliding Tab Selector */}
-                <div className="flex p-1 bg-muted/60 border border-border/50 rounded-2xl max-w-sm w-full md:w-auto relative">
-                    <button
-                        type="button"
-                        onClick={() => setRequestType('agent')}
-                        className={cn(
-                            "flex-1 md:flex-initial flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold font-display transition-all duration-300 relative text-xs uppercase tracking-wider",
-                            requestType === 'agent'
-                                ? "bg-primary text-primary-foreground shadow-md"
-                                : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                        )}
-                    >
-                        <Zap className="w-3.5 h-3.5" />
-                        Agent
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setRequestType('superagent')}
-                        className={cn(
-                            "flex-1 md:flex-initial flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold font-display transition-all duration-300 relative text-xs uppercase tracking-wider pr-14",
-                            requestType === 'superagent'
-                                ? "bg-primary text-primary-foreground shadow-md"
-                                : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                        )}
-                    >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        SuperAgent
-                        <span className="absolute right-2 bg-gradient-to-r from-amber-500 to-orange-500 text-[7px] font-black text-white px-1.5 py-0.5 rounded-full border border-background shadow-lg scale-90 animate-pulse">
-                            SOON
-                        </span>
-                    </button>
+                {/* Status Badge */}
+                <div className="flex p-1 bg-muted/60 border border-border/50 rounded-2xl w-fit relative">
+                    <div className="flex items-center gap-2 py-2.5 px-4 rounded-xl font-bold font-display bg-primary text-primary-foreground shadow-md text-xs uppercase tracking-wider">
+                        <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+                        SuperAgent Tier
+                    </div>
                 </div>
             </div>
 
@@ -226,7 +182,7 @@ export default function ApplyAgentPage() {
                 <div className="lg:col-span-1 space-y-4">
                     <h3 className="font-bold text-foreground flex items-center gap-2 tracking-tight uppercase text-xs">
                         <Sparkles className="w-4 h-4 text-emerald-500" />
-                        {requestType === 'superagent' ? 'SuperAgent Benefits' : 'Agent Privileges'}
+                        SuperAgent Privileges
                     </h3>
                     <div className="grid grid-cols-1 gap-3">
                         {benefits.map((benefit, index) => (
@@ -261,7 +217,7 @@ export default function ApplyAgentPage() {
                                 <span className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">Verified Program</span>
                             </div>
                             <p className="text-xs text-muted-foreground font-medium leading-relaxed">
-                                Join our network of thousands of successful agents across Ghana.
+                                Join our network of thousands of successful SuperAgents across Ghana.
                             </p>
                         </CardContent>
                     </Card>
@@ -271,37 +227,26 @@ export default function ApplyAgentPage() {
                 <Card className="lg:col-span-2 bg-card border-border overflow-hidden group shadow-lg">
                     <CardHeader className="border-b border-border/50">
                         <CardTitle className="text-lg font-display font-bold text-foreground tracking-tight flex items-center gap-2">
-                            {requestType === 'superagent' ? (
-                                <>
-                                    <Sparkles className="w-5 h-5 text-amber-500" />
-                                    SuperAgent Application
-                                </>
-                            ) : (
-                                <>
-                                    <Zap className="w-5 h-5 text-primary" />
-                                    Agent Application Form
-                                </>
-                            )}
+                            <Sparkles className="w-5 h-5 text-amber-500" />
+                            SuperAgent Application Form
                         </CardTitle>
                         <CardDescription className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">
-                            {requestType === 'superagent' ? 'Submit early-bird application (Free)' : 'Secure your agent credentials below'}
+                            Submit your SuperAgent credentials below
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-6">
                         <form onSubmit={handleSubmit} className="space-y-6">
                             <div className="space-y-4">
-                                {requestType === 'superagent' && (
-                                    <div className="p-4 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl text-purple-300 text-sm flex flex-col gap-2 relative overflow-hidden animate-in slide-in-from-top-2">
-                                        <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/10 rounded-full blur-xl pointer-events-none" />
-                                        <div className="flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest text-purple-400">
-                                            <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
-                                            SuperAgent Program Coming Soon
-                                        </div>
-                                        <p className="text-xs text-muted-foreground leading-relaxed">
-                                            The SuperAgent tier is launching soon! Apply today for GH₵ 0.00 (Early Bird Beta) to lock in your priority spot. Your request will be reviewed by the admin, and approved profiles will activate automatically on launch.
-                                        </p>
+                                <div className="p-4 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-xl text-purple-300 text-sm flex flex-col gap-2 relative overflow-hidden animate-in slide-in-from-top-2">
+                                    <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/10 rounded-full blur-xl pointer-events-none" />
+                                    <div className="flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest text-purple-400">
+                                        <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
+                                        Elite SuperAgent Network
                                     </div>
-                                )}
+                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                        Apply today to lock in your priority SuperAgent spot. Your request will be reviewed by the admin team, and approved profiles activate automatically.
+                                    </p>
+                                </div>
 
                                 <div className="bg-primary/10 border border-primary/20 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden">
                                     <div className="flex items-center gap-4 relative z-10">
@@ -335,10 +280,7 @@ export default function ApplyAgentPage() {
                             <div className="p-4 bg-muted/20 border border-border rounded-xl">
                                 <p className="text-[11px] text-muted-foreground italic font-medium leading-relaxed">
                                     <span className="text-emerald-500 font-black uppercase not-italic mr-2">Note:</span>
-                                    {requestType === 'superagent'
-                                        ? 'The SuperAgent Early Bird application is free. No amount will be deducted from your wallet.'
-                                        : 'The application fee is non-refundable and will be deducted from your wallet balance upon submission to secure your agent status.'
-                                    }
+                                    The SuperAgent application is free during this phase. No amount will be deducted from your wallet balance.
                                 </p>
                             </div>
 
@@ -360,10 +302,7 @@ export default function ApplyAgentPage() {
                                     </Label>
                                     <Textarea
                                         id="reason"
-                                        placeholder={requestType === 'superagent'
-                                            ? "Why are you interested in becoming a SuperAgent? E.g., API client base, downline network, etc."
-                                            : "Why should we appoint you as an agent? Tell us your vision..."
-                                        }
+                                        placeholder="Why are you interested in becoming a SuperAgent? E.g., API client base, downline network, POS operation..."
                                         className="bg-muted/50 border-border focus:border-emerald-500/50 min-h-[100px] transition-all duration-300"
                                         required
                                         value={formData.reason}
@@ -398,7 +337,7 @@ export default function ApplyAgentPage() {
                                         ) : (
                                             <>
                                                 <Sparkles className="w-6 h-6 animate-pulse" />
-                                                {requestType === 'superagent' ? 'Submit SuperAgent Application' : 'Secure Agency Status'}
+                                                Submit SuperAgent Application
                                             </>
                                         )}
                                     </div>
@@ -411,3 +350,4 @@ export default function ApplyAgentPage() {
         </div>
     );
 }
+

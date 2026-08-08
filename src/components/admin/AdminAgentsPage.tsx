@@ -327,7 +327,7 @@ export default function AdminAgentsPage() {
         setActionLoading(true);
         try {
             await adminService.updateAgentApplication(application.id, { status: 'approved' });
-            toast({ title: 'Success', description: `${application.fullName} is now an agent!` });
+            toast({ title: 'Success', description: `${application.fullName} is now a SuperAgent!` });
             fetchApplications();
             fetchAgents();
         } catch (err) {
@@ -437,8 +437,8 @@ export default function AdminAgentsPage() {
                 <div className="flex items-center gap-3">
                     <UserCog className="w-8 h-8 text-muted-foreground" />
                     <div>
-                        <h1 className="text-2xl font-bold text-foreground">Resellers & Agents</h1>
-                        <p className="text-muted-foreground">Manage agents and their privileges</p>
+                        <h1 className="text-2xl font-bold text-foreground">Resellers & SuperAgents</h1>
+                        <p className="text-muted-foreground">Manage SuperAgents and their privileges</p>
                     </div>
                 </div>
                 <DropdownMenu>
@@ -491,15 +491,9 @@ export default function AdminAgentsPage() {
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <p className="font-semibold text-foreground">{app.fullName}</p>
-                                                {app.requestType === 'superagent' ? (
-                                                    <span className="px-2 py-0.5 text-xs bg-emerald-500/20 text-emerald-500 font-bold rounded-full animate-pulse">
-                                                        SuperAgent Application (Coming Soon)
-                                                    </span>
-                                                ) : (
-                                                    <span className="px-2 py-0.5 text-xs bg-purple-500/20 text-purple-500 font-bold rounded-full">
-                                                        Agent Application
-                                                    </span>
-                                                )}
+                                                <span className="px-2 py-0.5 text-xs bg-emerald-500/20 text-emerald-500 font-bold rounded-full">
+                                                    SuperAgent Application
+                                                </span>
                                             </div>
                                             <p className="text-sm text-muted-foreground">{app.email} • {app.phone}</p>
                                             {app.businessName && <p className="text-xs text-muted-foreground">Business: {app.businessName}</p>}

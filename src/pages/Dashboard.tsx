@@ -14,12 +14,14 @@ import ApplyAgentPage from '@/components/dashboard/ApplyAgentPage';
 import PartnerConsole from '@/components/dashboard/PartnerConsole';
 import DeveloperApiDocs from '@/components/dashboard/DeveloperApiDocs';
 import DeveloperApiKeyManagement from '@/components/dashboard/DeveloperApiKeyManagement';
+import AgentStoreContainer from '@/components/dashboard/agentStore/AgentStoreContainer';
 
 export default function Dashboard() {
   return (
     <DashboardLayout>
       <Routes>
         <Route path="/" element={<DashboardHome />} />
+        <Route path="/agent-store/*" element={<AgentStoreContainer />} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/bundles/:network" element={<DataBundlesPage />} />
         <Route path="/orders" element={<OrdersPage />} />

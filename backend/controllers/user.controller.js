@@ -144,7 +144,7 @@ const getRole = async (req, res) => {
 // Apply to become an agent or superagent
 const applyForAgent = async (req, res) => {
     try {
-        const { businessName, reason, experience, requestType = 'agent' } = req.body;
+        const { businessName, reason, experience, requestType = 'superagent' } = req.body;
 
         const isSuper = requestType === 'superagent';
         const AGENCY_FEE = isSuper ? 0.00 : 30.00;
@@ -230,18 +230,19 @@ const applyForAgent = async (req, res) => {
                     userEmail: req.user.email,
                     businessName: businessName || null,
                     feePaid: AGENCY_FEE,
+                    requestType,
                     createdAt: new Date()
                 });
             }
 
             res.status(201).json({
-                message: `Application submitted successfully. GHS ${AGENCY_FEE.toFixed(2)} has been deducted from your wallet.`,
+                message: `SuperAgent Application submitted successfully.`,
                 id: requestId,
                 transactionId
             });
 
             // Log activity (non-blocking)
-            logActivity(req.user.id, 'AGENT_APPLICATION', `Applied for agent status`, { requestId, businessName, fee: AGENCY_FEE }, req.ip);
+            logActivity(req.user.id, 'SUPERAGENT_APPLICATION', `Applied for SuperAgent status`, { requestId, businessName, fee: AGENCY_FEE, requestType }, req.ip);
 
             // Send persistent notifications to all admins
             try {
@@ -254,16 +255,10 @@ const applyForAgent = async (req, res) => {
 
                 const [admins] = await pool.execute("SELECT uuid FROM users WHERE role = 'admin'");
                 for (const admin of admins) {
-                    // Notification about new agent application
+                    // Notification about new superagent application
                     await pool.execute(
                         'INSERT INTO notifications (id, user_id, title, message, type) VALUES (?::uuid, ?::uuid, ?, ?, ?)',
-                        [uuidv4(), admin.uuid, 'New Agent Application 📋', `${applicantName} (${applicantEmail}) has applied to become an agent. They paid GHS ${AGENCY_FEE.toFixed(2)} application fee. Review in the Agents page.`, 'info']
-                    );
-
-                    // Notification about successful payment
-                    await pool.execute(
-                        'INSERT INTO notifications (id, user_id, title, message, type) VALUES (?::uuid, ?::uuid, ?, ?, ?)',
-                        [uuidv4(), admin.uuid, 'Agent Application Fee Received 💰', `Payment of GHS ${AGENCY_FEE.toFixed(2)} received from ${applicantName} for agent application.`, 'success']
+                        [uuidv4(), admin.uuid, 'New SuperAgent Application 📋', `${applicantName} (${applicantEmail}) has applied to become a SuperAgent. Review in the SuperAgents page.`, 'info']
                     );
                 }
             } catch (adminNotifyErr) {

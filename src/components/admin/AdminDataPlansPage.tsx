@@ -311,7 +311,7 @@ export default function AdminDataPlansPage() {
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-xs text-slate-500">Agent Price</p>
+                                        <p className="text-xs text-slate-500">Super Agent Price</p>
                                         <p className="text-xl font-bold text-blue-400">
                                             GH₵ {bundle.agent_price_ghc.toFixed(2)}
                                         </p>
@@ -428,7 +428,7 @@ export default function AdminDataPlansPage() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-slate-300">Agent Price (GH₵)</Label>
+                                <Label className="text-slate-300">Super Agent Price (GH₵)</Label>
                                 <Input
                                     type="number"
                                     step="0.01"

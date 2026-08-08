@@ -1,13 +1,13 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Check, Users, ArrowRight } from 'lucide-react';
+import { Check, Sparkles, ArrowRight } from 'lucide-react';
 
 export default function BecomeAgentSection() {
     const benefits = [
-        'Earn 5% commission on every sale',
-        'No startup capital required',
-        'Free training and support',
-        'Weekly Mobile Money payouts',
+        'Earn top reseller margins on every bundle sale',
+        'Deploy white-labeled portals & balance sharing',
+        'Developer API access for automated fulfillment',
+        'Free onboarding, priority SLA & dedicated support',
     ];
 
     return (
@@ -18,20 +18,19 @@ export default function BecomeAgentSection() {
                     <div>
                         {/* Partnership Badge */}
                         <div className="inline-flex items-center gap-2 text-emerald-400 text-sm font-medium mb-6">
-                            <Users className="w-4 h-4" />
-                            <span className="uppercase tracking-wider">Partnership</span>
+                            <Sparkles className="w-4 h-4 text-amber-400" />
+                            <span className="uppercase tracking-wider">SuperAgent Network</span>
                         </div>
 
                         {/* Heading */}
                         <h2 className="text-white font-display text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
                             Become a{' '}
-                            <span className="text-emerald-400">Byte Beacon</span> Agent
+                            <span className="text-emerald-400">Byte Beacon</span> Super Agent
                         </h2>
 
                         {/* Description */}
                         <p className="text-slate-400 text-lg mb-8 max-w-lg">
-                            Turn your phone into a profitable business. Join our network of agents and
-                            earn commissions on every sale.
+                            Turn your phone or platform into a high-margin enterprise business. Join our network of elite Super Agents and enjoy maximum discounts and developer tools.
                         </p>
 
                         {/* Benefits List */}
@@ -52,7 +51,7 @@ export default function BecomeAgentSection() {
                                 size="lg"
                                 className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-8"
                             >
-                                Apply Now
+                                Apply for Super Agency
                                 <ArrowRight className="w-4 h-4 ml-2" />
                             </Button>
                         </Link>
@@ -68,7 +67,7 @@ export default function BecomeAgentSection() {
                             <div className="relative bg-slate-100 rounded-2xl overflow-hidden shadow-2xl">
                                 <img
                                     src="/agent-illustration.png"
-                                    alt="Become an Agent"
+                                    alt="Become a Super Agent"
                                     className="w-full h-auto"
                                     onError={(e) => {
                                         // Fallback to a placeholder if image doesn't load
@@ -77,7 +76,7 @@ export default function BecomeAgentSection() {
                                             <div class="w-full h-80 bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center">
                                                 <div class="text-center p-8">
                                                     <img src="/logo.png" alt="ByteBeacon" class="h-20 mx-auto mb-4" />
-                                                    <p class="text-slate-600 font-medium">Join 500+ Agents</p>
+                                                    <p class="text-slate-600 font-medium">Join 500+ SuperAgents</p>
                                                     <p class="text-slate-500 text-sm">Earning with ByteBeacon</p>
                                                 </div>
                                             </div>
@@ -91,7 +90,7 @@ export default function BecomeAgentSection() {
                                 <span className="text-yellow-900 font-bold text-lg">$</span>
                             </div>
                             <div className="absolute -bottom-2 -left-2 w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg">
-                                <span className="text-white text-xs font-bold">5%</span>
+                                <span className="text-white text-xs font-bold">15%</span>
                             </div>
                         </div>
                     </div>
@@ -100,3 +99,4 @@ export default function BecomeAgentSection() {
         </section>
     );
 }
+

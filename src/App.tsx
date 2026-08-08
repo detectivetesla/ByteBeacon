@@ -17,6 +17,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import NotFound from "./pages/NotFound";
 import DeveloperPortal from "./pages/DeveloperPortal";
+import PublicStorefront from "./pages/PublicStorefront";
 import { useState, useEffect } from "react";
 import { adminService } from "./services/admin.service";
 import { useAuth } from "./contexts/AuthContext";
@@ -131,6 +132,7 @@ const AppWithMaintenance = () => {
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/terms-of-service" element={<TermsOfService />} />
         <Route path="/developers" element={<DeveloperPortal />} />
+        <Route path="/store/:slug" element={<PublicStorefront />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

@@ -719,11 +719,11 @@ const sendEmail = async (req, res) => {
             `);
             users = rows;
         } else if (to === 'agents') {
-            // Get agents only
+            // Get agents and superagents
             const [rows] = await pool.execute(`
                 SELECT p.id, p.full_name FROM profiles p
                 INNER JOIN user_roles ur ON p.id = ur.user_id::uuid
-                WHERE ur.role = 'agent'
+                WHERE ur.role = 'agent' OR ur.role = 'superagent'
             `);
             users = rows;
         } else if (to && to.includes('@')) {
@@ -791,7 +791,7 @@ const getAnalytics = async (req, res) => {
         let todayRevenue = 0;
 
         try { [users] = await pool.execute('SELECT COUNT(*) as total FROM profiles'); } catch (e) { console.error('Users query fail:', e); }
-        try { [agents] = await pool.execute("SELECT COUNT(*) as total FROM user_roles WHERE role = 'agent'"); } catch (e) { console.error('Agents query fail:', e); }
+        try { [agents] = await pool.execute("SELECT COUNT(*) as total FROM user_roles WHERE role = 'agent' OR role = 'superagent'"); } catch (e) { console.error('Agents query fail:', e); }
         try { [transactions] = await pool.execute('SELECT t.*, db.network FROM transactions t LEFT JOIN data_bundles db ON t.bundle_id = db.id::uuid ORDER BY t.created_at DESC LIMIT 500'); } catch (e) { console.error('Tx query fail:', e); }
         try { [userGrowth] = await pool.execute('SELECT created_at FROM profiles ORDER BY created_at ASC'); } catch (e) { console.error('Growth query fail:', e); }
 
@@ -967,7 +967,7 @@ const getAgentApplications = async (req, res) => {
             experience: app.experience,
             status: app.status,
             adminNotes: app.admin_notes,
-            requestType: app.request_type || 'agent',
+            requestType: app.request_type || 'superagent',
             createdAt: app.created_at,
             updatedAt: app.updated_at
         }));
@@ -1007,10 +1007,10 @@ const updateAgentApplication = async (req, res) => {
 
             const io = req.app.get('io');
 
-            // If approved, update the user's role to 'agent' or 'superagent'
+            // If approved, update the user's role to 'superagent' or 'agent'
             if (status === 'approved' && application) {
-                const targetRole = application.request_type === 'superagent' ? 'superagent' : 'agent';
-                const roleLabel = targetRole === 'superagent' ? 'SuperAgent' : 'Agent';
+                const targetRole = (application.request_type === 'agent') ? 'agent' : 'superagent';
+                const roleLabel = targetRole === 'agent' ? 'Agent' : 'SuperAgent';
                 const [existing] = await connection.execute(
                     'SELECT id FROM user_roles WHERE user_id = ?::uuid',
                     [application.user_id]
@@ -2287,6 +2287,213 @@ module.exports = {
     getTransactionStats,
     updateTransactionStatus,
     createBundle,
+// =============================================
+// AGENT STORE & RESELLER MARKETPLACE ADMIN CONTROLLERS
+// =============================================
+
+const getAllAgentStores = async (req, res) => {
+    try {
+        const [stores] = await pool.execute(`
+            SELECT s.*, 
+                   COALESCE(p.full_name, u.name) as owner_name,
+                   COALESCE(p.email, u.email) as owner_email,
+                   COALESCE(w.total_profit_earned, 0.00) as total_profit_earned,
+                   (SELECT COUNT(*)::integer FROM agent_orders WHERE store_id = s.id) as total_orders
+            FROM agent_stores s
+            LEFT JOIN users u ON s.user_id = u.uuid
+            LEFT JOIN profiles p ON s.user_id = p.id
+            ORDER BY s.created_at DESC
+        `);
+
+        res.json(stores);
+    } catch (error) {
+        console.error('Error getting all agent stores:', error);
+        res.status(500).json({ error: 'Failed to fetch agent stores' });
+    }
+};
+
+const updateAgentStoreReviewStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { review_status, admin_notes } = req.body;
+
+        if (!['PENDING_REVIEW', 'APPROVED', 'REJECTED', 'CHANGES_REQUESTED', 'SUSPENDED'].includes(review_status)) {
+            return res.status(400).json({ error: 'Invalid review status' });
+        }
+
+        const [stores] = await pool.execute('SELECT user_id, store_name FROM agent_stores WHERE id = ?::uuid', [id]);
+        if (stores.length === 0) return res.status(404).json({ error: 'Store not found' });
+        const store = stores[0];
+
+        await pool.execute(
+            `UPDATE agent_stores 
+             SET review_status = ?, admin_notes = COALESCE(?, admin_notes), updated_at = NOW() 
+             WHERE id = ?::uuid`,
+            [review_status, admin_notes, id]
+        );
+
+        // Notify store owner
+        await pool.execute(
+            `INSERT INTO notifications (id, user_id, title, message, type, created_at)
+             VALUES (?::uuid, ?::uuid, ?, ?, 'info', NOW())`,
+            [
+                uuidv4(),
+                store.user_id,
+                `Agent Store Update: ${review_status.replace('_', ' ')}`,
+                `Your Agent Store "${store.store_name}" status has been updated to ${review_status.replace('_', ' ')}.${admin_notes ? ' Note: ' + admin_notes : ''}`
+            ]
+        );
+
+        res.json({ message: `Store status updated to ${review_status}` });
+    } catch (error) {
+        console.error('Error updating store review status:', error);
+        res.status(500).json({ error: 'Failed to update store status' });
+    }
+};
+
+const manualActivateAgentStore = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        await pool.execute(
+            `UPDATE agent_stores SET activation_status = 'PAID', updated_at = NOW() WHERE id = ?::uuid`,
+            [id]
+        );
+
+        res.json({ message: 'Store activation status manually marked as PAID' });
+    } catch (error) {
+        console.error('Error manually activating store:', error);
+        res.status(500).json({ error: 'Failed to activate store' });
+    }
+};
+
+const getAllAgentWithdrawals = async (req, res) => {
+    try {
+        const [withdrawals] = await pool.execute(`
+            SELECT w.*, 
+                   s.store_name,
+                   COALESCE(p.full_name, u.name) as agent_name,
+                   COALESCE(p.email, u.email) as agent_email
+            FROM agent_withdrawals w
+            LEFT JOIN agent_stores s ON w.store_id = s.id
+            LEFT JOIN users u ON w.agent_id = u.uuid
+            LEFT JOIN profiles p ON w.agent_id = p.id
+            ORDER BY w.created_at DESC
+        `);
+
+        res.json(withdrawals);
+    } catch (error) {
+        console.error('Error getting all agent withdrawals:', error);
+        res.status(500).json({ error: 'Failed to fetch agent withdrawals' });
+    }
+};
+
+const updateAgentWithdrawalStatus = async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const { id } = req.params;
+        const { status, admin_notes } = req.body;
+
+        if (!['REQUESTED', 'PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'].includes(status)) {
+            return res.status(400).json({ error: 'Invalid withdrawal status' });
+        }
+
+        const [rows] = await connection.execute('SELECT * FROM agent_withdrawals WHERE id = ?::uuid', [id]);
+        if (rows.length === 0) return res.status(404).json({ error: 'Withdrawal not found' });
+        const withdrawal = rows[0];
+
+        await connection.beginTransaction();
+
+        await connection.execute(
+            `UPDATE agent_withdrawals SET status = ?, admin_notes = COALESCE(?, admin_notes), updated_at = NOW() WHERE id = ?::uuid`,
+            [status, admin_notes, id]
+        );
+
+        // If status changed to FAILED and was previously not failed, refund the deducted amount back to available balance
+        if (status === 'FAILED' && withdrawal.status !== 'FAILED') {
+            const refundAmount = parseFloat(withdrawal.amount_ghc);
+
+            const [wallets] = await connection.execute('SELECT available_balance FROM agent_wallets WHERE agent_id = ?::uuid', [withdrawal.agent_id]);
+            const currentAvail = wallets.length > 0 ? parseFloat(wallets[0].available_balance) : 0.00;
+            const newAvail = currentAvail + refundAmount;
+
+            await connection.execute(
+                `UPDATE agent_wallets 
+                 SET available_balance = available_balance + ?,
+                     total_withdrawn = GREATEST(0.00, total_withdrawn - ?),
+                     updated_at = NOW()
+                 WHERE agent_id = ?::uuid`,
+                [refundAmount, refundAmount, withdrawal.agent_id]
+            );
+
+            await connection.execute(
+                `INSERT INTO agent_wallet_ledger (id, agent_id, store_id, type, amount_ghc, balance_after, description, reference, created_at)
+                 VALUES (?::uuid, ?::uuid, ?::uuid, 'REFUND', ?, ?, ?, ?, NOW())`,
+                [uuidv4(), withdrawal.agent_id, withdrawal.store_id, refundAmount, newAvail, `Refund for rejected withdrawal request`, id]
+            );
+        }
+
+        await connection.commit();
+
+        res.json({ message: `Withdrawal status updated to ${status}` });
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error('Error updating withdrawal status:', error);
+        res.status(500).json({ error: 'Failed to update withdrawal status' });
+    } finally {
+        if (connection) connection.release();
+    }
+};
+
+const getAgentPricingRules = async (req, res) => {
+    try {
+        const [rules] = await pool.execute('SELECT * FROM agent_pricing_rules LIMIT 1');
+        res.json(rules[0] || { min_markup_ghc: 0.50, max_markup_ghc: 50.00, min_withdrawal_ghc: 20.00 });
+    } catch (error) {
+        console.error('Error getting pricing rules:', error);
+        res.status(500).json({ error: 'Failed to fetch pricing rules' });
+    }
+};
+
+const updateAgentPricingRules = async (req, res) => {
+    try {
+        const { min_markup_ghc, max_markup_ghc, min_withdrawal_ghc } = req.body;
+
+        const [rules] = await pool.execute('SELECT id FROM agent_pricing_rules LIMIT 1');
+
+        if (rules.length > 0) {
+            await pool.execute(
+                `UPDATE agent_pricing_rules 
+                 SET min_markup_ghc = COALESCE(?, min_markup_ghc),
+                     max_markup_ghc = COALESCE(?, max_markup_ghc),
+                     min_withdrawal_ghc = COALESCE(?, min_withdrawal_ghc),
+                     updated_at = NOW()
+                 WHERE id = ?::uuid`,
+                [min_markup_ghc, max_markup_ghc, min_withdrawal_ghc, rules[0].id]
+            );
+        } else {
+            await pool.execute(
+                `INSERT INTO agent_pricing_rules (id, min_markup_ghc, max_markup_ghc, min_withdrawal_ghc, updated_at)
+                 VALUES (?::uuid, ?, ?, ?, NOW())`,
+                [uuidv4(), min_markup_ghc || 0.50, max_markup_ghc || 50.00, min_withdrawal_ghc || 20.00]
+            );
+        }
+
+        res.json({ message: 'Pricing rules updated successfully' });
+    } catch (error) {
+        console.error('Error updating pricing rules:', error);
+        res.status(500).json({ error: 'Failed to update pricing rules' });
+    }
+};
+
+module.exports = {
+    createUser,
+    getAllUsers,
+    changeUserRole,
+    getAllTransactions,
+    getTransactionStats,
+    updateTransactionStatus,
+    createBundle,
     updateBundle,
     deleteBundle,
     getDashboardStats,
@@ -2323,5 +2530,13 @@ module.exports = {
     updatePartner,
     adjustPartnerBalance,
     reprocessTransaction,
-    massReprocessFailedTransactions
+    massReprocessFailedTransactions,
+    getAllAgentStores,
+    updateAgentStoreReviewStatus,
+    manualActivateAgentStore,
+    getAllAgentWithdrawals,
+    updateAgentWithdrawalStatus,
+    getAgentPricingRules,
+    updateAgentPricingRules
 };
+

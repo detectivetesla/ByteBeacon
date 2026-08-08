@@ -19,6 +19,7 @@ import AdminNotificationsPage from '@/components/admin/AdminNotificationsPage';
 import AdminProfilePage from '@/components/admin/AdminProfilePage';
 import AdminActivityLogsPage from '@/components/admin/AdminActivityLogsPage';
 import AdminUserDetailPage from '@/components/admin/AdminUserDetailPage';
+import { AdminAgentStoresPage } from '@/components/admin/AdminAgentStoresPage';
 import { Loader2 } from 'lucide-react';
 
 export default function Admin() {
@@ -61,6 +62,7 @@ export default function Admin() {
 
         <Route path="/data-plans" element={<AdminDataPlansPage />} />
         <Route path="/agents" element={<AdminAgentsPage />} />
+        <Route path="/agent-stores" element={<AdminAgentStoresPage />} />
         <Route path="/transactions" element={<AdminTransactionsPage />} />
         <Route path="/discounts" element={<AdminDiscountsPage />} />
         <Route path="/networks" element={<AdminNetworksPage />} />

@@ -9,7 +9,7 @@ const purchaseBundle = async (req, res) => {
     try {
         const { bundleId, recipientPhone } = req.body;
         const userId = req.user.id;
-        const isAgent = req.user.role === 'agent';
+        const isAgent = req.user.role === 'agent' || req.user.role === 'superagent';
 
         if (!bundleId || !recipientPhone) {
             return res.status(400).json({ error: 'Bundle ID and recipient phone are required' });

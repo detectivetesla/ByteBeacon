@@ -4,7 +4,7 @@ const pool = require('../config/database');
 const getAllBundles = async (req, res) => {
     try {
         const userId = req.user?.id;
-        const isAgent = req.user?.role === 'agent';
+        const isAgent = req.user?.role === 'agent' || req.user?.role === 'superagent';
 
         const [bundles] = await pool.execute(`
             SELECT b.*, ap.custom_price
@@ -53,7 +53,7 @@ const getBundlesByNetwork = async (req, res) => {
         const { network } = req.params;
         const networkUpper = network.toUpperCase();
         const userId = req.user?.id;
-        const isAgent = req.user?.role === 'agent';
+        const isAgent = req.user?.role === 'agent' || req.user?.role === 'superagent';
 
         const [bundles] = await pool.execute(`
             SELECT b.*, ap.custom_price

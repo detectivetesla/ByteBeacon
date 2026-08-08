@@ -145,11 +145,14 @@ app.use(maintenanceMiddleware);
 const { getUnreadNotificationsCount } = require('./controllers/user.controller');
 app.get('/api/notifications/unread-count', auth, getUnreadNotificationsCount);
 
+const agentStoreRoutes = require('./routes/agentStore.routes');
+
 app.use('/api/users', userRoutes);
 app.use('/api/bundles', bundleRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/agent-store', agentStoreRoutes);
 app.use('/api/payment', paymentLimiter, paymentRoutes);
 app.use('/api/v1', partnerRoutes);
 

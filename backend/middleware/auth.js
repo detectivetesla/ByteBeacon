@@ -57,9 +57,9 @@ const adminOnly = (req, res, next) => {
     next();
 };
 
-// Agent or admin middleware
+// Agent, SuperAgent or admin middleware
 const agentOrAdmin = (req, res, next) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'agent') {
+    if (req.user.role !== 'admin' && req.user.role !== 'agent' && req.user.role !== 'superagent') {
         return res.status(403).json({ error: 'Agent or admin access required' });
     }
     next();

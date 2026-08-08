@@ -257,7 +257,81 @@ exports.paystackWebhook = async (req, res) => {
             const reference = event.data.reference;
             const amount = event.data.amount / 100; // Convert from pesewas to GHC
 
-            if (reference.startsWith('DEP-')) {
+            if (reference.startsWith('ACT-')) {
+                // Agent Store Activation Payment (GHS 100)
+                const storeId = event.data.metadata?.store_id;
+                console.log(`🛍️ Webhook: Verifying Agent Store Activation for store ${storeId}, reference ${reference}`);
+
+                await connection.execute(
+                    `UPDATE agent_store_activation_payments SET status = 'completed', paid_at = NOW() WHERE paystack_reference = ?`,
+                    [reference]
+                );
+
+                if (storeId) {
+                    await connection.execute(
+                        `UPDATE agent_stores SET activation_status = 'PAID', updated_at = NOW() WHERE id = ?::uuid`,
+                        [storeId]
+                    );
+                    console.log(`✅ Webhook: Agent Store ${storeId} marked as PAID`);
+                }
+            } else if (reference.startsWith('AG-ORD-')) {
+                // Agent Store Customer Purchase
+                console.log(`🛒 Webhook: Processing Agent Customer Purchase for reference ${reference}`);
+                const [orders] = await connection.execute('SELECT * FROM agent_orders WHERE paystack_reference = ?', [reference]);
+
+                if (orders.length > 0) {
+                    const order = orders[0];
+                    if (order.fulfillment_status !== 'completed' && order.fulfillment_status !== 'processing') {
+                        await connection.execute(
+                            `UPDATE agent_orders SET payment_status = 'paid', fulfillment_status = 'processing', updated_at = NOW() WHERE id = ?::uuid`,
+                            [order.id]
+                        );
+
+                        const fulfillment = await placeDataOrder({
+                            network: order.network,
+                            dataAmount: order.data_amount,
+                            recipientPhone: order.customer_phone,
+                            transactionId: order.id
+                        });
+
+                        if (fulfillment.status === 'completed') {
+                            await connection.beginTransaction();
+
+                            await connection.execute(
+                                `UPDATE agent_orders SET fulfillment_status = 'completed', updated_at = NOW() WHERE id = ?::uuid`,
+                                [order.id]
+                            );
+
+                            const profitGhc = parseFloat(order.profit_ghc);
+                            const [wallets] = await connection.execute('SELECT available_balance FROM agent_wallets WHERE agent_id = ?::uuid', [order.agent_id]);
+                            const currentAvail = wallets.length > 0 ? parseFloat(wallets[0].available_balance) : 0.00;
+                            const newAvail = currentAvail + profitGhc;
+
+                            await connection.execute(
+                                `UPDATE agent_wallets 
+                                 SET available_balance = available_balance + ?,
+                                     total_profit_earned = total_profit_earned + ?,
+                                     updated_at = NOW()
+                                 WHERE agent_id = ?::uuid`,
+                                [profitGhc, profitGhc, order.agent_id]
+                            );
+
+                            await connection.execute(
+                                `INSERT INTO agent_wallet_ledger (id, agent_id, store_id, order_id, type, amount_ghc, balance_after, description, reference, created_at)
+                                 VALUES (?::uuid, ?::uuid, ?::uuid, ?::uuid, 'SALE_PROFIT', ?, ?, ?, ?, NOW())`,
+                                [uuidv4(), order.agent_id, order.store_id, order.id, profitGhc, newAvail, `Markup profit for ${order.network} ${order.data_amount} sale`, reference]
+                            );
+
+                            await connection.commit();
+                        } else {
+                            await connection.execute(
+                                `UPDATE agent_orders SET fulfillment_status = 'failed', updated_at = NOW() WHERE id = ?::uuid`,
+                                [order.id]
+                            );
+                        }
+                    }
+                }
+            } else if (reference.startsWith('DEP-')) {
                 // This is a wallet deposit
                 const userId = event.data.metadata?.user_id;
 

@@ -235,7 +235,7 @@ export default function DashboardHome() {
     };
 
     const fetchTopBundles = useCallback(async () => {
-        if (role !== 'agent') {
+        if (role !== 'agent' && role !== 'superagent') {
             setBundlesLoading(false);
             return;
         }
@@ -924,7 +924,7 @@ export default function DashboardHome() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            {role === 'agent' ? (
+                            {role === 'agent' || role === 'superagent' ? (
                                 bundlesLoading ? (
                                     <div className="flex items-center justify-center py-6 sm:py-8">
                                         <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-primary"></div>
@@ -956,7 +956,7 @@ export default function DashboardHome() {
                                                         GH₵{bundle.agentPriceGhc?.toFixed(2) || bundle.priceGhc.toFixed(2)}
                                                     </p>
                                                     {bundle.agentPriceGhc && bundle.agentPriceGhc < bundle.priceGhc && (
-                                                        <p className="text-xs text-green-500">Agent Price</p>
+                                                        <p className="text-xs text-green-500">SuperAgent Price</p>
                                                     )}
                                                 </div>
                                             </div>
@@ -966,8 +966,8 @@ export default function DashboardHome() {
                             ) : (
                                 <div className="text-center py-6 sm:py-8">
                                     <Zap className="w-8 h-8 mx-auto text-muted-foreground/30 mb-2" />
-                                    <p className="text-muted-foreground text-sm">Coming Soon</p>
-                                    <p className="text-xs text-muted-foreground/70 mt-1">Become an Agent to see top bundles</p>
+                                    <p className="text-muted-foreground text-sm">Top Packages</p>
+                                    <p className="text-xs text-muted-foreground/70 mt-1">Become a SuperAgent to see top bundles</p>
                                 </div>
                             )}
                         </CardContent>

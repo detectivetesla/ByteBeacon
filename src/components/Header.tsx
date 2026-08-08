@@ -16,7 +16,7 @@ export default function Header({ isDarkMode = true, onToggleDarkMode }: HeaderPr
         { name: 'Home', href: '/', active: true },
         { name: 'Networks', href: '#networks' },
         { name: 'Pricing', href: '#pricing' },
-        { name: 'Become Agent', href: '#become-agent' },
+        { name: 'Become Super Agent', href: '#become-agent' },
     ];
 
     return (

@@ -14,7 +14,7 @@ export default function Footer({ isDarkMode = true }: FooterProps) {
         Company: [
             { name: 'About Us', href: '#' },
             { name: 'Pricing', href: '#pricing' },
-            { name: 'Become Agent', href: '#become-agent' },
+            { name: 'Become Super Agent', href: '#become-agent' },
         ],
         Support: [
             { name: 'Help Center', href: '#' },
