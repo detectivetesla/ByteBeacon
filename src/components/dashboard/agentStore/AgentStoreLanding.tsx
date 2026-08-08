@@ -220,7 +220,7 @@ export const AgentStoreLanding: React.FC<AgentStoreLandingProps> = ({ existingSt
                             type="text"
                             value={storeName}
                             onChange={(e) => setStoreName(e.target.value)}
-                            placeholder="e.g. Caleb Data Hub"
+                            placeholder="e.g. My Data Store"
                             required
                             className="w-full px-4 py-3 bg-[#18191c] border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-[#a3e635]"
                         />
