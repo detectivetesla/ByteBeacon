@@ -448,12 +448,13 @@ const initializeTables = async () => {
                     is_visible BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE INDEX IF NOT EXISTS idx_agent_stores_user ON agent_stores(user_id);
-                CREATE INDEX IF NOT EXISTS idx_agent_stores_slug ON agent_stores(slug);
-                CREATE INDEX IF NOT EXISTS idx_agent_stores_review ON agent_stores(review_status);
-                CREATE INDEX IF NOT EXISTS idx_agent_stores_activation ON agent_stores(activation_status);
+                )
             `).catch(err => console.log('Info: agent_stores check:', err.message));
+
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_stores_user ON agent_stores(user_id)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_stores_slug ON agent_stores(slug)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_stores_review ON agent_stores(review_status)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_stores_activation ON agent_stores(activation_status)`).catch(() => {});
 
             await pool.execute(`
                 CREATE TABLE IF NOT EXISTS agent_store_activation_payments (
@@ -465,10 +466,11 @@ const initializeTables = async () => {
                     status VARCHAR(20) NOT NULL DEFAULT 'pending',
                     paid_at TIMESTAMPTZ,
                     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE INDEX IF NOT EXISTS idx_activation_payments_store ON agent_store_activation_payments(store_id);
-                CREATE INDEX IF NOT EXISTS idx_activation_payments_ref ON agent_store_activation_payments(paystack_reference);
+                )
             `).catch(err => console.log('Info: agent_store_activation_payments check:', err.message));
+
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_activation_payments_store ON agent_store_activation_payments(store_id)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_activation_payments_ref ON agent_store_activation_payments(paystack_reference)`).catch(() => {});
 
             await pool.execute(`
                 CREATE TABLE IF NOT EXISTS agent_store_products (
@@ -480,10 +482,11 @@ const initializeTables = async () => {
                     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(store_id, bundle_id)
-                );
-                CREATE INDEX IF NOT EXISTS idx_agent_products_store ON agent_store_products(store_id);
-                CREATE INDEX IF NOT EXISTS idx_agent_products_bundle ON agent_store_products(bundle_id);
+                )
             `).catch(err => console.log('Info: agent_store_products check:', err.message));
+
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_products_store ON agent_store_products(store_id)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_products_bundle ON agent_store_products(bundle_id)`).catch(() => {});
 
             await pool.execute(`
                 CREATE TABLE IF NOT EXISTS agent_orders (
@@ -503,11 +506,12 @@ const initializeTables = async () => {
                     fulfillment_status VARCHAR(20) NOT NULL DEFAULT 'pending',
                     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE INDEX IF NOT EXISTS idx_agent_orders_store ON agent_orders(store_id);
-                CREATE INDEX IF NOT EXISTS idx_agent_orders_agent ON agent_orders(agent_id);
-                CREATE INDEX IF NOT EXISTS idx_agent_orders_paystack ON agent_orders(paystack_reference);
+                )
             `).catch(err => console.log('Info: agent_orders check:', err.message));
+
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_orders_store ON agent_orders(store_id)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_orders_agent ON agent_orders(agent_id)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_orders_paystack ON agent_orders(paystack_reference)`).catch(() => {});
 
             await pool.execute(`
                 CREATE TABLE IF NOT EXISTS agent_wallets (
@@ -519,9 +523,10 @@ const initializeTables = async () => {
                     total_withdrawn DECIMAL(10,2) NOT NULL DEFAULT 0.00,
                     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE INDEX IF NOT EXISTS idx_agent_wallets_agent ON agent_wallets(agent_id);
+                )
             `).catch(err => console.log('Info: agent_wallets check:', err.message));
+
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_wallets_agent ON agent_wallets(agent_id)`).catch(() => {});
 
             await pool.execute(`
                 CREATE TABLE IF NOT EXISTS agent_wallet_ledger (
@@ -535,9 +540,10 @@ const initializeTables = async () => {
                     description TEXT,
                     reference VARCHAR(255),
                     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE INDEX IF NOT EXISTS idx_agent_ledger_agent ON agent_wallet_ledger(agent_id);
+                )
             `).catch(err => console.log('Info: agent_wallet_ledger check:', err.message));
+
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_ledger_agent ON agent_wallet_ledger(agent_id)`).catch(() => {});
 
             await pool.execute(`
                 CREATE TABLE IF NOT EXISTS agent_withdrawals (
@@ -553,10 +559,11 @@ const initializeTables = async () => {
                     admin_notes TEXT,
                     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE INDEX IF NOT EXISTS idx_agent_withdrawals_agent ON agent_withdrawals(agent_id);
-                CREATE INDEX IF NOT EXISTS idx_agent_withdrawals_status ON agent_withdrawals(status);
+                )
             `).catch(err => console.log('Info: agent_withdrawals check:', err.message));
+
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_withdrawals_agent ON agent_withdrawals(agent_id)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_withdrawals_status ON agent_withdrawals(status)`).catch(() => {});
 
             await pool.execute(`
                 CREATE TABLE IF NOT EXISTS agent_pricing_rules (
@@ -565,7 +572,7 @@ const initializeTables = async () => {
                     max_markup_ghc DECIMAL(10,2) NOT NULL DEFAULT 50.00,
                     min_withdrawal_ghc DECIMAL(10,2) NOT NULL DEFAULT 20.00,
                     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                );
+                )
             `).catch(err => console.log('Info: agent_pricing_rules check:', err.message));
 
             // Seed default pricing rules if table empty
