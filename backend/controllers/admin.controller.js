@@ -2279,14 +2279,6 @@ const massReprocessFailedTransactions = async (req, res) => {
     }
 };
 
-module.exports = {
-    createUser,
-    getAllUsers,
-    changeUserRole,
-    getAllTransactions,
-    getTransactionStats,
-    updateTransactionStatus,
-    createBundle,
 // =============================================
 // AGENT STORE & RESELLER MARKETPLACE ADMIN CONTROLLERS
 // =============================================
