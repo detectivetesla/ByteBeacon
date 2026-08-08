@@ -214,10 +214,10 @@ export const AgentStoreLanding: React.FC<AgentStoreLandingProps> = ({ existingSt
 
             {/* Features Highlight */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="bg-card border-border hover:border-primary/30 transition-all duration-300">
+                <Card className="bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40 transition-all duration-300 shadow-md group">
                     <CardContent className="p-6 space-y-3">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                            <DollarSign className="w-5 h-5" />
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
+                            <DollarSign className="w-6 h-6 stroke-[2.5]" />
                         </div>
                         <h3 className="font-display font-bold text-foreground text-base">Markup-Only Model</h3>
                         <p className="text-xs text-muted-foreground leading-relaxed font-medium">
@@ -226,10 +226,10 @@ export const AgentStoreLanding: React.FC<AgentStoreLandingProps> = ({ existingSt
                     </CardContent>
                 </Card>
 
-                <Card className="bg-card border-border hover:border-primary/30 transition-all duration-300">
+                <Card className="bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40 transition-all duration-300 shadow-md group">
                     <CardContent className="p-6 space-y-3">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                            <ShieldCheck className="w-5 h-5" />
+                        <div className="w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 group-hover:scale-105 transition-transform">
+                            <ShieldCheck className="w-6 h-6 stroke-[2.5]" />
                         </div>
                         <h3 className="font-display font-bold text-foreground text-base">Automated Fulfillment</h3>
                         <p className="text-xs text-muted-foreground leading-relaxed font-medium">
@@ -238,10 +238,10 @@ export const AgentStoreLanding: React.FC<AgentStoreLandingProps> = ({ existingSt
                     </CardContent>
                 </Card>
 
-                <Card className="bg-card border-border hover:border-primary/30 transition-all duration-300">
+                <Card className="bg-purple-500/5 border-purple-500/20 hover:border-purple-500/40 transition-all duration-300 shadow-md group">
                     <CardContent className="p-6 space-y-3">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                            <Zap className="w-5 h-5" />
+                        <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:scale-105 transition-transform">
+                            <Zap className="w-6 h-6 stroke-[2.5]" />
                         </div>
                         <h3 className="font-display font-bold text-foreground text-base">Instant Profit Ledger</h3>
                         <p className="text-xs text-muted-foreground leading-relaxed font-medium">
