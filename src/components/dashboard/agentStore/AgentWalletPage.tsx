@@ -147,8 +147,21 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
                     </h3>
 
                     {loading ? (
-                        <div className="p-8 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
-                            <RefreshCw className="w-4 h-4 animate-spin text-[#a3e635]" /> Loading ledger...
+                        <div className="space-y-0">
+                            <div className="bg-[#18191c] p-3 flex gap-4">
+                                {['w-14', 'w-32', 'w-20', 'w-20', 'w-24'].map((w, i) => (
+                                    <div key={i} className={`h-3 ${w} bg-[#2a2b30] rounded animate-pulse`} />
+                                ))}
+                            </div>
+                            {Array.from({ length: 5 }).map((_, i) => (
+                                <div key={i} className="p-3 flex gap-4 border-b border-white/5">
+                                    <div className="h-3 w-16 bg-[#2a2b30] rounded animate-pulse" />
+                                    <div className="h-3 w-36 bg-[#2a2b30] rounded animate-pulse" />
+                                    <div className="h-3 w-20 bg-[#2a2b30] rounded animate-pulse" />
+                                    <div className="h-3 w-20 bg-[#2a2b30] rounded animate-pulse" />
+                                    <div className="h-3 w-24 bg-[#2a2b30] rounded animate-pulse" />
+                                </div>
+                            ))}
                         </div>
                     ) : ledger.length === 0 ? (
                         <div className="p-8 text-center text-slate-400 text-xs">No ledger entries recorded yet.</div>
@@ -177,10 +190,10 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
                                                 </span>
                                             </td>
                                             <td className="p-3 text-white max-w-xs truncate">{entry.description}</td>
-                                            <td className={`p-3 font-bold ${entry.amount_ghc >= 0 ? 'text-[#a3e635]' : 'text-red-400'}`}>
-                                                {entry.amount_ghc >= 0 ? '+' : ''}GHS {entry.amount_ghc.toFixed(2)}
+                                            <td className={`p-3 font-bold ${parseFloat(entry.amount_ghc as any) >= 0 ? 'text-[#a3e635]' : 'text-red-400'}`}>
+                                                {parseFloat(entry.amount_ghc as any) >= 0 ? '+' : ''}GHS {(parseFloat(entry.amount_ghc as any) || 0).toFixed(2)}
                                             </td>
-                                            <td className="p-3 font-semibold text-slate-300">GHS {entry.balance_after.toFixed(2)}</td>
+                                            <td className="p-3 font-semibold text-slate-300">GHS {(parseFloat(entry.balance_after as any) || 0).toFixed(2)}</td>
                                             <td className="p-3 text-slate-500">{new Date(entry.created_at).toLocaleDateString()}</td>
                                         </tr>
                                     ))}

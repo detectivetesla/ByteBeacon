@@ -58,9 +58,58 @@ export const AgentStoreDashboard: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#141518] flex items-center justify-center text-[#a3e635] space-x-3 font-sans">
-                <RefreshCw className="w-6 h-6 animate-spin" />
-                <span className="text-sm font-bold text-white">Loading Agent Store...</span>
+            <div className="min-h-screen bg-[#141518] text-white p-4 sm:p-6 space-y-6 font-sans">
+                {/* Skeleton: Header Bar */}
+                <div className="bg-[#202227] p-4 rounded-2xl border border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="h-9 w-full md:w-80 bg-[#2a2b30] rounded-xl animate-pulse" />
+                    <div className="flex items-center gap-3">
+                        <div className="h-7 w-28 bg-[#2a2b30] rounded-lg animate-pulse" />
+                        <div className="h-7 w-24 bg-[#2a2b30] rounded-lg animate-pulse" />
+                        <div className="h-8 w-28 bg-[#2a2b30] rounded-xl animate-pulse" />
+                        <div className="h-9 w-9 bg-[#2a2b30] rounded-xl animate-pulse" />
+                        <div className="h-9 w-9 bg-[#2a2b30] rounded-xl animate-pulse" />
+                    </div>
+                </div>
+                {/* Skeleton: Tab Navigation */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                    {Array.from({ length: 7 }).map((_, i) => (
+                        <div key={i} className={`h-9 rounded-xl animate-pulse ${i === 0 ? 'w-24 bg-[#a3e635]/20' : 'w-28 bg-[#2a2b30]'}`} />
+                    ))}
+                </div>
+                {/* Skeleton: Greeting */}
+                <div className="space-y-2">
+                    <div className="h-7 w-72 bg-[#2a2b30] rounded-lg animate-pulse" />
+                    <div className="h-3 w-64 bg-[#2a2b30] rounded animate-pulse" />
+                </div>
+                {/* Skeleton: Featured Products */}
+                <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                        <div className="h-3 w-40 bg-[#2a2b30] rounded animate-pulse" />
+                        <div className="h-3 w-28 bg-[#2a2b30] rounded animate-pulse" />
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                            <div key={i} className="bg-[#202227] p-4 rounded-2xl border border-white/5 space-y-3 animate-pulse">
+                                <div className="flex justify-between">
+                                    <div className="h-4 w-10 bg-[#2a2b30] rounded" />
+                                    <div className="h-3 w-10 bg-[#2a2b30] rounded" />
+                                </div>
+                                <div className="h-5 w-20 bg-[#2a2b30] rounded" />
+                                <div className="h-3 w-16 bg-[#2a2b30] rounded" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                {/* Skeleton: Metric Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="bg-[#202227] p-5 rounded-2xl border border-white/5 space-y-3 animate-pulse">
+                            <div className="h-3 w-20 bg-[#2a2b30] rounded" />
+                            <div className="h-7 w-32 bg-[#2a2b30] rounded" />
+                            <div className="h-2 w-36 bg-[#2a2b30] rounded" />
+                        </div>
+                    ))}
+                </div>
             </div>
         );
     }

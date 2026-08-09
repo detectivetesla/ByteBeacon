@@ -96,9 +96,22 @@ export const AgentOrdersPage: React.FC = () => {
             {/* Orders Table */}
             <div className="bg-[#202227] rounded-2xl border border-white/5 overflow-hidden shadow-xl">
                 {loading ? (
-                    <div className="p-12 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
-                        <RefreshCw className="w-5 h-5 animate-spin text-[#a3e635]" />
-                        <span>Loading store orders...</span>
+                    <div className="space-y-0">
+                        <div className="bg-[#18191c] p-4 flex gap-6">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                                <div key={i} className="h-3 w-20 bg-[#2a2b30] rounded animate-pulse" />
+                            ))}
+                        </div>
+                        {Array.from({ length: 5 }).map((_, i) => (
+                            <div key={i} className="p-4 flex gap-6 border-b border-white/5">
+                                <div className="h-3 w-24 bg-[#2a2b30] rounded animate-pulse" />
+                                <div className="h-3 w-14 bg-[#2a2b30] rounded animate-pulse" />
+                                <div className="h-3 w-28 bg-[#2a2b30] rounded animate-pulse" />
+                                <div className="h-3 w-16 bg-[#2a2b30] rounded animate-pulse" />
+                                <div className="h-3 w-16 bg-[#2a2b30] rounded animate-pulse" />
+                                <div className="h-3 w-16 bg-[#2a2b30] rounded animate-pulse" />
+                            </div>
+                        ))}
                     </div>
                 ) : orders.length === 0 ? (
                     <div className="p-12 text-center text-slate-400 text-sm">

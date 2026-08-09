@@ -104,9 +104,51 @@ export default function PublicStorefront() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#141518] flex items-center justify-center text-[#a3e635] space-x-3 font-sans">
-                <RefreshCw className="w-6 h-6 animate-spin text-[#a3e635]" />
-                <span className="text-sm font-bold text-white">Loading Storefront...</span>
+            <div className="min-h-screen bg-[#141518] text-white font-sans">
+                {/* Header Skeleton */}
+                <header className="bg-[#202227] border-b border-white/5 py-8 px-4 sm:px-6">
+                    <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
+                        <div className="flex items-center gap-4 text-center sm:text-left">
+                            <div className="w-16 h-16 rounded-2xl bg-[#2a2b30] animate-pulse" />
+                            <div className="space-y-2">
+                                <div className="h-7 w-48 bg-[#2a2b30] rounded animate-pulse" />
+                                <div className="h-3 w-64 bg-[#2a2b30] rounded animate-pulse" />
+                                <div className="h-3 w-32 bg-[#2a2b30] rounded animate-pulse" />
+                            </div>
+                        </div>
+                        <div className="h-8 w-60 bg-[#2a2b30] rounded-xl animate-pulse" />
+                    </div>
+                </header>
+
+                {/* Main Catalogue Skeleton */}
+                <main className="max-w-5xl mx-auto py-8 px-4 sm:px-6 space-y-8">
+                    {/* Network Chips Skeleton */}
+                    <div className="flex items-center justify-center gap-2 overflow-x-auto pb-2">
+                        {Array.from({ length: 4 }).map((_, i) => (
+                            <div key={i} className="h-10 w-24 bg-[#2a2b30] rounded-xl animate-pulse" />
+                        ))}
+                    </div>
+
+                    {/* Product Grid Skeleton */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="bg-[#202227] p-6 rounded-3xl border border-white/5 space-y-4 animate-pulse">
+                                <div className="flex justify-between items-center">
+                                    <div className="h-5 w-14 bg-[#2a2b30] rounded-lg" />
+                                    <div className="h-3 w-20 bg-[#2a2b30] rounded" />
+                                </div>
+                                <div className="h-8 w-24 bg-[#2a2b30] rounded" />
+                                <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+                                    <div className="space-y-1">
+                                        <div className="h-2.5 w-14 bg-[#2a2b30] rounded" />
+                                        <div className="h-6 w-20 bg-[#2a2b30] rounded" />
+                                    </div>
+                                    <div className="h-9 w-24 bg-[#2a2b30] rounded-xl" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </main>
             </div>
         );
     }
@@ -219,7 +261,7 @@ export default function PublicStorefront() {
                                 <div>
                                     <span className="text-[10px] text-slate-400 block">Retail Price</span>
                                     <span className="text-xl font-extrabold text-[#a3e635]">
-                                        GHS {bundle.agent_price_ghc.toFixed(2)}
+                                        GHS {(parseFloat(bundle.agent_price_ghc as any) || 0).toFixed(2)}
                                     </span>
                                 </div>
 
@@ -269,7 +311,7 @@ export default function PublicStorefront() {
                                 </div>
                                 <div className="flex justify-between border-t border-white/5 pt-2">
                                     <span className="text-slate-400">Total Price:</span>
-                                    <span className="text-[#a3e635] font-extrabold text-sm">GHS {selectedBundle.agent_price_ghc.toFixed(2)}</span>
+                                    <span className="text-[#a3e635] font-extrabold text-sm">GHS {(parseFloat(selectedBundle.agent_price_ghc as any) || 0).toFixed(2)}</span>
                                 </div>
                             </div>
 

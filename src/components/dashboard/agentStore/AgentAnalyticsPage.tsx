@@ -53,8 +53,32 @@ export const AgentAnalyticsPage: React.FC = () => {
             </div>
 
             {loading ? (
-                <div className="p-12 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
-                    <RefreshCw className="w-5 h-5 animate-spin text-[#a3e635]" /> Loading analytics data...
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Chart Skeleton */}
+                    <div className="lg:col-span-2 bg-[#202227] p-6 rounded-2xl border border-white/5 space-y-4 animate-pulse">
+                        <div className="h-4 w-48 bg-[#2a2b30] rounded" />
+                        <div className="h-64 flex items-end gap-3 pt-8 pb-2 px-2">
+                            {Array.from({ length: 10 }).map((_, i) => (
+                                <div key={i} className="flex-1 bg-[#2a2b30] rounded-t-lg" style={{ height: `${20 + Math.random() * 70}%` }} />
+                            ))}
+                        </div>
+                    </div>
+                    {/* Network Skeleton */}
+                    <div className="bg-[#202227] p-6 rounded-2xl border border-white/5 space-y-4 animate-pulse">
+                        <div className="h-4 w-36 bg-[#2a2b30] rounded" />
+                        {Array.from({ length: 3 }).map((_, i) => (
+                            <div key={i} className="p-3 bg-[#18191c] rounded-xl border border-white/5 space-y-2">
+                                <div className="flex justify-between">
+                                    <div className="h-3 w-16 bg-[#2a2b30] rounded" />
+                                    <div className="h-3 w-20 bg-[#2a2b30] rounded" />
+                                </div>
+                                <div className="flex justify-between">
+                                    <div className="h-3 w-24 bg-[#2a2b30] rounded" />
+                                    <div className="h-3 w-8 bg-[#2a2b30] rounded" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
