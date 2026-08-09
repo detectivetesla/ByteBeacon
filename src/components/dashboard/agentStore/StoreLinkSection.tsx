@@ -59,8 +59,8 @@ export const StoreLinkSection: React.FC<StoreLinkSectionProps> = ({ storeName, s
                 </a>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-3 bg-[#18191c] p-3 rounded-xl border border-white/5">
-                <span className="text-xs font-mono text-[#a3e635] truncate flex-1 px-2">
+            <div className="flex flex-col sm:flex-row items-center gap-3 bg-[#18191c] p-3 rounded-xl border border-white/5 overflow-hidden">
+                <span className="text-xs font-mono text-[#a3e635] truncate max-w-full flex-1 px-2 text-center sm:text-left break-all">
                     {publicUrl}
                 </span>
 

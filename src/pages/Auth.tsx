@@ -120,18 +120,18 @@ export default function Auth() {
         } else {
           toast({
             title: `Store Status: ${store.effective_status.replace(/_/g, ' ')}`,
-            description: 'Opening store console to complete registration/activation.',
+            description: 'Opening store registration/activation console.',
           });
-          navigate('/agent-store');
+          navigate('/dashboard/agent-store');
           return;
         }
       } else {
         if (isAgentPortal || role === 'agent' || role === 'superagent') {
           toast({
-            title: 'Agent Account Verified',
-            description: 'Create your custom Agent Store to start taking orders.',
+            title: 'No Active Agent Store Found',
+            description: 'Complete store creation or activation to open reseller console.',
           });
-          navigate('/agent-store');
+          navigate('/dashboard/agent-store');
           return;
         }
       }
@@ -623,15 +623,6 @@ export default function Auth() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {/* Agent Portal Toggle */}
-              <button
-                type="button"
-                onClick={() => setIsAgentPortal(true)}
-                className="px-3 py-1.5 rounded-full text-xs font-semibold bg-[#a3e635]/10 text-[#a3e635] border border-[#a3e635]/30 hover:bg-[#a3e635]/20 flex items-center gap-1.5 transition-all"
-              >
-                <Store className="w-3.5 h-3.5" /> Agent Sign In
-              </button>
-
               {/* Dark Mode Toggle */}
               <button
                 onClick={toggleDarkMode}
@@ -901,6 +892,26 @@ export default function Auth() {
               {isSignUp ? 'Sign In' : 'Create one'}
             </button>
           </p>
+
+          {/* Agent Store Dedicated Sign In Banner */}
+          <div className="mt-8 pt-6 border-t border-border">
+            <button
+              type="button"
+              onClick={() => setIsAgentPortal(true)}
+              className="w-full p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400 hover:text-emerald-300 font-bold text-xs transition-all flex items-center justify-between group shadow-sm"
+            >
+              <div className="flex items-center gap-3 text-left">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0">
+                  <Store className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="font-extrabold text-foreground text-xs">Reseller Agent Store Portal</p>
+                  <p className="text-[11px] text-muted-foreground font-medium">Approved Agent? Sign in to your store console</p>
+                </div>
+              </div>
+              <ArrowRight className="w-4 h-4 text-emerald-400 group-hover:translate-x-1 transition-transform flex-shrink-0 ml-2" />
+            </button>
+          </div>
         </div>
       </div>
 
