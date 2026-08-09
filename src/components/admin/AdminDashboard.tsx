@@ -438,11 +438,11 @@ export default function AdminDashboard() {
                     <TrendingUp className="w-5 h-5 text-primary" />
                     Revenue & Order Tracking by Tier
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* User Tier */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Customer Tier */}
                     <Card className="bg-card border-border border-t-4 border-t-blue-500 overflow-hidden relative shadow-md">
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-bold uppercase text-blue-500 tracking-wider">User Tier (Customers)</CardTitle>
+                            <CardTitle className="text-sm font-bold uppercase text-blue-500 tracking-wider">Customer Tier</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex justify-between items-center border-b border-border/50 pb-2">
@@ -460,27 +460,6 @@ export default function AdminDashboard() {
                         </CardContent>
                     </Card>
 
-                    {/* Agent Tier */}
-                    <Card className="bg-card border-border border-t-4 border-t-purple-500 overflow-hidden relative shadow-md">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-bold uppercase text-purple-500 tracking-wider">Agent Tier</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                                <span className="text-xs text-muted-foreground">Daily Revenue</span>
-                                <span className="text-lg font-bold text-foreground">GH₵ {(stats.roleStats?.agent?.dailyRevenue || 0).toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                                <span className="text-xs text-muted-foreground">Monthly Revenue</span>
-                                <span className="text-lg font-bold text-foreground">GH₵ {(stats.roleStats?.agent?.monthlyRevenue || 0).toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-xs text-muted-foreground">Total Orders</span>
-                                <span className="text-lg font-bold text-foreground">{(stats.roleStats?.agent?.totalOrders || 0).toLocaleString()}</span>
-                            </div>
-                        </CardContent>
-                    </Card>
-
                     {/* SuperAgent Tier */}
                     <Card className="bg-card border-border border-t-4 border-t-emerald-500 overflow-hidden relative shadow-md">
                         <CardHeader className="pb-2">
@@ -489,15 +468,15 @@ export default function AdminDashboard() {
                         <CardContent className="space-y-4">
                             <div className="flex justify-between items-center border-b border-border/50 pb-2">
                                 <span className="text-xs text-muted-foreground">Daily Revenue</span>
-                                <span className="text-lg font-bold text-foreground">GH₵ {(stats.roleStats?.superagent?.dailyRevenue || 0).toLocaleString()}</span>
+                                <span className="text-lg font-bold text-foreground">GH₵ {((stats.roleStats?.agent?.dailyRevenue || 0) + (stats.roleStats?.superagent?.dailyRevenue || 0)).toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between items-center border-b border-border/50 pb-2">
                                 <span className="text-xs text-muted-foreground">Monthly Revenue</span>
-                                <span className="text-lg font-bold text-foreground">GH₵ {(stats.roleStats?.superagent?.monthlyRevenue || 0).toLocaleString()}</span>
+                                <span className="text-lg font-bold text-foreground">GH₵ {((stats.roleStats?.agent?.monthlyRevenue || 0) + (stats.roleStats?.superagent?.monthlyRevenue || 0)).toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-xs text-muted-foreground">Total Orders</span>
-                                <span className="text-lg font-bold text-foreground">{(stats.roleStats?.superagent?.totalOrders || 0).toLocaleString()}</span>
+                                <span className="text-lg font-bold text-foreground">{((stats.roleStats?.agent?.totalOrders || 0) + (stats.roleStats?.superagent?.totalOrders || 0)).toLocaleString()}</span>
                             </div>
                         </CardContent>
                     </Card>

@@ -92,7 +92,7 @@ export const AgentStoreDashboard: React.FC = () => {
                 <div className="flex items-center gap-3 w-full md:w-auto justify-end">
                     {/* Role Chips */}
                     <span className="px-3 py-1 bg-[#18191c] border border-white/10 rounded-lg text-xs font-semibold text-slate-300">
-                        Reseller Agent
+                        Reseller SuperAgent
                     </span>
                     <span className="px-3 py-1 bg-[#a3e635]/20 text-[#a3e635] border border-[#a3e635]/30 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#a3e635] animate-pulse" />

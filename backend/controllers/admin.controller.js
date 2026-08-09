@@ -2325,6 +2325,12 @@ const updateAgentStoreReviewStatus = async (req, res) => {
             [review_status, admin_notes, id]
         );
 
+        // If APPROVED, promote store owner's role to 'superagent'
+        if (review_status === 'APPROVED') {
+            await pool.execute(`UPDATE users SET role = 'superagent'::user_role WHERE uuid = ?::uuid`, [store.user_id]).catch(() => {});
+            await pool.execute(`UPDATE user_roles SET role = 'superagent'::user_role WHERE user_id = ?::uuid`, [store.user_id]).catch(() => {});
+        }
+
         // Notify store owner
         await pool.execute(
             `INSERT INTO notifications (id, user_id, title, message, type, created_at)
@@ -2347,6 +2353,13 @@ const updateAgentStoreReviewStatus = async (req, res) => {
 const manualActivateAgentStore = async (req, res) => {
     try {
         const { id } = req.params;
+
+        const [stores] = await pool.execute('SELECT user_id FROM agent_stores WHERE id = ?::uuid', [id]);
+        if (stores.length > 0) {
+            const userId = stores[0].user_id;
+            await pool.execute(`UPDATE users SET role = 'superagent'::user_role WHERE uuid = ?::uuid`, [userId]).catch(() => {});
+            await pool.execute(`UPDATE user_roles SET role = 'superagent'::user_role WHERE user_id = ?::uuid`, [userId]).catch(() => {});
+        }
 
         await pool.execute(
             `UPDATE agent_stores SET activation_status = 'PAID', updated_at = NOW() WHERE id = ?::uuid`,

@@ -233,7 +233,7 @@ int main() {
             method: 'GET',
             path: '/api/user/profile',
             description: 'Get your user profile and role information',
-            response: '{ "fullName": "...", "email": "...", "role": "agent" }',
+            response: '{ "fullName": "...", "email": "...", "role": "superagent" }',
         },
         {
             method: 'GET',
@@ -535,7 +535,7 @@ int main() {
                     </ol>
                     <div className="mt-4 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
                         <p className="text-sm text-emerald-600 dark:text-emerald-400">
-                            💡 <strong>Agent Pricing:</strong> As an agent, you automatically receive discounted rates on all API purchases.
+                            💡 <strong>SuperAgent Pricing:</strong> As a SuperAgent, you automatically receive discounted rates on all API purchases.
                         </p>
                     </div>
                 </CardContent>
