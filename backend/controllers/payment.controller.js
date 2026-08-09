@@ -151,10 +151,21 @@ exports.verifyPayment = async (req, res) => {
                 success: true,
                 status: transaction.status,
                 message: transaction.status === 'completed'
-                    ? `Data bundle delivered: ${transaction.data_amount || 'package'}`
-                    : `Order placed and processing: ${transaction.data_amount || 'package'}`,
-                transaction_id: transaction.id
+                    ? `Data bundle delivered: ${transaction.data_amount}`
+                    : `Order processing`,
+                transaction_id: transaction.id,
             });
+        }
+
+        // SECURITY: Verify currency and amount matches expected transaction amount in pesewas
+        const expectedPesewas = Math.round(parseFloat(transaction.amount_ghc) * 100);
+        if (verifyData.data.currency !== 'GHS' || verifyData.data.amount !== expectedPesewas) {
+            console.error(`🚨 Security Alert: Amount/Currency mismatch on transaction ${transaction.id}. Expected: ${expectedPesewas} GHS pesewas, Received: ${verifyData.data.amount} ${verifyData.data.currency}`);
+            await connection.execute(
+                `UPDATE transactions SET status = 'failed', api_response = ? WHERE id = ?::uuid`,
+                [JSON.stringify({ error: 'Amount or currency mismatch', verifyData }), transaction.id]
+            );
+            return res.status(400).json({ success: false, error: 'Payment verification failed: Amount or currency mismatch' });
         }
 
         // Update transaction to processing
@@ -241,12 +252,17 @@ exports.paystackWebhook = async (req, res) => {
         // Use rawBody if available (more reliable for signature verification)
         const bodyContent = req.rawBody ? req.rawBody : JSON.stringify(req.body);
 
-        const hash = require('crypto')
-            .createHmac('sha512', secret)
+        const crypto = require('crypto');
+        const hash = crypto
+            .createHmac('sha512', secret || '')
             .update(bodyContent)
             .digest('hex');
 
-        if (hash !== signature) {
+        // Timing-safe comparison to prevent side-channel timing attacks
+        const hashBuffer = Buffer.from(hash, 'hex');
+        const sigBuffer = Buffer.from(signature || '', 'hex');
+
+        if (hashBuffer.length !== sigBuffer.length || !crypto.timingSafeEqual(hashBuffer, sigBuffer)) {
             console.error('❌ Webhook: Invalid signature');
             return res.status(400).json({ error: 'Invalid signature' });
         }

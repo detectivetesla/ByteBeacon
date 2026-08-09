@@ -31,10 +31,26 @@ exports.createStore = async (req, res) => {
     const connection = await pool.getConnection();
     try {
         const userId = req.user.id;
-        const { store_name, description, phone, logo_url } = req.body;
+        let { store_name, description, phone, logo_url } = req.body;
 
         if (!store_name || !phone) {
             return res.status(400).json({ success: false, error: 'Store name and phone number are required' });
+        }
+
+        // INPUT VALIDATION & SANITIZATION
+        store_name = String(store_name).trim();
+        phone = String(phone).trim();
+        description = description ? String(description).trim() : '';
+        logo_url = logo_url ? String(logo_url).trim() : '';
+
+        if (store_name.length < 3 || store_name.length > 60) {
+            return res.status(400).json({ success: false, error: 'Store name must be between 3 and 60 characters.' });
+        }
+        if (description.length > 500) {
+            return res.status(400).json({ success: false, error: 'Description cannot exceed 500 characters.' });
+        }
+        if (phone.length < 9 || phone.length > 15) {
+            return res.status(400).json({ success: false, error: 'Invalid phone number format.' });
         }
 
         // Check if user already has a store
@@ -309,6 +325,12 @@ exports.verifyActivationPayment = async (req, res) => {
 
         if (!verifyData.status || !verifyData.data || verifyData.data.status !== 'success') {
             return res.status(400).json({ success: false, error: 'Payment verification failed or unpaid.' });
+        }
+
+        // SECURITY: Verify currency and amount matches GHS 100 (10000 pesewas)
+        if (verifyData.data.currency !== 'GHS' || verifyData.data.amount !== 10000) {
+            console.error(`🚨 Security Alert: Activation payment amount/currency mismatch for user ${userId}. Expected: 10000 GHS pesewas, Received: ${verifyData.data.amount} ${verifyData.data.currency}`);
+            return res.status(400).json({ success: false, error: 'Activation payment verification failed: Amount or currency mismatch' });
         }
 
         const [stores] = await connection.execute('SELECT * FROM agent_stores WHERE user_id = ?::uuid', [userId]);
@@ -755,13 +777,22 @@ exports.requestWithdrawal = async (req, res) => {
             return res.status(400).json({ success: false, error: `Minimum withdrawal amount is GHS ${minWithdrawal.toFixed(2)}` });
         }
 
-        const [wallets] = await connection.execute('SELECT * FROM agent_wallets WHERE agent_id = ?::uuid', [userId]);
-        if (wallets.length === 0) return res.status(400).json({ success: false, error: 'Wallet not found' });
+        await connection.beginTransaction();
 
-        const wallet = wallets[0];
-        const currentBalance = parseFloat(wallet.available_balance);
+        // FOR UPDATE lock prevents concurrent withdrawal race conditions
+        const [wallets] = await connection.execute(
+            'SELECT available_balance FROM agent_wallets WHERE agent_id = ?::uuid FOR UPDATE',
+            [userId]
+        );
+        if (wallets.length === 0) {
+            await connection.rollback();
+            return res.status(400).json({ success: false, error: 'Wallet not found' });
+        }
+
+        const currentBalance = parseFloat(wallets[0].available_balance);
 
         if (currentBalance < amount) {
+            await connection.rollback();
             return res.status(400).json({ success: false, error: `Insufficient profit balance. Available: GHS ${currentBalance.toFixed(2)}` });
         }
 
@@ -771,23 +802,26 @@ exports.requestWithdrawal = async (req, res) => {
         const withdrawalId = uuidv4();
         const newBalance = currentBalance - amount;
 
-        await connection.beginTransaction();
+        // Atomic deduction check (WHERE available_balance >= amount)
+        const [updateResult] = await connection.execute(
+            `UPDATE agent_wallets 
+             SET available_balance = available_balance - ?,
+                 total_withdrawn = total_withdrawn + ?,
+                 updated_at = NOW()
+             WHERE agent_id = ?::uuid AND available_balance >= ?`,
+            [amount, amount, userId, amount]
+        );
+
+        if (updateResult.affectedRows === 0 && updateResult.rowCount === 0) {
+            await connection.rollback();
+            return res.status(400).json({ success: false, error: 'Transaction failed due to concurrent withdrawal attempt.' });
+        }
 
         // Create withdrawal request
         await connection.execute(
             `INSERT INTO agent_withdrawals (id, agent_id, store_id, amount_ghc, payment_method, account_number, account_name, bank_momo_provider, status, created_at, updated_at)
              VALUES (?::uuid, ?::uuid, ?::uuid, ?, ?, ?, ?, ?, 'REQUESTED', NOW(), NOW())`,
             [withdrawalId, userId, storeId, amount, payment_method || 'momo', account_number, account_name, bank_momo_provider]
-        );
-
-        // Deduct from available balance and update total withdrawn
-        await connection.execute(
-            `UPDATE agent_wallets 
-             SET available_balance = available_balance - ?,
-                 total_withdrawn = total_withdrawn + ?,
-                 updated_at = NOW()
-             WHERE agent_id = ?::uuid`,
-            [amount, amount, userId]
         );
 
         // Record in ledger
@@ -1046,6 +1080,13 @@ exports.verifyCustomerPurchase = async (req, res) => {
                 message: `Data bundle delivered: ${order.network} ${order.data_amount} to ${order.customer_phone}`,
                 order_id: order.id
             });
+        }
+
+        // SECURITY: Verify currency and amount matches expected order price in pesewas
+        const expectedPesewas = Math.round(parseFloat(order.selling_price_ghc) * 100);
+        if (verifyData.data.currency !== 'GHS' || verifyData.data.amount !== expectedPesewas) {
+            console.error(`🚨 Security Alert: Customer purchase amount/currency mismatch for order ${order.id}. Expected: ${expectedPesewas} GHS pesewas, Received: ${verifyData.data.amount} ${verifyData.data.currency}`);
+            return res.status(400).json({ success: false, error: 'Customer payment verification failed: Amount or currency mismatch' });
         }
 
         // Mark payment paid & processing

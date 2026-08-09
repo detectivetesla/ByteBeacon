@@ -3,7 +3,7 @@ const helmet = require('helmet');
 
 /**
  * Security Middleware Configuration
- * Optimized for Cloudflare and General Production Security
+ * OWASP Compliant Security Headers & Endpoint Rate Limiters
  */
 
 const { logActivity } = require('../utils/activityLogger');
@@ -11,21 +11,13 @@ const { logActivity } = require('../utils/activityLogger');
 // Helper to get client IP, prioritizing Cloudflare's connecting IP header
 const getClientIp = (req) => {
     return req.headers['cf-connecting-ip'] ||
-        (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0] : req.ip);
-};
-
-// Custom handler for rate limit blocks
-const onLimitReached = (req, res, options) => {
-    const ip = getClientIp(req);
-    const userId = req.user ? req.user.id : null;
-    logActivity(userId, 'SECURITY_BLOCK', `Rate limit reached on ${req.path}`, { ip, limit: options.max }, ip).catch(() => { });
-    res.status(options.statusCode).send(options.message);
+        (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : req.ip);
 };
 
 // Global rate limiter (General platform protection)
 const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5000, // Increased for shared network IPs (e.g. mobile NAT)
+    max: 5000,
     keyGenerator: getClientIp,
     message: {
         error: 'Too many requests.',
@@ -51,7 +43,7 @@ const authLimiter = rateLimit({
 // Payment & Webhook limiter (Protection for transactional endpoints)
 const paymentLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 200, // Increased for stability
+    max: 200,
     keyGenerator: getClientIp,
     message: {
         error: 'Too many payment requests.',
@@ -61,18 +53,65 @@ const paymentLimiter = rateLimit({
     legacyHeaders: false,
 });
 
+// Withdrawal limiter (Strict financial protection)
+const withdrawalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10, // 10 withdrawal attempts per 15 minutes per IP
+    keyGenerator: getClientIp,
+    message: {
+        error: 'Too many withdrawal requests.',
+        message: 'Financial security threshold reached. Please wait 15 minutes before requesting another withdrawal.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Store creation limiter (Prevents store spam)
+const storeCreationLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 5,
+    keyGenerator: getClientIp,
+    message: {
+        error: 'Store creation limit exceeded.',
+        message: 'You have reached the maximum store creation attempts for this hour.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Enhanced Security Headers (Helmet)
+const securityHeaders = helmet({
+    contentSecurityPolicy: {
+        directives: {
+            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+            "img-src": ["'self'", "data:", "https:", "blob:"],
+            "connect-src": ["'self'", "https:", "wss:"],
+        },
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    dnsPrefetchControl: { allow: false },
+    frameguard: { action: 'deny' },
+    hidePoweredBy: true,
+    hsts: {
+        maxAge: 31536000, // 1 year
+        includeSubDomains: true,
+        preload: true
+    },
+    ieNoOpen: true,
+    noSniff: true,
+    originAgentCluster: true,
+    permittedCrossDomainPolicies: { permittedPolicies: 'none' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    xssFilter: true
+});
+
 module.exports = {
     globalLimiter,
     authLimiter,
     paymentLimiter,
-    securityHeaders: helmet({
-        contentSecurityPolicy: {
-            directives: {
-                ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-                "img-src": ["'self'", "data:", "https:", "blob:"],
-                "connect-src": ["'self'", "https:", "wss:"],
-            },
-        },
-        crossOriginEmbedderPolicy: false,
-    })
+    withdrawalLimiter,
+    storeCreationLimiter,
+    securityHeaders
 };

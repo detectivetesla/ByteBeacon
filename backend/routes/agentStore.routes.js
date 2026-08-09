@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
+const { withdrawalLimiter, storeCreationLimiter, paymentLimiter } = require('../middleware/security');
 const {
     createStore,
     getMyStore,
@@ -26,20 +27,20 @@ const {
 // PUBLIC STOREFRONT ENDPOINTS (No Login Required)
 // =============================================
 router.get('/public/store/:slug', getPublicStorefront);
-router.post('/public/store/:slug/buy/initialize', initializeCustomerPurchase);
-router.post('/public/store/buy/verify', verifyCustomerPurchase);
+router.post('/public/store/:slug/buy/initialize', paymentLimiter, initializeCustomerPurchase);
+router.post('/public/store/buy/verify', paymentLimiter, verifyCustomerPurchase);
 router.get('/public/track/:orderId', trackPublicOrder);
 
 // =============================================
 // AUTHENTICATED AGENT STORE ENDPOINTS (User Login Required)
 // =============================================
-router.post('/create', auth, createStore);
+router.post('/create', auth, storeCreationLimiter, createStore);
 router.get('/my-store', auth, getMyStore);
 router.put('/settings', auth, updateStoreSettings);
 
 // Activation Payment (GHS 100)
-router.post('/activate/initialize', auth, initializeActivationPayment);
-router.post('/activate/verify', auth, verifyActivationPayment);
+router.post('/activate/initialize', auth, paymentLimiter, initializeActivationPayment);
+router.post('/activate/verify', auth, paymentLimiter, verifyActivationPayment);
 
 // Products & Pricing
 router.get('/products', auth, getStoreProducts);
@@ -53,7 +54,7 @@ router.get('/customers', auth, getAgentCustomers);
 router.get('/analytics', auth, getAgentAnalytics);
 
 // Financial Ledger & Withdrawals
-router.post('/withdrawals', auth, requestWithdrawal);
+router.post('/withdrawals', auth, withdrawalLimiter, requestWithdrawal);
 router.get('/withdrawals', auth, getWithdrawalHistory);
 
 module.exports = router;
