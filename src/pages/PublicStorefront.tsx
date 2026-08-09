@@ -46,6 +46,12 @@ export default function PublicStorefront() {
         loadStorefront();
     }, [slug]);
 
+    useEffect(() => {
+        if (storeInfo?.store_name) {
+            document.title = `${storeInfo.store_name} - Data Bundles`;
+        }
+    }, [storeInfo]);
+
     // Handle payment callback verification if reference in URL
     useEffect(() => {
         if (referenceFromUrl && !verifying && !verificationResult) {
@@ -193,7 +199,7 @@ export default function PublicStorefront() {
 
                     <div className="px-4 py-2 rounded-xl bg-[#18191c] border border-white/5 text-[11px] text-slate-400 flex items-center gap-2">
                         <ShieldCheck className="w-4 h-4 text-[#a3e635]" />
-                        <span>Powered by ByteBeacon Telecom Network</span>
+                        <span>Instant & Secure Delivery</span>
                     </div>
                 </div>
             </header>
@@ -277,6 +283,17 @@ export default function PublicStorefront() {
                     ))}
                 </div>
             </main>
+
+            {/* Branded Store Footer */}
+            <footer className="border-t border-white/5 bg-[#18191c] py-8 px-4 sm:px-6 text-center text-xs text-slate-500 space-y-2 mt-12">
+                <p className="font-semibold text-slate-400">© {new Date().getFullYear()} {storeInfo?.store_name || 'Storefront'}. All rights reserved.</p>
+                {storeInfo?.phone && (
+                    <p className="text-slate-400">
+                        Support: <a href={`tel:${storeInfo.phone}`} className="text-[#a3e635] hover:underline font-bold">{storeInfo.phone}</a>
+                    </p>
+                )}
+                <p className="text-[10px] text-slate-600 pt-2">Powered by ByteBeacon</p>
+            </footer>
 
             {/* Purchase Modal */}
             {selectedBundle && (

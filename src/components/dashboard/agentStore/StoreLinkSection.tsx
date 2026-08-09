@@ -45,7 +45,7 @@ export const StoreLinkSection: React.FC<StoreLinkSectionProps> = ({ storeName, s
                     </div>
                     <div>
                         <h3 className="font-bold text-white text-base">Your Public Storefront</h3>
-                        <p className="text-xs text-slate-400">Share your custom link with your customers to accept orders.</p>
+                        <p className="text-xs text-slate-400">Share your storefront link to take orders.</p>
                     </div>
                 </div>
                 <a
