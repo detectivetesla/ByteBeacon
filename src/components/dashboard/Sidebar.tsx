@@ -44,10 +44,11 @@ interface NavItem {
     divider?: boolean;
 }
 
-const getNavItems = (userRole: string | null | undefined): NavItem[] => {
+const getNavItems = (userRole: string | null | undefined, hasActiveStore?: boolean): NavItem[] => {
+    const agentStoreHref = hasActiveStore ? '/agent-store' : '/dashboard/agent-store';
     const baseItems: NavItem[] = [
         { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard', variant: 'violet' },
-        { icon: Store, label: 'Agent Store', href: '/agent-store', variant: 'emerald' },
+        { icon: Store, label: 'Agent Store', href: agentStoreHref, variant: 'emerald' },
         { icon: Wallet, label: 'Wallet', href: '/dashboard/wallet', variant: 'emerald' },
         {
             icon: Package,
@@ -127,7 +128,8 @@ export default function Sidebar({ isCollapsed, userName, userEmail, userRole, on
         fetchStore();
     }, []);
 
-    const navItems = getNavItems(userRole);
+    const hasActiveStore = storeInfo?.effective_status === 'ACTIVE';
+    const navItems = getNavItems(userRole, hasActiveStore);
 
     const handleSignOut = async () => {
         await signOut();
@@ -240,7 +242,7 @@ export default function Sidebar({ isCollapsed, userName, userEmail, userRole, on
                                 ) : (
                                     <div className="pt-1">
                                         <Link
-                                            to="/agent-store"
+                                            to="/dashboard/agent-store"
                                             className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-md bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all"
                                         >
                                             <Store className="w-3 h-3" />
