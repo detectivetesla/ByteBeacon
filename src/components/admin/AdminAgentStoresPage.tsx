@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { agentStoreService, AgentStore, AgentWithdrawal } from '@/services/agentStore.service';
-import { Store, RefreshCw, Search, ChevronDown, AlertTriangle } from 'lucide-react';
+import { Store, RefreshCw, Search, ChevronDown, AlertTriangle, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 type StoreWithMeta = AgentStore & { owner_name: string; owner_email: string; total_orders: number };
@@ -193,6 +193,26 @@ export const AdminAgentStoresPage: React.FC = () => {
                     loadAdminData();
                 } catch (err: any) {
                     toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                }
+            }
+        });
+    };
+
+    const confirmDeleteStore = (storeId: string, storeName: string) => {
+        setConfirmDialog({
+            open: true,
+            title: 'Delete Agent Store?',
+            message: `Are you sure you want to delete "${storeName}"? This will permanently delete the store, its product configurations, and custom settings. This action cannot be undone.`,
+            confirmLabel: 'Delete Store',
+            variant: 'danger',
+            onConfirm: async () => {
+                setConfirmDialog(prev => ({ ...prev, open: false }));
+                try {
+                    const res = await agentStoreService.adminDeleteStore(storeId);
+                    toast({ title: 'Store Deleted', description: res.message });
+                    loadAdminData();
+                } catch (err: any) {
+                    toast({ title: 'Delete Failed', description: err.message, variant: 'destructive' });
                 }
             }
         });
@@ -397,6 +417,14 @@ export const AdminAgentStoresPage: React.FC = () => {
                                                                     Mark Paid
                                                                 </button>
                                                             )}
+                                                            <button
+                                                                onClick={() => confirmDeleteStore(s.id, s.store_name)}
+                                                                className="px-2 py-1 text-[11px] font-semibold text-red-400 hover:bg-red-500/10 rounded-md transition-colors flex items-center gap-1"
+                                                                title="Delete Store"
+                                                            >
+                                                                <Trash2 className="w-3 h-3" />
+                                                                Delete
+                                                            </button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -433,6 +461,14 @@ export const AdminAgentStoresPage: React.FC = () => {
                                                             Mark Paid
                                                         </button>
                                                     )}
+                                                    <button
+                                                        onClick={() => confirmDeleteStore(s.id, s.store_name)}
+                                                        className="px-2 py-1 text-[11px] font-semibold text-red-400 hover:bg-red-500/10 rounded-md transition-colors flex items-center gap-1"
+                                                        title="Delete Store"
+                                                    >
+                                                        <Trash2 className="w-3 h-3" />
+                                                        Delete
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>

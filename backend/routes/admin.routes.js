@@ -49,6 +49,7 @@ const {
     getAllAgentStores,
     updateAgentStoreReviewStatus,
     manualActivateAgentStore,
+    deleteAgentStore,
     getAllAgentWithdrawals,
     updateAgentWithdrawalStatus,
     getAgentPricingRules,
@@ -149,6 +150,7 @@ router.post('/partners/:id/adjust-balance', adjustPartnerBalance);
 router.get('/agent-stores', getAllAgentStores);
 router.put('/agent-stores/:id/review', updateAgentStoreReviewStatus);
 router.post('/agent-stores/:id/activate-manual', manualActivateAgentStore);
+router.delete('/agent-stores/:id', deleteAgentStore);
 router.get('/agent-stores/withdrawals', getAllAgentWithdrawals);
 router.put('/agent-stores/withdrawals/:id', updateAgentWithdrawalStatus);
 router.get('/agent-stores/pricing-rules', getAgentPricingRules);

@@ -196,6 +196,10 @@ export const agentStoreService = {
         return api.post<{ message: string }>(`/admin/agent-stores/${id}/activate-manual`, {});
     },
 
+    adminDeleteStore: async (id: string) => {
+        return api.delete<{ message: string }>(`/admin/agent-stores/${id}`);
+    },
+
     adminGetAllWithdrawals: async () => {
         return api.get<(AgentWithdrawal & { store_name: string; agent_name: string; agent_email: string })[]>('/admin/agent-stores/withdrawals');
     },

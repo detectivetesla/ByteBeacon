@@ -2373,6 +2373,25 @@ const manualActivateAgentStore = async (req, res) => {
     }
 };
 
+const deleteAgentStore = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const [stores] = await pool.execute('SELECT user_id, store_name FROM agent_stores WHERE id = ?::uuid', [id]);
+        if (stores.length === 0) {
+            return res.status(404).json({ error: 'Store not found' });
+        }
+        const store = stores[0];
+
+        await pool.execute('DELETE FROM agent_stores WHERE id = ?::uuid', [id]);
+
+        res.json({ message: `Agent Store "${store.store_name}" deleted successfully` });
+    } catch (error) {
+        console.error('Error deleting agent store:', error);
+        res.status(500).json({ error: 'Failed to delete agent store: ' + error.message });
+    }
+};
+
 const getAllAgentWithdrawals = async (req, res) => {
     try {
         const [withdrawals] = await pool.execute(`
@@ -2540,6 +2559,7 @@ module.exports = {
     getAllAgentStores,
     updateAgentStoreReviewStatus,
     manualActivateAgentStore,
+    deleteAgentStore,
     getAllAgentWithdrawals,
     updateAgentWithdrawalStatus,
     getAgentPricingRules,
