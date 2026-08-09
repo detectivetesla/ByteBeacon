@@ -106,27 +106,33 @@ export default function Auth() {
       return;
     }
 
-    try {
-      const storeRes = await agentStoreService.getMyStore();
-      if (storeRes.success && storeRes.hasStore && storeRes.store) {
-        const store = storeRes.store;
-        if (store.effective_status === 'ACTIVE') {
-          toast({
-            title: `Store Verified: ${store.store_name}`,
-            description: 'Health Status: Operational & Active. Opening store dashboard...',
-          });
-          navigate('/agent-store');
-          return;
+    // Determine authentication entry point context (ByteBeacon vs Agent Store)
+    const currentAuthContext = sessionStorage.getItem('auth_context') || (isAgentPortal ? 'agent' : 'bytebeacon');
+    sessionStorage.removeItem('auth_context');
+
+    if (currentAuthContext === 'agent') {
+      // AGENT STORE AUTHENTICATION ENTRY POINT
+      // Evaluate Agent Store authorization & store status
+      try {
+        const storeRes = await agentStoreService.getMyStore();
+        if (storeRes.success && storeRes.hasStore && storeRes.store) {
+          const store = storeRes.store;
+          if (store.effective_status === 'ACTIVE') {
+            toast({
+              title: `Store Verified: ${store.store_name}`,
+              description: 'Health Status: Operational & Active. Opening store console...',
+            });
+            navigate('/agent-store');
+            return;
+          } else {
+            toast({
+              title: `Store Status: ${store.effective_status.replace(/_/g, ' ')}`,
+              description: 'Opening store registration/activation console.',
+            });
+            navigate('/dashboard/agent-store');
+            return;
+          }
         } else {
-          toast({
-            title: `Store Status: ${store.effective_status.replace(/_/g, ' ')}`,
-            description: 'Opening store registration/activation console.',
-          });
-          navigate('/dashboard/agent-store');
-          return;
-        }
-      } else {
-        if (isAgentPortal || role === 'agent' || role === 'superagent') {
           toast({
             title: 'No Active Agent Store Found',
             description: 'Complete store creation or activation to open reseller console.',
@@ -134,14 +140,19 @@ export default function Auth() {
           navigate('/dashboard/agent-store');
           return;
         }
+      } catch (err) {
+        console.error('Error verifying agent store status during agent sign-in:', err);
+        navigate('/dashboard/agent-store');
+        return;
       }
-    } catch (err) {
-      console.error('Error verifying agent store status:', err);
     }
 
+    // BYTEBEACON AUTHENTICATION ENTRY POINT
+    // Signing into ByteBeacon through standard auth ALWAYS returns to ByteBeacon Dashboard (/dashboard).
+    // Owning an Agent Store NEVER overrides standard ByteBeacon authentication redirects!
     toast({
       title: 'Welcome back!',
-      description: 'You have successfully signed in.',
+      description: 'You have successfully signed in to ByteBeacon.',
     });
     navigate('/dashboard');
   };
@@ -235,6 +246,8 @@ export default function Auth() {
   };
 
   const handleGoogleSignIn = async () => {
+    // Persist authentication entry point context prior to OAuth trigger
+    sessionStorage.setItem('auth_context', isAgentPortal ? 'agent' : 'bytebeacon');
     setLoading(true);
     try {
       const { user, error } = await signInWithGoogle();
