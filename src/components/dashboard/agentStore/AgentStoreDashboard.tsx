@@ -122,7 +122,38 @@ export const AgentStoreDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* 2. DASHBOARD GREETING & STORE LINK BANNER */}
+            {/* 2. SUB NAVIGATION TABS — pinned to top for visibility */}
+            <div className="flex items-center gap-2 border-b border-white/5 pb-2 overflow-x-auto">
+                {[
+                    { id: 'Overview', label: 'Overview', icon: BarChart3 },
+                    { id: 'Pricing', label: 'SuperAgent Prices', icon: Tag },
+                    { id: 'Orders', label: 'Orders', icon: ShoppingCart },
+                    { id: 'Wallet', label: 'Wallet & Profit', icon: Wallet },
+                    { id: 'Analytics', label: 'Analytics', icon: TrendingUp },
+                    { id: 'Reports', label: 'Reports', icon: FileText },
+                    { id: 'Tracking', label: 'Tracking', icon: ShieldCheck },
+                ].map(tab => {
+                    const IconComp = tab.icon;
+                    const isActive = activeTab === tab.id;
+
+                    return (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                                isActive
+                                    ? 'bg-[#a3e635] text-black shadow-md shadow-[#a3e635]/20 font-extrabold'
+                                    : 'bg-[#202227] text-slate-400 hover:text-white border border-white/5'
+                            }`}
+                        >
+                            <IconComp className="w-3.5 h-3.5" />
+                            {tab.label}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* 3. DASHBOARD GREETING & STORE LINK BANNER */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="space-y-1">
                     <div className="flex items-center gap-2">
@@ -137,7 +168,7 @@ export const AgentStoreDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* 3. FEATURED PRODUCTS & NETWORKS CAROUSEL */}
+            {/* 4. FEATURED PRODUCTS & NETWORKS CAROUSEL */}
             <div className="space-y-3">
                 <div className="flex justify-between items-center text-xs">
                     <h3 className="font-bold text-white uppercase tracking-wider text-[11px] text-slate-400">Featured Network Products</h3>
@@ -205,37 +236,6 @@ export const AgentStoreDashboard: React.FC = () => {
                         </div>
                     </div>
                 </div>
-            </div>
-
-            {/* 4. SUB NAVIGATION TABS */}
-            <div className="flex items-center gap-2 border-b border-white/5 pb-2 overflow-x-auto">
-                {[
-                    { id: 'Overview', label: 'Overview', icon: BarChart3 },
-                    { id: 'Pricing', label: 'Agent Prices', icon: Tag },
-                    { id: 'Orders', label: 'Orders', icon: ShoppingCart },
-                    { id: 'Wallet', label: 'Wallet & Profit', icon: Wallet },
-                    { id: 'Analytics', label: 'Analytics', icon: TrendingUp },
-                    { id: 'Reports', label: 'Reports', icon: FileText },
-                    { id: 'Tracking', label: 'Tracking', icon: ShieldCheck },
-                ].map(tab => {
-                    const IconComp = tab.icon;
-                    const isActive = activeTab === tab.id;
-
-                    return (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
-                                isActive
-                                    ? 'bg-[#a3e635] text-black shadow-md shadow-[#a3e635]/20 font-extrabold'
-                                    : 'bg-[#202227] text-slate-400 hover:text-white border border-white/5'
-                            }`}
-                        >
-                            <IconComp className="w-3.5 h-3.5" />
-                            {tab.label}
-                        </button>
-                    );
-                })}
             </div>
 
             {/* 5. TAB CONTENT DISPLAY */}
