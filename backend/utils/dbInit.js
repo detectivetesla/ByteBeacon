@@ -429,9 +429,14 @@ const initializeTables = async () => {
                         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'transactions' AND column_name = 'source_provider') THEN
                             ALTER TABLE transactions ADD COLUMN source_provider VARCHAR(50) DEFAULT 'datahouse';
                         END IF;
+
+                        -- Add provider_slug to data_bundles
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'data_bundles' AND column_name = 'provider_slug') THEN
+                            ALTER TABLE data_bundles ADD COLUMN provider_slug VARCHAR(50) DEFAULT NULL;
+                        END IF;
                     END $$;
                 `);
-                console.log('✅ Altered transactions table with redesign columns');
+                console.log('✅ Altered transactions and data_bundles tables with redesign columns');
             } catch (txAlterErr) {
                 console.error('⚠️ transactions table redesign alter error:', txAlterErr.message);
             }

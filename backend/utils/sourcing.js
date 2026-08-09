@@ -65,12 +65,12 @@ const getSourcingConfig = async () => {
 };
 
 /**
- * Place order using active provider
+ * Place order using plan-assigned provider or fallback active provider
  */
-const placeDataOrderUnified = async ({ network, dataAmount, recipientPhone, transactionId }) => {
+const placeDataOrderUnified = async ({ network, dataAmount, recipientPhone, transactionId, providerSlug: overrideProviderSlug = null }) => {
     const config = await getSourcingConfig();
-    const providerSlug = config.active_sourcing_api;
-    const provider = config.providers[providerSlug] || { slug: 'datahouse', provider_type: 'builtin', base_url: '', api_key: '' };
+    const providerSlug = overrideProviderSlug || config.active_sourcing_api;
+    const provider = config.providers[providerSlug] || config.providers[config.active_sourcing_api] || { slug: 'datahouse', provider_type: 'builtin', base_url: '', api_key: '' };
     
     const apiKey = provider.api_key;
     const baseUrl = provider.base_url;

@@ -392,10 +392,11 @@ const updateTransactionStatus = async (req, res) => {
 };
 
 // CRUD for bundles
+// CRUD for bundles
 const getAllBundles = async (req, res) => {
     try {
         const [bundles] = await pool.execute(
-            'SELECT id, network, data_amount, price_ghc, agent_price_ghc, is_active, created_at FROM data_bundles ORDER BY network, price_ghc'
+            'SELECT id, network, data_amount, price_ghc, agent_price_ghc, is_active, provider_slug, created_at FROM data_bundles ORDER BY network, price_ghc'
         );
 
         const formattedBundles = bundles.map(b => ({
@@ -405,6 +406,7 @@ const getAllBundles = async (req, res) => {
             priceGhc: parseFloat(b.price_ghc),
             agentPriceGhc: parseFloat(b.agent_price_ghc || b.price_ghc),
             isActive: Boolean(b.is_active),
+            providerSlug: b.provider_slug || null,
             createdAt: b.created_at
         }));
 
@@ -417,7 +419,7 @@ const getAllBundles = async (req, res) => {
 
 const createBundle = async (req, res) => {
     try {
-        const { network, dataAmount, priceGhc, agentPriceGhc } = req.body;
+        const { network, dataAmount, priceGhc, agentPriceGhc, providerSlug } = req.body;
 
         if (!network || !dataAmount || !priceGhc) {
             return res.status(400).json({ error: 'All fields are required' });
@@ -427,8 +429,8 @@ const createBundle = async (req, res) => {
         const finalAgentPrice = (agentPriceGhc !== undefined && agentPriceGhc !== null) ? agentPriceGhc : priceGhc;
 
         await pool.execute(
-            'INSERT INTO data_bundles (id, network, data_amount, price_ghc, agent_price_ghc, is_active) VALUES (?::uuid, ?, ?, ?, ?, ?)',
-            [id, network.toUpperCase(), dataAmount, priceGhc, finalAgentPrice, true]
+            'INSERT INTO data_bundles (id, network, data_amount, price_ghc, agent_price_ghc, is_active, provider_slug) VALUES (?::uuid, ?, ?, ?, ?, ?, ?)',
+            [id, network.toUpperCase(), dataAmount, priceGhc, finalAgentPrice, true, providerSlug || null]
         );
 
         res.status(201).json({
@@ -437,7 +439,8 @@ const createBundle = async (req, res) => {
             network: network.toUpperCase(),
             dataAmount,
             priceGhc,
-            agentPriceGhc
+            agentPriceGhc,
+            providerSlug: providerSlug || null
         });
 
     } catch (error) {
@@ -449,9 +452,9 @@ const createBundle = async (req, res) => {
 const updateBundle = async (req, res) => {
     try {
         const { id } = req.params;
-        const { network, dataAmount, priceGhc, agentPriceGhc, isActive } = req.body;
+        const { network, dataAmount, priceGhc, agentPriceGhc, isActive, providerSlug } = req.body;
 
-        console.log('Update bundle request:', { id, network, dataAmount, priceGhc, agentPriceGhc, isActive });
+        console.log('Update bundle request:', { id, network, dataAmount, priceGhc, agentPriceGhc, isActive, providerSlug });
 
         // Build dynamic update query - only update fields that are provided
         const updates = [];
@@ -476,6 +479,10 @@ const updateBundle = async (req, res) => {
         if (isActive !== undefined) {
             updates.push('is_active = ?');
             params.push(isActive);
+        }
+        if (providerSlug !== undefined) {
+            updates.push('provider_slug = ?');
+            params.push(providerSlug || null);
         }
 
         if (updates.length === 0) {

@@ -19,9 +19,9 @@ const purchaseBundle = async (req, res) => {
         const hour = new Date().getHours();
         const isOffline = hour < 7 || hour >= 22;
 
-        // Get bundle details (including default agent price)
+        // Get bundle details (including default agent price and provider assignment)
         const [bundles] = await pool.execute(
-            'SELECT id, network, data_amount, price_ghc, agent_price_ghc FROM data_bundles WHERE id = ?::uuid AND is_active = true',
+            'SELECT id, network, data_amount, price_ghc, agent_price_ghc, is_active, provider_slug FROM data_bundles WHERE id = ?::uuid',
             [bundleId]
         );
 
@@ -30,6 +30,9 @@ const purchaseBundle = async (req, res) => {
         }
 
         const bundle = bundles[0];
+        if (!bundle.is_active) {
+            return res.status(400).json({ error: 'This data plan is currently disabled and unavailable for purchase' });
+        }
         const originalPrice = parseFloat(bundle.price_ghc);
 
         // Determine final price based on user role and custom pricing
@@ -126,7 +129,8 @@ const purchaseBundle = async (req, res) => {
                         network: bundle.network,
                         dataAmount: bundle.data_amount,
                         recipientPhone: recipientPhone,
-                        transactionId: transactionId
+                        transactionId: transactionId,
+                        providerSlug: bundle.provider_slug
                     });
 
                     apiResponse = fulfillment.apiResponse || { error: fulfillment.message || fulfillment.error };

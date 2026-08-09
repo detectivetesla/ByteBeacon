@@ -39,6 +39,7 @@ interface DataBundle {
     agent_price_ghc: number;
     validity_days: number;
     is_active: boolean;
+    provider_slug?: string | null;
 }
 
 export default function AdminDataPlansPage() {
@@ -60,6 +61,7 @@ export default function AdminDataPlansPage() {
         agent_price_ghc: '',
         validity_days: '30',
         is_active: true,
+        provider_slug: 'default'
     });
 
     const fetchBundles = useCallback(async () => {
@@ -74,6 +76,7 @@ export default function AdminDataPlansPage() {
                 agent_price_ghc: b.agentPriceGhc,
                 validity_days: (b as any).validityDays || 30,
                 is_active: b.isActive,
+                provider_slug: (b as any).providerSlug || null,
             }));
             setBundles(bundlesFormatted as DataBundle[]);
         } catch (err) {
@@ -105,7 +108,7 @@ export default function AdminDataPlansPage() {
 
     const openCreateModal = () => {
         setEditingBundle(null);
-        setForm({ network: 'MTN', data_amount: '', price_ghc: '', agent_price_ghc: '', validity_days: '30', is_active: true });
+        setForm({ network: 'MTN', data_amount: '', price_ghc: '', agent_price_ghc: '', validity_days: '30', is_active: true, provider_slug: 'default' });
         setShowModal(true);
     };
 
@@ -118,6 +121,7 @@ export default function AdminDataPlansPage() {
             agent_price_ghc: (bundle.agent_price_ghc !== undefined ? bundle.agent_price_ghc : bundle.price_ghc).toString(),
             validity_days: bundle.validity_days.toString(),
             is_active: bundle.is_active,
+            provider_slug: bundle.provider_slug || 'default'
         });
         setShowModal(true);
     };
@@ -141,14 +145,15 @@ export default function AdminDataPlansPage() {
                 priceGhc: parseFloat(form.price_ghc),
                 agentPriceGhc: form.agent_price_ghc !== '' ? parseFloat(form.agent_price_ghc) : parseFloat(form.price_ghc),
                 isActive: form.is_active,
+                providerSlug: form.provider_slug === 'default' ? null : form.provider_slug
             };
 
             if (editingBundle) {
                 await adminService.updateBundle(editingBundle.id, bundleData);
-                toast({ title: 'Success', description: 'Data plan updated successfully' });
+                toast({ title: 'Success', description: `${form.network} ${form.data_amount} updated successfully` });
             } else {
                 await adminService.createBundle(bundleData);
-                toast({ title: 'Success', description: 'Data plan created successfully' });
+                toast({ title: 'Success', description: `${form.network} ${form.data_amount} created successfully` });
             }
 
             setShowModal(false);
@@ -186,9 +191,9 @@ export default function AdminDataPlansPage() {
         try {
             await adminService.updateBundle(bundle.id, { isActive: !bundle.is_active });
             fetchBundles();
-            toast({ title: 'Success', description: `Plan ${bundle.is_active ? 'disabled' : 'enabled'}` });
+            toast({ title: 'Success', description: `${bundle.network} ${bundle.data_amount} has been ${bundle.is_active ? 'disabled' : 'enabled'}.` });
         } catch (err) {
-            toast({ title: 'Error', description: 'Failed to update status', variant: 'destructive' });
+            toast({ title: 'Error', description: `Failed to update ${bundle.network} ${bundle.data_amount}. Please try again.`, variant: 'destructive' });
         }
     };
 
@@ -285,9 +290,16 @@ export default function AdminDataPlansPage() {
                         )}>
                             <CardContent className="p-4">
                                 <div className="flex items-start justify-between mb-3">
-                                    <span className={cn("px-2 py-1 text-xs font-bold rounded", getNetworkColor(bundle.network))}>
-                                        {bundle.network}
-                                    </span>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className={cn("px-2 py-1 text-xs font-bold rounded", getNetworkColor(bundle.network))}>
+                                            {bundle.network}
+                                        </span>
+                                        {bundle.provider_slug && (
+                                            <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-slate-800 text-slate-300 border border-slate-700">
+                                                {bundle.provider_slug === 'portal02' ? 'Portal-02' : bundle.provider_slug === 'datahouse' ? 'GetMorePayLess' : bundle.provider_slug}
+                                            </span>
+                                        )}
+                                    </div>
                                     <div className="flex gap-1">
                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditModal(bundle)}>
                                             <Edit className="w-4 h-4 text-slate-400" />
@@ -447,6 +459,25 @@ export default function AdminDataPlansPage() {
                                 onChange={(e) => setForm({ ...form, validity_days: e.target.value })}
                                 className="bg-slate-700/50 border-slate-600 text-white"
                             />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-slate-300">Assigned Provider / API Routing</Label>
+                            <Select value={form.provider_slug} onValueChange={(value) => setForm({ ...form, provider_slug: value })}>
+                                <SelectTrigger className="w-full bg-slate-700/50 border-slate-600 text-white">
+                                    <SelectValue placeholder="Select provider" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-800 border-slate-600">
+                                    <SelectItem value="default" className="text-white hover:bg-slate-700 focus:bg-slate-700">
+                                        Global Active Provider (System Default)
+                                    </SelectItem>
+                                    <SelectItem value="portal02" className="text-white hover:bg-slate-700 focus:bg-slate-700">
+                                        Portal-02
+                                    </SelectItem>
+                                    <SelectItem value="datahouse" className="text-white hover:bg-slate-700 focus:bg-slate-700">
+                                        GetMorePayLess (Datahouse)
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
                     <DialogFooter>

@@ -16,6 +16,18 @@ exports.processPayment = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Missing required fields' });
         }
 
+        // Validate bundle existence and active state
+        const [bundles] = await connection.execute(
+            'SELECT id, is_active FROM data_bundles WHERE id = ?::uuid',
+            [bundleId]
+        );
+        if (bundles.length === 0) {
+            return res.status(404).json({ success: false, error: 'Data plan not found' });
+        }
+        if (!bundles[0].is_active) {
+            return res.status(400).json({ success: false, error: 'This data plan is currently disabled and unavailable for purchase' });
+        }
+
         const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY;
         if (!paystackSecretKey) {
             return res.status(500).json({ success: false, error: 'Payment service not configured' });

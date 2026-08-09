@@ -19,7 +19,7 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
 
         // 1. Lock transaction row for UPDATE to prevent concurrent refunding
         const [txRows] = await connection.execute(
-            'SELECT id, user_id, partner_id, amount_ghc, status FROM transactions WHERE id = ?::uuid FOR UPDATE',
+            'SELECT id, user_id, partner_id, amount_ghc, status, paid FROM transactions WHERE id = ?::uuid FOR UPDATE',
             [transactionId]
         );
 
@@ -30,9 +30,19 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
         }
 
         const tx = txRows[0];
+
+        // Only refund charged/paid orders. Unpaid/failed payments do NOT require a refund.
+        if (tx.status === 'pending_payment' || tx.paid === 'no') {
+            console.log(`ℹ️ [REFUND HELPER] Transaction ${transactionId} was never charged (status: ${tx.status}, paid: ${tx.paid}). Skipping refund.`);
+            await connection.rollback();
+            connection.release();
+            return { success: false, reason: 'Transaction was not charged' };
+        }
+
         const targetUserId = userId || tx.user_id;
         const targetPartnerId = partnerId || tx.partner_id;
-        const refundAmount = amountGhc !== null && amountGhc !== undefined ? parseFloat(amountGhc) : parseFloat(tx.amount_ghc || 0);
+        // Always calculate refund amount strictly from the trusted database transaction record
+        const refundAmount = parseFloat(tx.amount_ghc || 0);
 
         if (refundAmount <= 0) {
             await connection.rollback();
@@ -41,9 +51,9 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
         }
 
         // 2. Check if a refund record has ALREADY been inserted for this transaction ID
-        let alreadyRefunded = false;
+        let alreadyRefunded = tx.paid === 'refunded';
 
-        if (targetUserId) {
+        if (!alreadyRefunded && targetUserId) {
             const [existingRefunds] = await connection.execute(
                 "SELECT id FROM refunds WHERE notes LIKE ?",
                 [`%${transactionId}%`]
@@ -66,13 +76,11 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
             return { success: false, reason: 'Already refunded' };
         }
 
-        // 3. Mark transaction as failed if not already failed
-        if (tx.status !== 'failed') {
-            await connection.execute(
-                'UPDATE transactions SET status = \'failed\', failure_reason = COALESCE(failure_reason, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
-                [reason, transactionId]
-            );
-        }
+        // 3. Mark transaction as failed and paid status as refunded
+        await connection.execute(
+            'UPDATE transactions SET status = \'failed\', paid = \'refunded\', failure_reason = COALESCE(failure_reason, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
+            [reason, transactionId]
+        );
 
         // 4. Perform wallet balance credit & refund log insertion
         if (targetUserId) {
