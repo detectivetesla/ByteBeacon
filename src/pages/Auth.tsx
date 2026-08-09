@@ -115,14 +115,14 @@ export default function Auth() {
             title: `Store Verified: ${store.store_name}`,
             description: 'Health Status: Operational & Active. Opening store dashboard...',
           });
-          navigate('/dashboard/agent-store');
+          navigate('/agent-store');
           return;
         } else {
           toast({
             title: `Store Status: ${store.effective_status.replace(/_/g, ' ')}`,
             description: 'Opening store console to complete registration/activation.',
           });
-          navigate('/dashboard/agent-store');
+          navigate('/agent-store');
           return;
         }
       } else {
@@ -131,7 +131,7 @@ export default function Auth() {
             title: 'Agent Account Verified',
             description: 'Create your custom Agent Store to start taking orders.',
           });
-          navigate('/dashboard/agent-store');
+          navigate('/agent-store');
           return;
         }
       }

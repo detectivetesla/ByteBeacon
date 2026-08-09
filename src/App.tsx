@@ -18,6 +18,7 @@ import TermsOfService from "./pages/TermsOfService";
 import NotFound from "./pages/NotFound";
 import DeveloperPortal from "./pages/DeveloperPortal";
 import PublicStorefront from "./pages/PublicStorefront";
+import AgentStoreLayout from "@/components/dashboard/agentStore/AgentStoreLayout";
 import { useState, useEffect } from "react";
 import { adminService } from "./services/admin.service";
 import { useAuth } from "./contexts/AuthContext";
@@ -135,6 +136,7 @@ const AppWithMaintenance = () => {
         <Route path="/terms-of-service" element={<TermsOfService />} />
         <Route path="/developers" element={<DeveloperPortal />} />
         <Route path="/store/:slug" element={<PublicStorefront />} />
+        <Route path="/agent-store/*" element={<AgentStoreLayout />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

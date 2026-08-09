@@ -21,7 +21,6 @@ export default function Dashboard() {
     <DashboardLayout>
       <Routes>
         <Route path="/" element={<DashboardHome />} />
-        <Route path="/agent-store/*" element={<AgentStoreContainer />} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/bundles/:network" element={<DataBundlesPage />} />
         <Route path="/orders" element={<OrdersPage />} />
