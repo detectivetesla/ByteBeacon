@@ -121,6 +121,8 @@ const AppWithMaintenance = () => {
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/auth" element={<Auth />} />
+        <Route path="/agent/login" element={<Auth />} />
+        <Route path="/agent-auth" element={<Auth />} />
         <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
         <Route path="/dashboard/*" element={<Dashboard />} />
         <Route

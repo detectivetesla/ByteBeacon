@@ -9,7 +9,7 @@ interface AuthContextType {
   loading: boolean;
   signUp: (email: string, password: string, fullName: string, phone: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ user: User | null; error: Error | null }>;
-  signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signInWithGoogle: () => Promise<{ user: User | null; error: Error | null }>;
   resetPassword: (email: string) => Promise<{ data: any; error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -65,21 +65,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signInWithGoogle = async (): Promise<{ error: Error | null }> => {
+  const signInWithGoogle = async (): Promise<{ user: User | null; error: Error | null }> => {
     const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
     if (!googleClientId) {
-      return { error: new Error('Google Client ID not configured. Please add VITE_GOOGLE_CLIENT_ID to your .env file.') };
+      return { user: null, error: new Error('Google Client ID not configured. Please add VITE_GOOGLE_CLIENT_ID to your .env file.') };
     }
 
     // @ts-ignore - Google Identity Services types
     if (typeof google === 'undefined' || !google.accounts) {
       return {
+        user: null,
         error: new Error('Google Sign-In script failed to load. This might be due to an ad-blocker or network restriction. Please disable any ad-blockers and refresh the page.')
       };
     }
 
-    return new Promise<{ error: Error | null }>((resolve) => {
+    return new Promise<{ user: User | null; error: Error | null }>((resolve) => {
       try {
         // @ts-ignore
         google.accounts.id.initialize({
@@ -90,13 +91,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 const result = await authService.googleLogin(response.credential);
                 setUser(result.user);
                 setRole(result.user.role as AppRole);
-                resolve({ error: null });
+                resolve({ user: result.user, error: null });
               } catch (err: any) {
                 console.error('Google backend login error:', err);
-                resolve({ error: new Error(err.response?.data?.error || 'Failed to authenticate with Google via our backend.') });
+                resolve({ user: null, error: new Error(err.response?.data?.error || 'Failed to authenticate with Google via our backend.') });
               }
             } else {
-              resolve({ error: new Error('No credential received from Google.') });
+              resolve({ user: null, error: new Error('No credential received from Google.') });
             }
           },
           auto_select: false,
@@ -135,12 +136,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // @ts-ignore
           google.accounts.id.prompt((notification: any) => {
             if (notification.isNotDisplayed()) {
-              resolve({ error: new Error('Google Sign-In prompt could not be displayed. Try refreshing the page.') });
+              resolve({ user: null, error: new Error('Google Sign-In prompt could not be displayed. Try refreshing the page.') });
             }
           });
         }
       } catch (err) {
-        resolve({ error: err as Error });
+        resolve({ user: null, error: err as Error });
       }
     });
   };

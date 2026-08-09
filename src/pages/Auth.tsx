@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Eye, EyeOff, Loader2, ArrowLeft, ExternalLink, DollarSign, Check, Wifi, X } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ArrowLeft, ExternalLink, DollarSign, Check, Wifi, Store, ShieldCheck, ArrowRight } from 'lucide-react';
 import { z } from 'zod';
 import {
   Dialog,
@@ -37,6 +37,11 @@ const signInSchema = z.object({
 });
 
 export default function Auth() {
+  const location = useLocation();
+  const urlParams = new URLSearchParams(window.location.search);
+  const isAgentRoute = location.pathname.includes('/agent') || urlParams.get('type') === 'agent' || urlParams.get('agent') === 'true';
+
+  const [isAgentPortal, setIsAgentPortal] = useState(isAgentRoute);
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -63,7 +68,6 @@ export default function Auth() {
 
   // Check URL params for signup mode
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('signup') === 'true') {
       setIsSignUp(true);
     }
@@ -87,6 +91,29 @@ export default function Auth() {
     } else {
       document.documentElement.classList.add('dark');
       localStorage.setItem('theme', 'dark');
+    }
+  };
+
+  const handleSuccessfulAuth = (user: any) => {
+    const role = user?.role;
+    if (role === 'agent' || role === 'superagent') {
+      toast({
+        title: 'Agent Store Access Granted!',
+        description: 'Welcome back! Opening your Agent Store...',
+      });
+      navigate('/dashboard/agent-store');
+    } else if (role === 'admin') {
+      toast({
+        title: 'Admin Access Granted',
+        description: 'Redirecting to Admin Console...',
+      });
+      navigate('/admin');
+    } else {
+      toast({
+        title: 'Welcome back!',
+        description: 'You have successfully signed in.',
+      });
+      navigate('/dashboard');
     }
   };
 
@@ -136,11 +163,10 @@ export default function Auth() {
             description: 'Registration successful! Please sign in with your credentials.',
           });
           setIsSignUp(false);
-          // Pre-fill email for convenience but clear password for security
           setFormData(prev => ({
             ...prev,
             emailOrPhone: formData.email,
-            password: '' // Explicitly clear password
+            password: ''
           }));
         }
       } else {
@@ -157,19 +183,15 @@ export default function Auth() {
           return;
         }
 
-        const { error } = await signIn(formData.emailOrPhone, formData.password);
+        const { user, error } = await signIn(formData.emailOrPhone, formData.password);
         if (error) {
           toast({
             title: 'Sign in failed',
             description: error.message,
             variant: 'destructive',
           });
-        } else {
-          toast({
-            title: 'Welcome back!',
-            description: 'You have successfully signed in.',
-          });
-          navigate('/dashboard');
+        } else if (user) {
+          handleSuccessfulAuth(user);
         }
       }
     } catch (err) {
@@ -186,19 +208,15 @@ export default function Auth() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
-      const { error } = await signInWithGoogle();
+      const { user, error } = await signInWithGoogle();
       if (error) {
         toast({
           title: 'Google Sign-In Failed',
           description: error.message,
           variant: 'destructive',
         });
-      } else {
-        toast({
-          title: 'Welcome back!',
-          description: 'Successfully signed in with Google.',
-        });
-        navigate('/dashboard');
+      } else if (user) {
+        handleSuccessfulAuth(user);
       }
     } catch (err) {
       toast({
@@ -281,6 +299,213 @@ export default function Auth() {
   ];
 
   const features = isSignUp ? signUpFeatures : signInFeatures;
+
+  // Minimal Agent Store Sign-In layout
+  if (isAgentPortal) {
+    return (
+      <div className="min-h-screen bg-[#141518] text-white font-sans flex flex-col justify-between selection:bg-[#a3e635] selection:text-black">
+        {/* Top Minimal Store Header */}
+        <header className="bg-[#202227] border-b border-white/5 py-4 px-4 sm:px-8 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#a3e635]/10 border border-[#a3e635]/30 flex items-center justify-center text-[#a3e635]">
+              <Store className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-lg font-black text-white tracking-tight">Agent Store Portal</h1>
+              <p className="text-[11px] text-slate-400">Reseller Agent Management</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsAgentPortal(false)}
+              className="text-xs text-slate-400 hover:text-white transition-colors border border-white/10 px-3.5 py-1.5 rounded-xl bg-[#18191c]"
+            >
+              Standard Sign In
+            </button>
+            <Link
+              to="/"
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Home
+            </Link>
+          </div>
+        </header>
+
+        {/* Main Sign-In Card */}
+        <main className="flex-1 flex items-center justify-center p-4 sm:p-6">
+          <div className="bg-[#202227] border border-white/10 rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-6 shadow-2xl">
+            <div className="space-y-2 text-center sm:text-left">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#a3e635]/10 border border-[#a3e635]/30 text-[#a3e635] text-xs font-bold">
+                <ShieldCheck className="w-4 h-4" /> Approved Agent Sign In
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Sign In to Your Agent Store</h2>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Sign in with your approved account email/phone or Gmail to access your reseller store dashboard, bundle pricing, and customer orders.
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-300">Approved Email or Phone</Label>
+                <Input
+                  type="text"
+                  placeholder="Enter approved email or phone"
+                  value={formData.emailOrPhone}
+                  onChange={(e) => setFormData(prev => ({ ...prev, emailOrPhone: e.target.value }))}
+                  className="w-full px-4 py-3 bg-[#18191c] border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-[#a3e635]"
+                  required
+                />
+                {errors.emailOrPhone && (
+                  <p className="text-xs text-destructive">{errors.emailOrPhone}</p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs font-semibold text-slate-300">Password</Label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (formData.emailOrPhone && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.emailOrPhone)) {
+                        setForgotPasswordEmail(formData.emailOrPhone);
+                      }
+                      setShowForgotPassword(true);
+                    }}
+                    className="text-xs text-[#a3e635] hover:underline font-semibold"
+                  >
+                    Forgot?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Enter password"
+                    value={formData.password}
+                    onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                    className="w-full px-4 py-3 bg-[#18191c] border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-[#a3e635] pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {errors.password && (
+                  <p className="text-xs text-destructive">{errors.password}</p>
+                )}
+              </div>
+
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-extrabold rounded-xl shadow-lg shadow-[#a3e635]/20 text-sm transition-all flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" /> Accessing Store...
+                  </>
+                ) : (
+                  <>
+                    Access Agent Store <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </Button>
+            </form>
+
+            <div className="relative my-4 text-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/5"></div>
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-[#202227] px-3 text-[11px] text-slate-500 font-semibold">or sign in with</span>
+              </div>
+            </div>
+
+            <div id="google-signin-button" className="hidden"></div>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleGoogleSignIn}
+              disabled={loading}
+              className="w-full py-3.5 bg-[#18191c] hover:bg-[#26282e] text-white font-bold rounded-xl border border-white/10 text-xs flex items-center justify-center gap-2 transition-all"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              {loading ? 'Connecting Google...' : 'Continue with Gmail'}
+            </Button>
+
+            <div className="pt-2 text-center text-xs text-slate-400 space-y-1">
+              <p>Not an approved agent yet? <Link to="/dashboard/apply-agent" className="text-[#a3e635] font-bold hover:underline">Apply for Agency</Link></p>
+            </div>
+          </div>
+        </main>
+
+        {/* Minimal Footer */}
+        <footer className="border-t border-white/5 py-4 text-center text-[11px] text-slate-600">
+          © {new Date().getFullYear()} Reseller Agent Store Portal. All rights reserved.
+        </footer>
+
+        {/* Forgot Password Modal */}
+        <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
+          <DialogContent className="bg-[#202227] border-white/10 text-white sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold text-white">Reset Agent Password</DialogTitle>
+              <DialogDescription className="text-slate-400">
+                Enter your approved agent email address to receive password reset instructions.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleForgotPassword} className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="forgotEmail" className="text-slate-300">Email Address</Label>
+                <Input
+                  id="forgotEmail"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={forgotPasswordEmail}
+                  onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                  required
+                  className="bg-[#18191c] border-white/10 text-white"
+                />
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowForgotPassword(false)}
+                  className="flex-1 border-white/10 bg-[#18191c] text-slate-300 hover:text-white"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={forgotPasswordLoading}
+                  className="flex-1 bg-[#a3e635] text-black font-bold hover:bg-[#b5f73c]"
+                >
+                  {forgotPasswordLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" /> Sending...
+                    </>
+                  ) : (
+                    'Send Reset Link'
+                  )}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -369,6 +594,15 @@ export default function Auth() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {/* Agent Portal Toggle */}
+              <button
+                type="button"
+                onClick={() => setIsAgentPortal(true)}
+                className="px-3 py-1.5 rounded-full text-xs font-semibold bg-[#a3e635]/10 text-[#a3e635] border border-[#a3e635]/30 hover:bg-[#a3e635]/20 flex items-center gap-1.5 transition-all"
+              >
+                <Store className="w-3.5 h-3.5" /> Agent Sign In
+              </button>
+
               {/* Dark Mode Toggle */}
               <button
                 onClick={toggleDarkMode}
@@ -555,7 +789,6 @@ export default function Auth() {
                       });
                       return;
                     }
-                    // Check if input looks like an email
                     const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input);
                     if (isEmail) {
                       setForgotPasswordEmail(input);
@@ -598,7 +831,6 @@ export default function Auth() {
           </div>
 
           {/* Google Sign In */}
-          {/* Hidden container for Google Identity Services */}
           <div id="google-signin-button" className="hidden"></div>
 
           <Button
