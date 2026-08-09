@@ -276,7 +276,7 @@ export default function AdminAgentsPage() {
         setActionLoading(true);
         try {
             // Update role
-            await adminService.changeUserRole(selectedAgent.id, editForm.role as 'customer' | 'agent' | 'admin');
+            await adminService.changeUserRole(selectedAgent.id, editForm.role as 'customer' | 'agent' | 'superagent' | 'admin');
 
             toast({ title: 'Success', description: 'Agent updated successfully' });
             setShowEditModal(false);
@@ -769,6 +769,7 @@ export default function AdminAgentsPage() {
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="bg-slate-800 border-slate-600">
+                                    <SelectItem value="customer" className="text-white hover:bg-slate-700 focus:bg-slate-700">Customer</SelectItem>
                                     <SelectItem value="agent" className="text-white hover:bg-slate-700 focus:bg-slate-700">Agent</SelectItem>
                                     <SelectItem value="superagent" className="text-white hover:bg-slate-700 focus:bg-slate-700">SuperAgent</SelectItem>
                                     <SelectItem value="admin" className="text-white hover:bg-slate-700 focus:bg-slate-700">Admin</SelectItem>
