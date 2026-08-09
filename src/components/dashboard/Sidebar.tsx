@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { agentStoreService } from '@/services/agentStore.service';
 import {
     LayoutDashboard,
     Wallet,
@@ -16,7 +17,10 @@ import {
     Code,
     BookOpen,
     Key,
-    Store
+    Store,
+    CheckCircle2,
+    Clock,
+    Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PremiumIcon, PremiumIconVariant } from '../ui/PremiumIcon';
@@ -103,6 +107,25 @@ export default function Sidebar({ isCollapsed, userName, userEmail, userRole, on
     const navigate = useNavigate();
     const { signOut } = useAuth();
     const [expandedItems, setExpandedItems] = useState<string[]>(['Data Bundles', 'Orders']);
+    const [storeInfo, setStoreInfo] = useState<{ store_name: string; effective_status: string; slug: string } | null>(null);
+
+    useEffect(() => {
+        const fetchStore = async () => {
+            try {
+                const res = await agentStoreService.getMyStore();
+                if (res.success && res.hasStore && res.store) {
+                    setStoreInfo({
+                        store_name: res.store.store_name,
+                        effective_status: res.store.effective_status,
+                        slug: res.store.slug,
+                    });
+                }
+            } catch (err) {
+                // Ignore errors on mount
+            }
+        };
+        fetchStore();
+    }, []);
 
     const navItems = getNavItems(userRole);
 
@@ -181,13 +204,50 @@ export default function Sidebar({ isCollapsed, userName, userEmail, userRole, on
                         {getInitials(userName || 'User')}
                     </div>
                     {!isCollapsed && (
-                        <div className="overflow-hidden">
+                        <div className="overflow-hidden space-y-1">
                             <p className="font-semibold text-sm truncate">{userName || 'User'}</p>
-                            <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
-                            {(userRole === 'agent' || userRole === 'superagent') && (
-                                <span className="inline-block mt-1 px-2 py-0.5 text-xs font-semibold rounded uppercase tracking-wider bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
-                                    Agent
-                                </span>
+                            <p className="text-[11px] text-muted-foreground truncate">{userEmail}</p>
+
+                            {storeInfo ? (
+                                storeInfo.effective_status === 'ACTIVE' ? (
+                                    <div className="pt-1 space-y-1">
+                                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-extrabold truncate max-w-full">
+                                            <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                                            <span className="truncate">{storeInfo.store_name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-semibold">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                            <span>Health: Operational</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="pt-1 space-y-1">
+                                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-extrabold truncate max-w-full">
+                                            <Clock className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                                            <span className="truncate">{storeInfo.store_name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-[10px] text-amber-400 font-semibold">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                            <span>Health: Pending Activation</span>
+                                        </div>
+                                    </div>
+                                )
+                            ) : (
+                                (userRole === 'agent' || userRole === 'superagent') ? (
+                                    <span className="inline-block mt-1 px-2 py-0.5 text-xs font-semibold rounded uppercase tracking-wider bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
+                                        Agent
+                                    </span>
+                                ) : (
+                                    <div className="pt-1">
+                                        <Link
+                                            to="/dashboard/agent-store"
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-md bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all"
+                                        >
+                                            <Store className="w-3 h-3" />
+                                            <span>Create Agent Store</span>
+                                        </Link>
+                                    </div>
+                                )
                             )}
                         </div>
                     )}

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Eye, EyeOff, Loader2, ArrowLeft, ExternalLink, DollarSign, Check, Wifi, Store, ShieldCheck, ArrowRight } from 'lucide-react';
 import { z } from 'zod';
+import { agentStoreService } from '@/services/agentStore.service';
 import {
   Dialog,
   DialogContent,
@@ -94,27 +95,55 @@ export default function Auth() {
     }
   };
 
-  const handleSuccessfulAuth = (user: any) => {
+  const handleSuccessfulAuth = async (user: any) => {
     const role = user?.role;
-    if (role === 'agent' || role === 'superagent') {
-      toast({
-        title: 'Agent Store Access Granted!',
-        description: 'Welcome back! Opening your Agent Store...',
-      });
-      navigate('/dashboard/agent-store');
-    } else if (role === 'admin') {
+    if (role === 'admin') {
       toast({
         title: 'Admin Access Granted',
         description: 'Redirecting to Admin Console...',
       });
       navigate('/admin');
-    } else {
-      toast({
-        title: 'Welcome back!',
-        description: 'You have successfully signed in.',
-      });
-      navigate('/dashboard');
+      return;
     }
+
+    try {
+      const storeRes = await agentStoreService.getMyStore();
+      if (storeRes.success && storeRes.hasStore && storeRes.store) {
+        const store = storeRes.store;
+        if (store.effective_status === 'ACTIVE') {
+          toast({
+            title: `Store Verified: ${store.store_name}`,
+            description: 'Health Status: Operational & Active. Opening store dashboard...',
+          });
+          navigate('/dashboard/agent-store');
+          return;
+        } else {
+          toast({
+            title: `Store Status: ${store.effective_status.replace(/_/g, ' ')}`,
+            description: 'Opening store console to complete registration/activation.',
+          });
+          navigate('/dashboard/agent-store');
+          return;
+        }
+      } else {
+        if (isAgentPortal || role === 'agent' || role === 'superagent') {
+          toast({
+            title: 'Agent Account Verified',
+            description: 'Create your custom Agent Store to start taking orders.',
+          });
+          navigate('/dashboard/agent-store');
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Error verifying agent store status:', err);
+    }
+
+    toast({
+      title: 'Welcome back!',
+      description: 'You have successfully signed in.',
+    });
+    navigate('/dashboard');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
