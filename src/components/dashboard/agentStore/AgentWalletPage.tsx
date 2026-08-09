@@ -4,16 +4,16 @@ import { Wallet, ArrowDownRight, ArrowUpRight, History, CreditCard, RefreshCw, S
 import { useToast } from '@/components/ui/use-toast';
 
 interface AgentWalletPageProps {
-    availableBalance: number;
-    totalProfitEarned: number;
-    totalWithdrawn: number;
-    onRefresh: () => void;
+    availableBalance?: number;
+    totalProfitEarned?: number;
+    totalWithdrawn?: number;
+    onRefresh?: () => void;
 }
 
 export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
-    availableBalance,
-    totalProfitEarned,
-    totalWithdrawn,
+    availableBalance: propAvailableBalance,
+    totalProfitEarned: propTotalProfitEarned,
+    totalWithdrawn: propTotalWithdrawn,
     onRefresh
 }) => {
     const { toast } = useToast();
@@ -21,6 +21,17 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
     const [withdrawals, setWithdrawals] = useState<AgentWithdrawal[]>([]);
     const [loading, setLoading] = useState(true);
     const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+
+    // Internal wallet state if not passed via props
+    const [wallet, setWallet] = useState<{
+        available_balance: number;
+        total_profit_earned: number;
+        total_withdrawn: number;
+    }>({
+        available_balance: propAvailableBalance ?? 0,
+        total_profit_earned: propTotalProfitEarned ?? 0,
+        total_withdrawn: propTotalWithdrawn ?? 0,
+    });
 
     // Form states
     const [amount, setAmount] = useState<string>('');
@@ -33,12 +44,22 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
     const loadFinancialData = async () => {
         setLoading(true);
         try {
-            const [txRes, wdRes] = await Promise.all([
+            const [storeRes, txRes, wdRes] = await Promise.all([
+                agentStoreService.getMyStore(),
                 agentStoreService.getTransactions(),
                 agentStoreService.getWithdrawalHistory()
             ]);
-            if (txRes.success) setLedger(txRes.ledger);
-            if (wdRes.success) setWithdrawals(wdRes.withdrawals);
+
+            if (storeRes.success && storeRes.store) {
+                setWallet({
+                    available_balance: parseFloat(storeRes.store.available_balance as any) || 0,
+                    total_profit_earned: parseFloat(storeRes.store.total_profit_earned as any) || 0,
+                    total_withdrawn: parseFloat(storeRes.store.total_withdrawn as any) || 0,
+                });
+            }
+
+            if (txRes.success) setLedger(txRes.ledger || []);
+            if (wdRes.success) setWithdrawals(wdRes.withdrawals || []);
         } catch (err: any) {
             toast({ title: 'Error', description: err.message || 'Failed to load financial records', variant: 'destructive' });
         } finally {
@@ -50,6 +71,10 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
         loadFinancialData();
     }, []);
 
+    const effectiveBalance = propAvailableBalance ?? wallet.available_balance;
+    const effectiveProfit = propTotalProfitEarned ?? wallet.total_profit_earned;
+    const effectiveWithdrawn = propTotalWithdrawn ?? wallet.total_withdrawn;
+
     const handleWithdrawSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const numAmount = parseFloat(amount);
@@ -59,8 +84,8 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
             return;
         }
 
-        if (numAmount > availableBalance) {
-            toast({ title: 'Insufficient Balance', description: `Your available balance is GHS ${availableBalance.toFixed(2)}`, variant: 'destructive' });
+        if (numAmount > effectiveBalance) {
+            toast({ title: 'Insufficient Balance', description: `Your available balance is GHS ${(parseFloat(effectiveBalance as any) || 0).toFixed(2)}`, variant: 'destructive' });
             return;
         }
 
@@ -83,7 +108,7 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
                 toast({ title: 'Withdrawal Requested!', description: 'Your payout request has been received.' });
                 setShowWithdrawModal(false);
                 setAmount('');
-                onRefresh();
+                onRefresh?.();
                 loadFinancialData();
             }
         } catch (err: any) {
@@ -103,7 +128,7 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
                         <Wallet className="w-4 h-4 text-[#a3e635]" />
                     </div>
                     <p className="text-3xl font-extrabold text-[#a3e635]">
-                        GHS {availableBalance.toFixed(2)}
+                        GHS {(parseFloat(effectiveBalance as any) || 0).toFixed(2)}
                     </p>
                     <button
                         onClick={() => setShowWithdrawModal(true)}
@@ -120,7 +145,7 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
                         <DollarSign className="w-4 h-4 text-emerald-400" />
                     </div>
                     <p className="text-3xl font-bold text-white">
-                        GHS {totalProfitEarned.toFixed(2)}
+                        GHS {(parseFloat(effectiveProfit as any) || 0).toFixed(2)}
                     </p>
                     <p className="text-[11px] text-slate-500 pt-2">Lifetime cumulative reseller profit</p>
                 </div>
@@ -131,7 +156,7 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
                         <ArrowUpRight className="w-4 h-4 text-blue-400" />
                     </div>
                     <p className="text-3xl font-bold text-white">
-                        GHS {totalWithdrawn.toFixed(2)}
+                        GHS {(parseFloat(effectiveWithdrawn as any) || 0).toFixed(2)}
                     </p>
                     <p className="text-[11px] text-slate-500 pt-2">Successfully paid out profit</p>
                 </div>
@@ -217,7 +242,7 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
                             {withdrawals.map(w => (
                                 <div key={w.id} className="p-3 bg-[#18191c] rounded-xl border border-white/5 space-y-1 text-xs">
                                     <div className="flex justify-between items-center">
-                                        <span className="font-bold text-white">GHS {parseFloat(w.amount_ghc as any).toFixed(2)}</span>
+                                        <span className="font-bold text-white">GHS {(parseFloat(w.amount_ghc as any) || 0).toFixed(2)}</span>
                                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                                             w.status === 'COMPLETED' ? 'bg-[#a3e635] text-black' :
                                             w.status === 'REQUESTED' || w.status === 'PENDING' ? 'bg-amber-400/20 text-amber-400' :
@@ -251,14 +276,14 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
                                     type="number"
                                     step="1"
                                     min="20"
-                                    max={availableBalance}
+                                    max={effectiveBalance}
                                     value={amount}
                                     onChange={(e) => setAmount(e.target.value)}
                                     placeholder="Min: GHS 20.00"
                                     required
                                     className="w-full px-4 py-2.5 bg-[#18191c] border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-[#a3e635]"
                                 />
-                                <p className="text-[11px] text-slate-500">Available: GHS {availableBalance.toFixed(2)}</p>
+                                <p className="text-[11px] text-slate-500">Available: GHS {(parseFloat(effectiveBalance as any) || 0).toFixed(2)}</p>
                             </div>
 
                             <div className="space-y-1">
@@ -344,3 +369,5 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
         </div>
     );
 };
+
+export default AgentWalletPage;
