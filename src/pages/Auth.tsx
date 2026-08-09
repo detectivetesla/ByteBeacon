@@ -67,12 +67,15 @@ export default function Auth() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Check URL params for signup mode
+  // Check URL params for signup mode & reset stale auth context
   useEffect(() => {
     if (urlParams.get('signup') === 'true') {
       setIsSignUp(true);
     }
-  }, []);
+    if (!isAgentRoute) {
+      sessionStorage.removeItem('auth_context');
+    }
+  }, [isAgentRoute]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -106,13 +109,14 @@ export default function Auth() {
       return;
     }
 
-    // Determine authentication entry point context (ByteBeacon vs Agent Store)
-    const currentAuthContext = sessionStorage.getItem('auth_context') || (isAgentPortal ? 'agent' : 'bytebeacon');
+    // Is the user logging in explicitly via the Agent Store Portal interface?
+    const storedContext = sessionStorage.getItem('auth_context');
     sessionStorage.removeItem('auth_context');
 
-    if (currentAuthContext === 'agent') {
+    const isAgentFlow = isAgentPortal || storedContext === 'agent';
+
+    if (isAgentFlow) {
       // AGENT STORE AUTHENTICATION ENTRY POINT
-      // Evaluate Agent Store authorization & store status
       try {
         const storeRes = await agentStoreService.getMyStore();
         if (storeRes.success && storeRes.hasStore && storeRes.store) {
@@ -147,9 +151,9 @@ export default function Auth() {
       }
     }
 
-    // BYTEBEACON AUTHENTICATION ENTRY POINT
-    // Signing into ByteBeacon through standard auth ALWAYS returns to ByteBeacon Dashboard (/dashboard).
-    // Owning an Agent Store NEVER overrides standard ByteBeacon authentication redirects!
+    // STANDARD BYTEBEACON AUTHENTICATION ENTRY POINT
+    // Standard sign-in ALWAYS enters ByteBeacon Dashboard (/dashboard).
+    // Having an active Agent Store NEVER overrides standard ByteBeacon authentication redirects!
     toast({
       title: 'Welcome back!',
       description: 'You have successfully signed in to ByteBeacon.',
@@ -361,7 +365,10 @@ export default function Auth() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => setIsAgentPortal(false)}
+              onClick={() => {
+                setIsAgentPortal(false);
+                sessionStorage.setItem('auth_context', 'bytebeacon');
+              }}
               className="text-xs text-slate-400 hover:text-white transition-colors border border-white/10 px-3.5 py-1.5 rounded-xl bg-[#18191c]"
             >
               Standard Sign In
@@ -910,7 +917,10 @@ export default function Auth() {
           <div className="mt-8 pt-6 border-t border-border">
             <button
               type="button"
-              onClick={() => setIsAgentPortal(true)}
+              onClick={() => {
+                setIsAgentPortal(true);
+                sessionStorage.setItem('auth_context', 'agent');
+              }}
               className="w-full p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400 hover:text-emerald-300 font-bold text-xs transition-all flex items-center justify-between group shadow-sm"
             >
               <div className="flex items-center gap-3 text-left">
