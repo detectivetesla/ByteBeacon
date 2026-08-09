@@ -78,6 +78,7 @@ const ACTION_COLORS: Record<string, string> = {
 
 const ROLE_COLORS: Record<string, string> = {
     admin: 'bg-red-500/20 text-red-500',
+    superagent: 'bg-emerald-500/20 text-emerald-500',
     agent: 'bg-purple-500/20 text-purple-500',
     customer: 'bg-blue-500/20 text-blue-500',
 };

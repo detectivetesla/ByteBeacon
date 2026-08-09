@@ -59,7 +59,7 @@ interface User {
     email: string;
     phone: string;
     created_at: string;
-    role: 'customer' | 'agent' | 'admin';
+    role: 'customer' | 'agent' | 'superagent' | 'admin';
     is_verified?: boolean;
     isActive: boolean;
 }
@@ -70,7 +70,7 @@ export default function AdminUsersPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [roleFilter, setRoleFilter] = useState<'all' | 'customer' | 'agent' | 'admin'>('all');
+    const [roleFilter, setRoleFilter] = useState<'all' | 'customer' | 'agent' | 'superagent' | 'admin'>('all');
 
     const [showEditModal, setShowEditModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -79,8 +79,8 @@ export default function AdminUsersPage() {
     const [showMessageModal, setShowMessageModal] = useState(false);
     const [showNotificationModal, setShowNotificationModal] = useState(false);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
-    const [editForm, setEditForm] = useState({ full_name: '', email: '', phone: '', role: 'customer' as 'customer' | 'agent' | 'admin' });
-    const [addForm, setAddForm] = useState({ full_name: '', email: '', phone: '', password: '', role: 'customer' as 'customer' | 'agent' | 'admin' });
+    const [editForm, setEditForm] = useState({ full_name: '', email: '', phone: '', role: 'customer' as 'customer' | 'agent' | 'superagent' | 'admin' });
+    const [addForm, setAddForm] = useState({ full_name: '', email: '', phone: '', password: '', role: 'customer' as 'customer' | 'agent' | 'superagent' | 'admin' });
     const [messageForm, setMessageForm] = useState({ subject: '', body: '' });
     const [notificationForm, setNotificationForm] = useState({ title: '', message: '', type: 'info' });
     const [actionLoading, setActionLoading] = useState(false);
@@ -95,7 +95,7 @@ export default function AdminUsersPage() {
                 email: u.email,
                 phone: u.phone,
                 created_at: u.createdAt || '',
-                role: u.role as 'customer' | 'agent' | 'admin',
+                role: u.role as 'customer' | 'agent' | 'superagent' | 'admin',
                 is_verified: true,
                 isActive: u.isActive !== undefined ? u.isActive : true,
             }));
@@ -317,7 +317,7 @@ export default function AdminUsersPage() {
         }
     };
 
-    const changeRole = async (userId: string, newRole: 'customer' | 'agent' | 'admin') => {
+    const changeRole = async (userId: string, newRole: 'customer' | 'agent' | 'superagent' | 'admin') => {
         try {
             await adminService.changeUserRole(userId, newRole);
             toast({
@@ -408,7 +408,7 @@ export default function AdminUsersPage() {
                             />
                         </div>
                         <div className="flex gap-2 flex-wrap">
-                            {(['all', 'customer', 'agent', 'admin'] as const).map((role) => (
+                            {(['all', 'customer', 'agent', 'superagent', 'admin'] as const).map((role) => (
                                 <Button
                                     key={role}
                                     variant={roleFilter === role ? 'default' : 'outline'}
@@ -420,7 +420,7 @@ export default function AdminUsersPage() {
                                             : 'border-border text-muted-foreground hover:bg-accent'
                                     )}
                                 >
-                                    {role.charAt(0).toUpperCase() + role.slice(1)}
+                                    {role === 'superagent' ? 'SuperAgent' : role.charAt(0).toUpperCase() + role.slice(1)}
                                 </Button>
                             ))}
                         </div>
@@ -494,19 +494,21 @@ export default function AdminUsersPage() {
                                             </td>
                                             <td className="p-4 text-muted-foreground">{user.phone}</td>
                                             <td className="p-4">
-                                                <Select value={user.role} onValueChange={(value) => changeRole(user.id, value as 'customer' | 'agent' | 'admin')}>
+                                                <Select value={user.role} onValueChange={(value) => changeRole(user.id, value as 'customer' | 'agent' | 'superagent' | 'admin')}>
                                                     <SelectTrigger className={cn(
                                                         "h-8 w-auto px-3 text-xs font-medium rounded-full border-0",
                                                         user.role === 'admin' ? 'bg-purple-500/20 text-purple-400' :
-                                                            user.role === 'agent' ? 'bg-blue-500/20 text-blue-400' :
-                                                                'bg-slate-500/20 text-slate-400'
+                                                            user.role === 'superagent' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                                user.role === 'agent' ? 'bg-blue-500/20 text-blue-400' :
+                                                                    'bg-slate-500/20 text-slate-400'
                                                     )}>
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent className="bg-popover border-border">
-                                                        <SelectItem value="customer" className="hover:bg-accent focus:bg-accent">customer</SelectItem>
-                                                        <SelectItem value="agent" className="hover:bg-accent focus:bg-accent">agent</SelectItem>
-                                                        <SelectItem value="admin" className="hover:bg-accent focus:bg-accent">admin</SelectItem>
+                                                        <SelectItem value="customer" className="hover:bg-accent focus:bg-accent">Customer</SelectItem>
+                                                        <SelectItem value="agent" className="hover:bg-accent focus:bg-accent">Agent</SelectItem>
+                                                        <SelectItem value="superagent" className="hover:bg-accent focus:bg-accent">SuperAgent</SelectItem>
+                                                        <SelectItem value="admin" className="hover:bg-accent focus:bg-accent">Admin</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </td>
@@ -632,13 +634,14 @@ export default function AdminUsersPage() {
                         </div>
                         <div className="space-y-2">
                             <Label className="text-muted-foreground">Role</Label>
-                            <Select value={editForm.role} onValueChange={(value) => setEditForm({ ...editForm, role: value as 'customer' | 'agent' | 'admin' })}>
+                            <Select value={editForm.role} onValueChange={(value) => setEditForm({ ...editForm, role: value as 'customer' | 'agent' | 'superagent' | 'admin' })}>
                                 <SelectTrigger className="w-full bg-accent/50 border-border text-foreground">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="bg-popover border-border">
                                     <SelectItem value="customer" className="hover:bg-accent focus:bg-accent">Customer</SelectItem>
                                     <SelectItem value="agent" className="hover:bg-accent focus:bg-accent">Agent</SelectItem>
+                                    <SelectItem value="superagent" className="hover:bg-accent focus:bg-accent">SuperAgent</SelectItem>
                                     <SelectItem value="admin" className="hover:bg-accent focus:bg-accent">Admin</SelectItem>
                                 </SelectContent>
                             </Select>
@@ -752,13 +755,14 @@ export default function AdminUsersPage() {
                         </div>
                         <div className="space-y-2">
                             <Label className="text-muted-foreground">Role</Label>
-                            <Select value={addForm.role} onValueChange={(value) => setAddForm({ ...addForm, role: value as 'customer' | 'agent' | 'admin' })}>
+                            <Select value={addForm.role} onValueChange={(value) => setAddForm({ ...addForm, role: value as 'customer' | 'agent' | 'superagent' | 'admin' })}>
                                 <SelectTrigger className="w-full bg-accent/50 border-border text-foreground">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="bg-popover border-border">
                                     <SelectItem value="customer" className="hover:bg-accent focus:bg-accent">Customer</SelectItem>
                                     <SelectItem value="agent" className="hover:bg-accent focus:bg-accent">Agent</SelectItem>
+                                    <SelectItem value="superagent" className="hover:bg-accent focus:bg-accent">SuperAgent</SelectItem>
                                     <SelectItem value="admin" className="hover:bg-accent focus:bg-accent">Admin</SelectItem>
                                 </SelectContent>
                             </Select>

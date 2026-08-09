@@ -27,9 +27,11 @@ interface Message {
     senderId: string;
     senderName: string;
     senderEmail: string;
+    senderRole: string;
     recipientId: string;
     recipientName: string;
     recipientEmail: string;
+    recipientRole: string;
     subject: string;
     body: string;
     isRead: boolean;
@@ -201,6 +203,22 @@ export default function AdminMessagesPage() {
         return (name || 'U').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     };
 
+    const getRoleBadge = (role: string) => {
+        const colors: Record<string, string> = {
+            admin: 'bg-purple-500/20 text-purple-400',
+            superagent: 'bg-emerald-500/20 text-emerald-400',
+            agent: 'bg-blue-500/20 text-blue-400',
+            customer: 'bg-slate-500/20 text-slate-400',
+            system: 'bg-amber-500/20 text-amber-400',
+        };
+        const label = role === 'superagent' ? 'SuperAgent' : role.charAt(0).toUpperCase() + role.slice(1);
+        return (
+            <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full ${colors[role] || colors.customer}`}>
+                {label}
+            </span>
+        );
+    };
+
     const unreadCount = messages.filter(m => !m.isRead).length;
 
     return (
@@ -276,12 +294,15 @@ export default function AdminMessagesPage() {
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center justify-between">
-                                                    <p className={cn(
-                                                        "font-medium text-sm truncate",
-                                                        message.isRead ? 'text-slate-300' : 'text-white'
-                                                    )}>
-                                                        {message.senderName || 'Anonymous'}
-                                                    </p>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <p className={cn(
+                                                            "font-medium text-sm truncate",
+                                                            message.isRead ? 'text-slate-300' : 'text-white'
+                                                        )}>
+                                                            {message.senderName || 'Anonymous'}
+                                                        </p>
+                                                        {getRoleBadge(message.senderRole || 'customer')}
+                                                    </div>
                                                     {!message.isRead && (
                                                         <Mail className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                                                     )}
@@ -311,7 +332,10 @@ export default function AdminMessagesPage() {
                                             {getInitials(selectedMessage.senderName)}
                                         </div>
                                         <div>
-                                            <p className="font-semibold text-white">{selectedMessage.senderName}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-semibold text-white">{selectedMessage.senderName}</p>
+                                                {getRoleBadge(selectedMessage.senderRole || 'customer')}
+                                            </div>
                                             <p className="text-sm text-slate-400">{selectedMessage.senderEmail}</p>
                                         </div>
                                     </div>
@@ -390,7 +414,7 @@ export default function AdminMessagesPage() {
                                 <SelectContent className="bg-slate-800 border-slate-600">
                                     {users.map(u => (
                                         <SelectItem key={u.id} value={u.email} className="text-white hover:bg-slate-700">
-                                            {u.fullName} ({u.email})
+                                            {u.fullName} ({u.email}) — [{u.role === 'superagent' ? 'SuperAgent' : (u.role || 'customer').charAt(0).toUpperCase() + (u.role || 'customer').slice(1)}]
                                         </SelectItem>
                                     ))}
                                 </SelectContent>

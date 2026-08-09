@@ -74,8 +74,8 @@ const getNavItems = (userRole: string | null | undefined, hasActiveStore?: boole
         { icon: CreditCard, label: 'Deposits', href: '/dashboard/deposits', variant: 'indigo' },
     ];
 
-    // Add role-specific items
-    if (userRole === 'agent' || userRole === 'superagent') {
+    // Add role-specific items: Developer features (API Docs & API Keys) are strictly for SuperAgent & Admin
+    if (userRole === 'superagent' || userRole === 'admin') {
         baseItems.push({
             icon: BookOpen,
             label: "API Docs",
@@ -89,10 +89,10 @@ const getNavItems = (userRole: string | null | undefined, hasActiveStore?: boole
             href: '/dashboard/api-keys',
             variant: 'indigo',
         });
-    } else {
+    } else if (userRole === 'customer') {
         baseItems.push({
             icon: UserPlus,
-            label: 'Apply for Super Agency',
+            label: 'Apply for Agency / Super Agency',
             href: '/dashboard/apply-agent',
             variant: 'violet',
         });

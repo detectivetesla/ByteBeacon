@@ -867,10 +867,14 @@ const getMessages = async (req, res) => {
         const [messages] = await pool.execute(`
             SELECT m.*, 
                    ps.full_name as sender_name, ps.email as sender_email,
-                   pr.full_name as recipient_name, pr.email as recipient_email
+                   pr.full_name as recipient_name, pr.email as recipient_email,
+                   COALESCE(urs.role::text, 'customer') as sender_role,
+                   COALESCE(urr.role::text, 'customer') as recipient_role
             FROM messages m
             LEFT JOIN profiles ps ON (CASE WHEN m.sender_id ~ '^[0-9a-fA-F-]{36}$' THEN m.sender_id::uuid ELSE NULL END) = ps.id
             LEFT JOIN profiles pr ON (CASE WHEN m.recipient_id ~ '^[0-9a-fA-F-]{36}$' THEN m.recipient_id::uuid ELSE NULL END) = pr.id
+            LEFT JOIN user_roles urs ON (CASE WHEN m.sender_id ~ '^[0-9a-fA-F-]{36}$' THEN m.sender_id::uuid ELSE NULL END) = urs.user_id::uuid
+            LEFT JOIN user_roles urr ON (CASE WHEN m.recipient_id ~ '^[0-9a-fA-F-]{36}$' THEN m.recipient_id::uuid ELSE NULL END) = urr.user_id::uuid
             ORDER BY m.created_at DESC
             LIMIT 100
         `);
@@ -879,9 +883,11 @@ const getMessages = async (req, res) => {
             // Handle special sender IDs
             let senderName = m.sender_name;
             let senderEmail = m.sender_email || '';
+            let senderRole = m.sender_role || 'customer';
             if (m.sender_id === 'system') {
                 senderName = 'ByteBeacon System';
                 senderEmail = 'noreply@bytebeacon.com';
+                senderRole = 'system';
             } else if (!senderName) {
                 senderName = 'Unknown User';
             }
@@ -889,9 +895,11 @@ const getMessages = async (req, res) => {
             // Handle special recipient IDs
             let recipientName = m.recipient_name;
             let recipientEmail = m.recipient_email || '';
+            let recipientRole = m.recipient_role || 'customer';
             if (m.recipient_id === 'admin') {
                 recipientName = 'Support Team';
                 recipientEmail = 'support@bytebeacon.com';
+                recipientRole = 'admin';
             } else if (!recipientName) {
                 recipientName = 'Unknown User';
             }
@@ -901,9 +909,11 @@ const getMessages = async (req, res) => {
                 senderId: m.sender_id,
                 senderName,
                 senderEmail,
+                senderRole,
                 recipientId: m.recipient_id,
                 recipientName,
                 recipientEmail,
+                recipientRole,
                 subject: m.subject,
                 body: m.body,
                 isRead: Boolean(m.is_read),
@@ -917,6 +927,7 @@ const getMessages = async (req, res) => {
         res.status(500).json({ error: 'Failed to get messages' });
     }
 };
+
 
 // Delete message (admin)
 const deleteMessage = async (req, res) => {

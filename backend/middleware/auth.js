@@ -65,6 +65,14 @@ const agentOrAdmin = (req, res, next) => {
     next();
 };
 
+// SuperAgent or admin middleware (for API keys, API docs, developer features)
+const superAgentOrAdmin = (req, res, next) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'superagent') {
+        return res.status(403).json({ error: 'SuperAgent or Admin access required. Normal agents do not have access to developer API features.' });
+    }
+    next();
+};
+
 // Helper to just get user from token without sending response (useful for optional auth)
 const getUserFromToken = async (req) => {
     try {
@@ -96,4 +104,4 @@ const getUserFromToken = async (req) => {
     }
 };
 
-module.exports = { auth, adminOnly, agentOrAdmin, getUserFromToken };
+module.exports = { auth, adminOnly, agentOrAdmin, superAgentOrAdmin, getUserFromToken };

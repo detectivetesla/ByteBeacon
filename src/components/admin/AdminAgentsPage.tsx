@@ -621,7 +621,7 @@ export default function AdminAgentsPage() {
                                             : 'border-slate-600 text-slate-300'
                                     )}
                                 >
-                                    {role === 'superagent' ? 'Agent' : role.charAt(0).toUpperCase() + role.slice(1)}
+                                    {role === 'superagent' ? 'SuperAgent' : role.charAt(0).toUpperCase() + role.slice(1)}
                                 </Button>
                             ))}
                         </div>
@@ -674,7 +674,7 @@ export default function AdminAgentsPage() {
                                                 agent.role === 'superagent' ? 'bg-emerald-500/20 text-emerald-400' :
                                                 'bg-blue-500/20 text-blue-400'
                                             )}>
-                                                {agent.role === 'superagent' ? 'Agent' : agent.role === 'admin' ? 'Admin' : agent.role === 'agent' ? 'Agent' : 'Customer'}
+                                                {agent.role === 'superagent' ? 'SuperAgent' : agent.role === 'admin' ? 'Admin' : agent.role === 'agent' ? 'Agent' : 'Customer'}
                                             </span>
                                         </div>
                                     </div>
@@ -732,7 +732,7 @@ export default function AdminAgentsPage() {
                                         <SelectContent className="bg-slate-800 border-slate-600">
                                             <SelectItem value="customer" className="text-white hover:bg-slate-700 focus:bg-slate-700">Customer</SelectItem>
                                             <SelectItem value="agent" className="text-white hover:bg-slate-700 focus:bg-slate-700">Agent</SelectItem>
-                                            <SelectItem value="superagent" className="text-white hover:bg-slate-700 focus:bg-slate-700">Agent (Super)</SelectItem>
+                                            <SelectItem value="superagent" className="text-white hover:bg-slate-700 focus:bg-slate-700">SuperAgent</SelectItem>
                                             <SelectItem value="admin" className="text-white hover:bg-slate-700 focus:bg-slate-700">Admin</SelectItem>
                                         </SelectContent>
                                     </Select>

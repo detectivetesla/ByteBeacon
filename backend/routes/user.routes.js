@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, superAgentOrAdmin } = require('../middleware/auth');
 const {
     getProfile,
     updateProfile,
@@ -38,12 +38,12 @@ router.get('/activity', auth, getMyActivityLogs);
 router.post('/apply-agent', auth, applyForAgent);
 router.get('/agent-application', auth, getMyAgentApplication);
 
-// API Key management
-router.get('/api-key', auth, getApiKey);
-router.post('/api-key/regenerate', auth, regenerateApiKey);
-router.get('/api-keys', auth, getApiKeys);
-router.post('/api-keys', auth, createApiKey);
-router.delete('/api-keys/:id', auth, deleteApiKey);
+// API Key management (SuperAgent & Admin only)
+router.get('/api-key', auth, superAgentOrAdmin, getApiKey);
+router.post('/api-key/regenerate', auth, superAgentOrAdmin, regenerateApiKey);
+router.get('/api-keys', auth, superAgentOrAdmin, getApiKeys);
+router.post('/api-keys', auth, superAgentOrAdmin, createApiKey);
+router.delete('/api-keys/:id', auth, superAgentOrAdmin, deleteApiKey);
 
 // Messages
 router.get('/messages', auth, getMyMessages);

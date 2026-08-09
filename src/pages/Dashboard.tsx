@@ -1,4 +1,5 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import DashboardHome from '@/components/dashboard/DashboardHome';
 import WalletPage from '@/components/dashboard/WalletPage';
@@ -15,6 +16,15 @@ import PartnerConsole from '@/components/dashboard/PartnerConsole';
 import DeveloperApiDocs from '@/components/dashboard/DeveloperApiDocs';
 import DeveloperApiKeyManagement from '@/components/dashboard/DeveloperApiKeyManagement';
 import AgentStoreUserContainer from '@/components/dashboard/agentStore/AgentStoreUserContainer';
+
+// Route guard: only superagent and admin can access developer features
+function SuperAgentGuard({ children }: { children: React.ReactNode }) {
+  const { role } = useAuth();
+  if (role === 'agent' || role === 'customer') {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
 
 export default function Dashboard() {
   return (
@@ -34,8 +44,8 @@ export default function Dashboard() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/apply-agent" element={<ApplyAgentPage />} />
         <Route path="/developer-api" element={<PartnerConsole />} />
-        <Route path="/api-docs" element={<DeveloperApiDocs />} />
-        <Route path="/api-keys" element={<DeveloperApiKeyManagement />} />
+        <Route path="/api-docs" element={<SuperAgentGuard><DeveloperApiDocs /></SuperAgentGuard>} />
+        <Route path="/api-keys" element={<SuperAgentGuard><DeveloperApiKeyManagement /></SuperAgentGuard>} />
       </Routes>
     </DashboardLayout>
   );
