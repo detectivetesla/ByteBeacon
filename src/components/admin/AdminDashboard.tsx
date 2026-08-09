@@ -460,10 +460,10 @@ export default function AdminDashboard() {
                         </CardContent>
                     </Card>
 
-                    {/* SuperAgent Tier */}
+                    {/* Agent Tier */}
                     <Card className="bg-card border-border border-t-4 border-t-emerald-500 overflow-hidden relative shadow-md">
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-bold uppercase text-emerald-500 tracking-wider">SuperAgent Tier</CardTitle>
+                            <CardTitle className="text-sm font-bold uppercase text-emerald-500 tracking-wider">Agent Tier</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex justify-between items-center border-b border-border/50 pb-2">

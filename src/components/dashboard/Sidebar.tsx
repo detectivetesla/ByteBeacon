@@ -186,7 +186,7 @@ export default function Sidebar({ isCollapsed, userName, userEmail, userRole, on
                             <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
                             {(userRole === 'agent' || userRole === 'superagent') && (
                                 <span className="inline-block mt-1 px-2 py-0.5 text-xs font-semibold rounded uppercase tracking-wider bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
-                                    SuperAgent
+                                    Agent
                                 </span>
                             )}
                         </div>

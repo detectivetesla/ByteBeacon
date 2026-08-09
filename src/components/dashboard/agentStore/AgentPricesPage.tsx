@@ -108,7 +108,7 @@ export const AgentPricesPage: React.FC = () => {
                 <div>
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
                         <Tag className="w-5 h-5 text-[#a3e635]" />
-                        SuperAgent Pricing & Bundle Selection
+                        Agent Pricing & Bundle Selection
                     </h2>
                     <p className="text-xs text-slate-400 mt-1">
                         Select which data bundles to offer on your store and set your custom retail prices.

@@ -75,7 +75,7 @@ const navSections: NavSection[] = [
             },
 
             { icon: Database, label: 'Data Plans', href: '/admin/data-plans', variant: 'blue' },
-            { icon: UserCog, label: 'Resellers/SuperAgents', href: '/admin/agents', variant: 'indigo' },
+            { icon: UserCog, label: 'Resellers/Agents', href: '/admin/agents', variant: 'indigo' },
             { icon: Store, label: 'Agent Stores', href: '/admin/agent-stores', variant: 'emerald' },
         ]
     },

@@ -956,7 +956,7 @@ export default function DashboardHome() {
                                                         GH₵{bundle.agentPriceGhc?.toFixed(2) || bundle.priceGhc.toFixed(2)}
                                                     </p>
                                                     {bundle.agentPriceGhc && bundle.agentPriceGhc < bundle.priceGhc && (
-                                                        <p className="text-xs text-green-500">SuperAgent Price</p>
+                                                        <p className="text-xs text-green-500">Agent Price</p>
                                                     )}
                                                 </div>
                                             </div>
@@ -967,7 +967,7 @@ export default function DashboardHome() {
                                 <div className="text-center py-6 sm:py-8">
                                     <Zap className="w-8 h-8 mx-auto text-muted-foreground/30 mb-2" />
                                     <p className="text-muted-foreground text-sm">Top Packages</p>
-                                    <p className="text-xs text-muted-foreground/70 mt-1">Become a SuperAgent to see top bundles</p>
+                                    <p className="text-xs text-muted-foreground/70 mt-1">Become an Agent to see top bundles</p>
                                 </div>
                             )}
                         </CardContent>

@@ -19,18 +19,18 @@ export default function BecomeAgentSection() {
                         {/* Partnership Badge */}
                         <div className="inline-flex items-center gap-2 text-emerald-400 text-sm font-medium mb-6">
                             <Sparkles className="w-4 h-4 text-amber-400" />
-                            <span className="uppercase tracking-wider">SuperAgent Network</span>
+                            <span className="uppercase tracking-wider">Agent Network</span>
                         </div>
 
                         {/* Heading */}
                         <h2 className="text-white font-display text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
                             Become a{' '}
-                            <span className="text-emerald-400">Byte Beacon</span> Super Agent
+                            <span className="text-emerald-400">Byte Beacon</span> Agent
                         </h2>
 
                         {/* Description */}
                         <p className="text-slate-400 text-lg mb-8 max-w-lg">
-                            Turn your phone or platform into a high-margin enterprise business. Join our network of elite Super Agents and enjoy maximum discounts and developer tools.
+                            Turn your phone or platform into a high-margin enterprise business. Join our network of elite Agents and enjoy maximum discounts and developer tools.
                         </p>
 
                         {/* Benefits List */}
@@ -51,7 +51,7 @@ export default function BecomeAgentSection() {
                                 size="lg"
                                 className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-8"
                             >
-                                Apply for Super Agency
+                                Apply for Agency
                                 <ArrowRight className="w-4 h-4 ml-2" />
                             </Button>
                         </Link>
@@ -67,7 +67,7 @@ export default function BecomeAgentSection() {
                             <div className="relative bg-slate-100 rounded-2xl overflow-hidden shadow-2xl">
                                 <img
                                     src="/agent-illustration.png"
-                                    alt="Become a Super Agent"
+                                    alt="Become an Agent"
                                     className="w-full h-auto"
                                     onError={(e) => {
                                         // Fallback to a placeholder if image doesn't load
@@ -76,7 +76,7 @@ export default function BecomeAgentSection() {
                                             <div class="w-full h-80 bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center">
                                                 <div class="text-center p-8">
                                                     <img src="/logo.png" alt="ByteBeacon" class="h-20 mx-auto mb-4" />
-                                                    <p class="text-slate-600 font-medium">Join 500+ SuperAgents</p>
+                                                    <p class="text-slate-600 font-medium">Join 500+ Agents</p>
                                                     <p class="text-slate-500 text-sm">Earning with ByteBeacon</p>
                                                 </div>
                                             </div>

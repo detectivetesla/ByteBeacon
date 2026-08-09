@@ -146,7 +146,7 @@ export default function AgentPricingModal({ isOpen, onClose, agentId, agentName 
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <DollarSign className="w-5 h-5 text-primary" />
-                        Custom SuperAgent Pricing for {agentName}
+                        Custom Agent Pricing for {agentName}
                     </DialogTitle>
                 </DialogHeader>
 
@@ -171,7 +171,7 @@ export default function AgentPricingModal({ isOpen, onClose, agentId, agentName 
                                         <div className="grid grid-cols-4 gap-2 text-xs font-medium text-muted-foreground px-2">
                                             <span>Data</span>
                                             <span>Standard</span>
-                                            <span>Default SuperAgent</span>
+                                            <span>Default Agent</span>
                                             <span>Custom Price</span>
                                         </div>
                                         {getBundlesByNetwork(network).map(bundle => {

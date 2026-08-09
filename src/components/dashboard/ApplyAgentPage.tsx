@@ -7,18 +7,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UserPlus, CheckCircle, Clock, Users, DollarSign, Code, Sparkles, ShieldCheck, Zap, AlertTriangle } from 'lucide-react';
-import { cn } from '@/lib/utils';
-
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/services';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useToast } from '@/hooks/use-toast';
 import { Loader2, UserPlus, CheckCircle, Clock, DollarSign, Code, Sparkles, ShieldCheck, Zap, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -27,7 +15,7 @@ export default function ApplyAgentPage() {
     const { toast } = useToast();
     const [loading, setLoading] = useState(false);
     const [submitted, setSubmitted] = useState(false);
-    const [requestType, setRequestType] = useState<'agent' | 'superagent'>('superagent');
+    const [requestType, setRequestType] = useState<'agent' | 'superagent'>('agent');
     const [formData, setFormData] = useState({
         businessName: '',
         reason: '',
@@ -35,7 +23,7 @@ export default function ApplyAgentPage() {
     });
     const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
-    const AGENCY_FEE = requestType === 'superagent' ? 0.00 : 30.00;
+    const AGENCY_FEE = 0.00;
 
     useEffect(() => {
         const fetchBalance = async () => {
@@ -69,12 +57,12 @@ export default function ApplyAgentPage() {
                 businessName: formData.businessName,
                 reason: formData.reason,
                 experience: formData.experience,
-                requestType,
+                requestType: 'agent',
             });
 
             toast({
                 title: 'Application Submitted!',
-                description: response.message || `Your ${requestType} application is being processed.`,
+                description: response.message || 'Your agent application is being processed.',
             });
             setSubmitted(true);
         } catch (err: any) {
@@ -91,7 +79,7 @@ export default function ApplyAgentPage() {
         }
     };
 
-    const superAgentBenefits = [
+    const agentBenefits = [
         {
             icon: Code,
             title: 'Custom API Portals',
@@ -122,7 +110,7 @@ export default function ApplyAgentPage() {
         }
     ];
 
-    const benefits = superAgentBenefits;
+    const benefits = agentBenefits;
 
     if (submitted) {
         return (
@@ -138,12 +126,8 @@ export default function ApplyAgentPage() {
                             Application Submitted!
                         </h2>
                         <p className="text-muted-foreground mb-8 max-w-md mx-auto text-lg leading-relaxed">
-                            Your <span className="text-foreground font-bold italic uppercase">SuperAgent</span> application is now in our queue. Our team will review your credentials and activate your profile within <span className="text-foreground font-bold italic">24-48 hours</span>.
+                            Your <span className="text-foreground font-bold italic uppercase">Agent</span> application is now in our queue. Our team will review your credentials and activate your profile within <span className="text-foreground font-bold italic">24-48 hours</span>.
                         </p>
-                        <div className="flex items-center justify-center gap-3 py-3 px-6 bg-emerald-500/5 rounded-full border border-emerald-500/20 w-fit mx-auto animate-pulse">
-                            <Clock className="w-5 h-5 text-emerald-500" />
-                            <span className="text-sm font-bold text-emerald-500 tracking-wider">Estimated Review: 24-48 Hours</span>
-                        </div>
                     </CardContent>
                 </Card>
             </div>
@@ -160,10 +144,10 @@ export default function ApplyAgentPage() {
                     </div>
                     <div>
                         <h1 className="text-3xl md:text-4xl font-display font-bold text-foreground tracking-tight">
-                            Apply for Super Agency
+                            Apply for Agency
                         </h1>
                         <p className="text-muted-foreground font-medium mt-1">
-                            Unlock elite SuperAgent privileges, reseller pricing, white-labeled portals, and developer tools.
+                            Unlock elite Agent privileges, reseller pricing, white-labeled portals, and developer tools.
                         </p>
                     </div>
                 </div>
@@ -172,7 +156,7 @@ export default function ApplyAgentPage() {
                 <div className="flex p-1 bg-muted/60 border border-border/50 rounded-2xl w-fit relative">
                     <div className="flex items-center gap-2 py-2.5 px-4 rounded-xl font-bold font-display bg-primary text-primary-foreground shadow-md text-xs uppercase tracking-wider">
                         <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
-                        SuperAgent Tier
+                        Agent Tier
                     </div>
                 </div>
             </div>
@@ -182,7 +166,7 @@ export default function ApplyAgentPage() {
                 <div className="lg:col-span-1 space-y-4">
                     <h3 className="font-bold text-foreground flex items-center gap-2 tracking-tight uppercase text-xs">
                         <Sparkles className="w-4 h-4 text-emerald-500" />
-                        SuperAgent Privileges
+                        Agent Privileges
                     </h3>
                     <div className="grid grid-cols-1 gap-3">
                         {benefits.map((benefit, index) => (
@@ -217,7 +201,7 @@ export default function ApplyAgentPage() {
                                 <span className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">Verified Program</span>
                             </div>
                             <p className="text-xs text-muted-foreground font-medium leading-relaxed">
-                                Join our network of thousands of successful SuperAgents across Ghana.
+                                Join our network of thousands of successful Agents across Ghana.
                             </p>
                         </CardContent>
                     </Card>
@@ -228,10 +212,10 @@ export default function ApplyAgentPage() {
                     <CardHeader className="border-b border-border/50">
                         <CardTitle className="text-lg font-display font-bold text-foreground tracking-tight flex items-center gap-2">
                             <Sparkles className="w-5 h-5 text-amber-500" />
-                            SuperAgent Application Form
+                            Agent Application Form
                         </CardTitle>
                         <CardDescription className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">
-                            Submit your SuperAgent credentials below
+                            Submit your Agent credentials below
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-6">
@@ -241,10 +225,10 @@ export default function ApplyAgentPage() {
                                     <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/10 rounded-full blur-xl pointer-events-none" />
                                     <div className="flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest text-purple-400">
                                         <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
-                                        Elite SuperAgent Network
+                                        Elite Agent Network
                                     </div>
                                     <p className="text-xs text-muted-foreground leading-relaxed">
-                                        Apply today to lock in your priority SuperAgent spot. Your request will be reviewed by the admin team, and approved profiles activate automatically.
+                                        Apply today to lock in your priority Agent spot. Your request will be reviewed by the admin team, and approved profiles activate automatically.
                                     </p>
                                 </div>
 
@@ -258,30 +242,7 @@ export default function ApplyAgentPage() {
                                             <p className="text-3xl font-display font-bold text-foreground tracking-tight">GH₵ {AGENCY_FEE.toFixed(2)}</p>
                                         </div>
                                     </div>
-                                    <div className="text-center sm:text-right bg-muted/50 p-3 px-6 rounded-2xl relative z-10 border border-border">
-                                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Your Balance</p>
-                                        <p className={cn(
-                                            "text-lg font-display font-bold tracking-tight",
-                                            walletBalance !== null && walletBalance < AGENCY_FEE ? 'text-destructive' : 'text-primary'
-                                        )}>
-                                            GH₵ {walletBalance?.toFixed(2) || '0.00'}
-                                        </p>
-                                    </div>
                                 </div>
-
-                                {walletBalance !== null && walletBalance < AGENCY_FEE && (
-                                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-center gap-3 animate-in slide-in-from-top-2">
-                                        <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                                        <span className="font-medium">Insufficient balance to proceed. <a href="/dashboard/wallet" className="font-black underline ml-1 hover:text-red-300 transition-colors uppercase text-xs">Top up now →</a></span>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="p-4 bg-muted/20 border border-border rounded-xl">
-                                <p className="text-[11px] text-muted-foreground italic font-medium leading-relaxed">
-                                    <span className="text-emerald-500 font-black uppercase not-italic mr-2">Note:</span>
-                                    The SuperAgent application is free during this phase. No amount will be deducted from your wallet balance.
-                                </p>
                             </div>
 
                             <div className="space-y-4">
@@ -302,7 +263,7 @@ export default function ApplyAgentPage() {
                                     </Label>
                                     <Textarea
                                         id="reason"
-                                        placeholder="Why are you interested in becoming a SuperAgent? E.g., API client base, downline network, POS operation..."
+                                        placeholder="Why are you interested in becoming an Agent? E.g., API client base, downline network, POS operation..."
                                         className="bg-muted/50 border-border focus:border-emerald-500/50 min-h-[100px] transition-all duration-300"
                                         required
                                         value={formData.reason}
@@ -337,7 +298,7 @@ export default function ApplyAgentPage() {
                                         ) : (
                                             <>
                                                 <Sparkles className="w-6 h-6 animate-pulse" />
-                                                Submit SuperAgent Application
+                                                Submit Agent Application
                                             </>
                                         )}
                                     </div>
@@ -350,4 +311,3 @@ export default function ApplyAgentPage() {
         </div>
     );
 }
-

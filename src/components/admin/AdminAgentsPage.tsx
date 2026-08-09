@@ -327,7 +327,7 @@ export default function AdminAgentsPage() {
         setActionLoading(true);
         try {
             await adminService.updateAgentApplication(application.id, { status: 'approved' });
-            toast({ title: 'Success', description: `${application.fullName} is now a SuperAgent!` });
+            toast({ title: 'Success', description: `${application.fullName} is now an Agent!` });
             fetchApplications();
             fetchAgents();
         } catch (err) {
@@ -437,8 +437,8 @@ export default function AdminAgentsPage() {
                 <div className="flex items-center gap-3">
                     <UserCog className="w-8 h-8 text-muted-foreground" />
                     <div>
-                        <h1 className="text-2xl font-bold text-foreground">Resellers & SuperAgents</h1>
-                        <p className="text-muted-foreground">Manage SuperAgents and their privileges</p>
+                        <h1 className="text-2xl font-bold text-foreground">Resellers & Agents</h1>
+                        <p className="text-muted-foreground">Manage Agents and their privileges</p>
                     </div>
                 </div>
                 <DropdownMenu>
@@ -492,7 +492,7 @@ export default function AdminAgentsPage() {
                                             <div className="flex items-center gap-2">
                                                 <p className="font-semibold text-foreground">{app.fullName}</p>
                                                 <span className="px-2 py-0.5 text-xs bg-emerald-500/20 text-emerald-500 font-bold rounded-full">
-                                                    SuperAgent Application
+                                                    Agent Application
                                                 </span>
                                             </div>
                                             <p className="text-sm text-muted-foreground">{app.email} • {app.phone}</p>
@@ -621,7 +621,7 @@ export default function AdminAgentsPage() {
                                             : 'border-slate-600 text-slate-300'
                                     )}
                                 >
-                                    {role === 'superagent' ? 'SuperAgent' : role.charAt(0).toUpperCase() + role.slice(1)}
+                                    {role === 'superagent' ? 'Agent' : role.charAt(0).toUpperCase() + role.slice(1)}
                                 </Button>
                             ))}
                         </div>
@@ -674,7 +674,7 @@ export default function AdminAgentsPage() {
                                                 agent.role === 'superagent' ? 'bg-emerald-500/20 text-emerald-400' :
                                                 'bg-blue-500/20 text-blue-400'
                                             )}>
-                                                {agent.role}
+                                                {agent.role === 'superagent' ? 'Agent' : agent.role === 'admin' ? 'Admin' : agent.role === 'agent' ? 'Agent' : 'Customer'}
                                             </span>
                                         </div>
                                     </div>
@@ -732,7 +732,7 @@ export default function AdminAgentsPage() {
                                         <SelectContent className="bg-slate-800 border-slate-600">
                                             <SelectItem value="customer" className="text-white hover:bg-slate-700 focus:bg-slate-700">Customer</SelectItem>
                                             <SelectItem value="agent" className="text-white hover:bg-slate-700 focus:bg-slate-700">Agent</SelectItem>
-                                            <SelectItem value="superagent" className="text-white hover:bg-slate-700 focus:bg-slate-700">SuperAgent</SelectItem>
+                                            <SelectItem value="superagent" className="text-white hover:bg-slate-700 focus:bg-slate-700">Agent (Super)</SelectItem>
                                             <SelectItem value="admin" className="text-white hover:bg-slate-700 focus:bg-slate-700">Admin</SelectItem>
                                         </SelectContent>
                                     </Select>
@@ -771,7 +771,7 @@ export default function AdminAgentsPage() {
                                 <SelectContent className="bg-slate-800 border-slate-600">
                                     <SelectItem value="customer" className="text-white hover:bg-slate-700 focus:bg-slate-700">Customer</SelectItem>
                                     <SelectItem value="agent" className="text-white hover:bg-slate-700 focus:bg-slate-700">Agent</SelectItem>
-                                    <SelectItem value="superagent" className="text-white hover:bg-slate-700 focus:bg-slate-700">SuperAgent</SelectItem>
+                                    <SelectItem value="superagent" className="text-white hover:bg-slate-700 focus:bg-slate-700">Agent (Super)</SelectItem>
                                     <SelectItem value="admin" className="text-white hover:bg-slate-700 focus:bg-slate-700">Admin</SelectItem>
                                 </SelectContent>
                             </Select>
