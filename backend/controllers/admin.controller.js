@@ -628,8 +628,6 @@ const getDashboardStats = async (req, res) => {
 // Notifications
 const sendNotification = async (req, res) => {
     try {
-const sendNotification = async (req, res) => {
-    try {
         const { userId, targetGroup, title, message, type = 'info' } = req.body;
 
         if (!title || !message) {
