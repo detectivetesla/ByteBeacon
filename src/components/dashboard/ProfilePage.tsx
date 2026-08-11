@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 import {
     Dialog,
     DialogContent,
@@ -41,7 +42,7 @@ interface Profile {
 }
 
 export default function ProfilePage() {
-    const { user, role, signOut } = useAuth();
+    const { user, role, signOut, loading: authLoading } = useAuth();
     const { toast } = useToast();
     const navigate = useNavigate();
 
@@ -66,19 +67,25 @@ export default function ProfilePage() {
     const [activityLoading, setActivityLoading] = useState(true);
 
     const fetchProfile = useCallback(async () => {
-        if (!user) return;
+        if (!user) {
+            if (!authLoading) setLoading(false);
+            return;
+        }
 
         try {
-            const [profileData, balanceData] = await Promise.all([
+            const [profileResult, balanceResult] = await Promise.allSettled([
                 api.get<{ fullName: string; email: string; phone: string }>('/users/profile'),
                 walletService.getBalance(),
             ]);
 
+            const profileData = profileResult.status === 'fulfilled' ? profileResult.value : null;
+            const balanceData = balanceResult.status === 'fulfilled' ? balanceResult.value : null;
+
             const data = {
-                full_name: profileData.fullName || 'User',
-                email: profileData.email || '',
-                phone: profileData.phone || '',
-                wallet_balance: balanceData.balance || 0,
+                full_name: profileData?.fullName || user.fullName || 'User',
+                email: profileData?.email || user.email || '',
+                phone: profileData?.phone || user.phone || '',
+                wallet_balance: balanceData?.balance || 0,
             };
             setProfile(data);
             setFormData({
@@ -90,9 +97,9 @@ export default function ProfilePage() {
             console.error('Error fetching profile:', err);
             // Use user data as fallback
             const fallbackProfile = {
-                full_name: user.fullName || 'User',
-                email: user.email || '',
-                phone: user.phone || '',
+                full_name: user?.fullName || 'User',
+                email: user?.email || '',
+                phone: user?.phone || '',
                 wallet_balance: 0,
             };
             setProfile(fallbackProfile);
@@ -104,25 +111,31 @@ export default function ProfilePage() {
         } finally {
             setLoading(false);
         }
-    }, [user]);
+    }, [user, authLoading]);
 
     const fetchActivityLogs = useCallback(async () => {
         try {
             const data = await userService.getActivityLogs();
-            setActivityLogs(data);
+            setActivityLogs(data || []);
         } catch (err) {
             console.error('Error fetching activity logs:', err);
+            setActivityLogs([]);
         } finally {
             setActivityLoading(false);
         }
     }, []);
 
     useEffect(() => {
+        if (authLoading) return;
+
         if (user) {
             fetchProfile();
             fetchActivityLogs();
+        } else {
+            setLoading(false);
+            setActivityLoading(false);
         }
-    }, [user, fetchProfile, fetchActivityLogs]);
+    }, [user, authLoading, fetchProfile, fetchActivityLogs]);
 
     const handleSave = async () => {
         if (!user) return;
@@ -227,14 +240,16 @@ export default function ProfilePage() {
     };
 
     const handleContactSupport = () => {
-        // Open WhatsApp with pre-filled message
-        const phoneNumber = '233XXXXXXXXX'; // Replace with actual support number
-        const message = encodeURIComponent(`Hello, I need help with my ByteBeacon account. My email is ${profile.email}`);
-        window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank');
+        // Open WhatsApp support channel
+        const message = encodeURIComponent(`Hello, I need help with my ByteBeacon account. My email is ${profile.email || ''}`);
+        window.open(`https://chat.whatsapp.com/Jpmtz6kPYbR6bcYV63MiQi`, '_blank');
     };
 
-    const getInitials = (name: string) => {
-        return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    const getInitials = (name?: string) => {
+        if (!name || typeof name !== 'string') return 'U';
+        const parts = name.trim().split(' ').filter(Boolean);
+        if (parts.length === 0) return 'U';
+        return parts.map(n => n[0]).join('').toUpperCase().slice(0, 2);
     };
 
     if (loading) {
@@ -328,7 +343,7 @@ export default function ProfilePage() {
                                 <div className="flex items-center gap-3">
                                     <Wallet className="w-5 h-5 text-muted-foreground" />
                                     <span className="text-sm">Wallet Balance</span>
-                                    <span className="text-sm font-bold text-primary ml-auto">GH₵ {profile.wallet_balance.toFixed(2)}</span>
+                                    <span className="text-sm font-bold text-primary ml-auto">GH₵ {(Number(profile.wallet_balance) || 0).toFixed(2)}</span>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <User className="w-5 h-5 text-muted-foreground" />

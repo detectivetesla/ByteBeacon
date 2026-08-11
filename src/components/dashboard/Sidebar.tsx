@@ -201,13 +201,20 @@ export default function Sidebar({ isCollapsed, userName, userEmail, userRole, on
                 "p-4 border-b border-border",
                 isCollapsed ? "flex justify-center" : ""
             )}>
-                <div className={cn("flex items-center gap-3", isCollapsed && "justify-center")}>
-                    <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold flex-shrink-0">
+                <Link
+                    to="/dashboard/profile"
+                    onClick={handleNavClick}
+                    className={cn(
+                        "flex items-center gap-3 group/profile p-1.5 -m-1.5 rounded-xl hover:bg-primary/5 transition-all duration-200",
+                        isCollapsed && "justify-center"
+                    )}
+                >
+                    <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold flex-shrink-0 group-hover/profile:scale-105 transition-transform">
                         {getInitials(userName || 'User')}
                     </div>
                     {!isCollapsed && (
                         <div className="overflow-hidden space-y-1">
-                            <p className="font-semibold text-sm truncate">{userName || 'User'}</p>
+                            <p className="font-semibold text-sm truncate group-hover/profile:text-primary transition-colors">{userName || 'User'}</p>
                             <p className="text-[11px] text-muted-foreground truncate">{userEmail}</p>
 
                             {storeInfo ? (
@@ -253,7 +260,7 @@ export default function Sidebar({ isCollapsed, userName, userEmail, userRole, on
                             )}
                         </div>
                     )}
-                </div>
+                </Link>
             </div>
 
             {/* Navigation */}
