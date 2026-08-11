@@ -4,6 +4,7 @@ const pool = require('../config/database');
 const { logActivity } = require('../utils/activityLogger');
 const { encryptSecret } = require('../utils/encryption');
 const { triggerTransactionWebhook, validateWebhookUrl } = require('../services/partnerWebhook.service');
+const { sendGenericEmail } = require('../services/email.service');
 
 // Create a new user (admin only)
 const createUser = async (req, res) => {
@@ -627,38 +628,98 @@ const getDashboardStats = async (req, res) => {
 // Notifications
 const sendNotification = async (req, res) => {
     try {
-        const { userId, title, message, type = 'info' } = req.body;
+const sendNotification = async (req, res) => {
+    try {
+        const { userId, targetGroup, title, message, type = 'info' } = req.body;
 
         if (!title || !message) {
             return res.status(400).json({ error: 'Title and message are required' });
         }
 
-        const id = uuidv4();
-        await pool.execute(
-            'INSERT INTO notifications (id, user_id, title, message, type) VALUES (?::uuid, ?::uuid, ?, ?, ?)',
-            [id, userId || null, title, message, type]
-        );
-
-        // Emit real-time notification via Socket.IO
         const io = req.app.get('io');
-        const notificationData = {
-            id,
-            title,
-            message,
-            type,
-            isRead: false,
-            createdAt: new Date()
-        };
+        let targetUsers = [];
 
         if (userId) {
-            io.to(userId).emit('newNotification', notificationData);
+            targetUsers = [{ id: userId }];
+        } else if (targetGroup === 'customers') {
+            const [rows] = await pool.execute(`
+                SELECT p.id FROM profiles p
+                LEFT JOIN user_roles ur ON p.id = ur.user_id::uuid
+                WHERE ur.role = 'customer' OR ur.role IS NULL
+            `);
+            targetUsers = rows;
+        } else if (targetGroup === 'agents') {
+            const [rows] = await pool.execute(`
+                SELECT p.id FROM profiles p
+                INNER JOIN user_roles ur ON p.id = ur.user_id::uuid
+                WHERE ur.role = 'agent'
+            `);
+            targetUsers = rows;
+        } else if (targetGroup === 'superagents') {
+            const [rows] = await pool.execute(`
+                SELECT p.id FROM profiles p
+                INNER JOIN user_roles ur ON p.id = ur.user_id::uuid
+                WHERE ur.role = 'superagent'
+            `);
+            targetUsers = rows;
+        } else if (targetGroup === 'agent_store_users') {
+            const [rows] = await pool.execute(`
+                SELECT DISTINCT user_id as id FROM agent_stores
+            `);
+            targetUsers = rows;
+        } else if (targetGroup === 'admins') {
+            const [rows] = await pool.execute(`
+                SELECT p.id FROM profiles p
+                INNER JOIN user_roles ur ON p.id = ur.user_id::uuid
+                WHERE ur.role = 'admin'
+            `);
+            targetUsers = rows;
         } else {
-            io.emit('newNotification', notificationData);
+            // 'all' or default broadcast
+            const [rows] = await pool.execute('SELECT id FROM profiles');
+            targetUsers = rows;
         }
 
-        logActivity(req.user?.id, 'NOTIFICATION_SENT', `Sent system notification: "${title}"`, { notificationId: id, targetUserId: userId || 'broadcast', title, type }, req.ip);
+        let sentCount = 0;
 
-        res.status(201).json({ message: 'Notification sent successfully', id });
+        if (targetUsers.length > 0) {
+            for (const u of targetUsers) {
+                const notifId = uuidv4();
+                await pool.execute(
+                    'INSERT INTO notifications (id, user_id, title, message, type) VALUES (?::uuid, ?::uuid, ?, ?, ?)',
+                    [notifId, u.id, title, message, type]
+                );
+
+                const notificationData = {
+                    id: notifId,
+                    title,
+                    message,
+                    type,
+                    isRead: false,
+                    createdAt: new Date()
+                };
+
+                if (io) {
+                    io.to(u.id).emit('newNotification', notificationData);
+                }
+                sentCount++;
+            }
+        } else {
+            // Fallback general broadcast
+            const id = uuidv4();
+            await pool.execute(
+                'INSERT INTO notifications (id, user_id, title, message, type) VALUES (?::uuid, NULL, ?, ?, ?)',
+                [id, title, message, type]
+            );
+            if (io) {
+                io.emit('newNotification', { id, title, message, type, isRead: false, createdAt: new Date() });
+            }
+            sentCount = 1;
+        }
+
+        logActivity(req.user?.id, 'NOTIFICATION_SENT', `Sent system notification "${title}" to ${sentCount} user(s)`, { targetGroup: targetGroup || userId || 'broadcast', title, type, sentCount }, req.ip);
+
+        res.status(201).json({ message: `Notification dispatched successfully to ${sentCount} user(s)`, sentCount });
     } catch (error) {
         console.error('Send notification error:', error);
         res.status(500).json({ error: 'Failed to send notification' });
@@ -733,7 +794,7 @@ const clearAllNotifications = async (req, res) => {
 
 const sendEmail = async (req, res) => {
     try {
-        const { to, subject, body } = req.body;
+        const { to, subject, body, sendSmtp = true } = req.body;
 
         if (!subject || !body) {
             return res.status(400).json({ error: 'Subject and body are required' });
@@ -742,34 +803,47 @@ const sendEmail = async (req, res) => {
         const io = req.app.get('io');
         let users = [];
 
-        // Determine recipients based on 'to' field
         if (to === 'all') {
-            // Get all users
-            const [rows] = await pool.execute('SELECT id, full_name FROM profiles');
+            const [rows] = await pool.execute('SELECT p.id, p.full_name, u.email FROM profiles p JOIN users u ON p.id = u.uuid::uuid');
             users = rows;
         } else if (to === 'customers') {
-            // Get customers only
             const [rows] = await pool.execute(`
-                SELECT p.id, p.full_name FROM profiles p
+                SELECT p.id, p.full_name, u.email FROM profiles p
+                JOIN users u ON p.id = u.uuid::uuid
                 LEFT JOIN user_roles ur ON p.id = ur.user_id::uuid
                 WHERE ur.role = 'customer' OR ur.role IS NULL
             `);
             users = rows;
         } else if (to === 'agents') {
-            // Get agents and superagents
             const [rows] = await pool.execute(`
-                SELECT p.id, p.full_name FROM profiles p
+                SELECT p.id, p.full_name, u.email FROM profiles p
+                JOIN users u ON p.id = u.uuid::uuid
                 INNER JOIN user_roles ur ON p.id = ur.user_id::uuid
-                WHERE ur.role = 'agent' OR ur.role = 'superagent'
+                WHERE ur.role = 'agent'
+            `);
+            users = rows;
+        } else if (to === 'superagents') {
+            const [rows] = await pool.execute(`
+                SELECT p.id, p.full_name, u.email FROM profiles p
+                JOIN users u ON p.id = u.uuid::uuid
+                INNER JOIN user_roles ur ON p.id = ur.user_id::uuid
+                WHERE ur.role = 'superagent'
+            `);
+            users = rows;
+        } else if (to === 'agent_store_users') {
+            const [rows] = await pool.execute(`
+                SELECT DISTINCT p.id, p.full_name, u.email 
+                FROM agent_stores s
+                JOIN profiles p ON s.user_id = p.id
+                JOIN users u ON p.id = u.uuid::uuid
             `);
             users = rows;
         } else if (to && to.includes('@')) {
-            // Custom email list - find users by email
             const emails = to.split(',').map(e => e.trim()).filter(e => e);
             if (emails.length > 0) {
                 const placeholders = emails.map(() => '?').join(',');
                 const [rows] = await pool.execute(
-                    `SELECT id, full_name FROM profiles WHERE email IN (${placeholders})`,
+                    `SELECT p.id, p.full_name, u.email FROM profiles p JOIN users u ON p.id = u.uuid::uuid WHERE u.email IN (${placeholders})`,
                     emails
                 );
                 users = rows;
@@ -777,11 +851,13 @@ const sendEmail = async (req, res) => {
         }
 
         if (users.length === 0) {
-            return res.status(400).json({ error: 'No recipients found' });
+            return res.status(400).json({ error: 'No matching recipients found' });
         }
 
-        // Send in-app message to each user
         let sentCount = 0;
+        let smtpSentCount = 0;
+        let smtpFailedCount = 0;
+
         for (const user of users) {
             try {
                 const messageId = uuidv4();
@@ -790,7 +866,6 @@ const sendEmail = async (req, res) => {
                     [messageId, req.user.id, user.id, subject, body]
                 );
 
-                // Emit Socket.IO event for real-time delivery
                 if (io) {
                     io.to(user.id).emit('newMessage', {
                         id: messageId,
@@ -803,20 +878,33 @@ const sendEmail = async (req, res) => {
                     });
                 }
                 sentCount++;
+
+                // Send actual SMTP email if requested and recipient has valid email
+                if (sendSmtp && user.email) {
+                    const mailRes = await sendGenericEmail({
+                        to: user.email,
+                        subject: subject,
+                        text: body
+                    });
+                    if (mailRes.success) smtpSentCount++;
+                    else smtpFailedCount++;
+                }
             } catch (err) {
                 console.error(`Failed to send message to user ${user.id}:`, err);
             }
         }
 
-        logActivity(req.user?.id, 'EMAIL_SENT', `Sent administrative message to ${sentCount} user(s): "${subject}"`, { targetGroup: to, recipientCount: sentCount, subject }, req.ip);
+        logActivity(req.user?.id, 'EMAIL_SENT', `Sent administrative email/message to ${sentCount} user(s): "${subject}"`, { targetGroup: to, recipientCount: sentCount, smtpSentCount, subject }, req.ip);
 
         res.json({
-            message: `Messages sent successfully to ${sentCount} user(s)`,
-            sentCount
+            message: `Communication dispatched successfully to ${sentCount} user(s). SMTP emails sent: ${smtpSentCount}, failed: ${smtpFailedCount}.`,
+            sentCount,
+            smtpSentCount,
+            smtpFailedCount
         });
     } catch (error) {
         console.error('Send email/message error:', error);
-        res.status(500).json({ error: 'Failed to send messages' });
+        res.status(500).json({ error: 'Failed to send messages or emails' });
     }
 };
 

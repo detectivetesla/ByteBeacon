@@ -266,7 +266,35 @@ Review this application at: ${process.env.FRONTEND_URL || 'http://localhost:5173
     }
 };
 
+/**
+ * Send generic/custom email to a recipient or group
+ * @param {Object} options - { to, subject, html, text }
+ */
+const sendGenericEmail = async ({ to, subject, html, text }) => {
+    const transporter = createTransporter();
+    const fromAddress = process.env.SMTP_USER || 'no-reply@bytebeacon.online';
+
+    const mailOptions = {
+        from: `"ByteBeacon" <${fromAddress}>`,
+        to,
+        subject: subject || 'Notice from ByteBeacon',
+        html: html || `<p>${(text || '').replace(/\n/g, '<br>')}</p>`,
+        text: text || ''
+    };
+
+    try {
+        console.log(`📧 Dispatching email to: ${to} | Subject: "${subject}"`);
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`✅ Email sent successfully to ${to} (${info.messageId})`);
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
+        console.error(`❌ Failed to send email to ${to}:`, error.message);
+        return { success: false, error: error.message };
+    }
+};
+
 module.exports = {
     sendPasswordResetEmail,
-    sendAgentApplicationEmail
+    sendAgentApplicationEmail,
+    sendGenericEmail
 };

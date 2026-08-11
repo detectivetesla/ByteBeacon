@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { agentStoreService, AgentStore } from '@/services/agentStore.service';
 import { AgentStoreContainer } from './AgentStoreContainer';
+import { AgentNotificationCenter } from './AgentNotificationCenter';
 import {
     Store,
     BarChart3,
@@ -269,25 +270,26 @@ export const AgentStoreLayout: React.FC = () => {
 
             {/* Standalone Sidebar Navigation */}
             <aside className={cn(
-                "fixed inset-y-0 left-0 z-50 w-64 bg-[#18191c] border-r border-white/5 flex flex-col transition-transform duration-300 md:static md:translate-x-0",
+                "fixed inset-y-0 left-0 z-50 w-[min(18rem,85vw)] md:w-64 bg-[#18191c] border-r border-white/5 flex flex-col transition-transform duration-300 md:static md:translate-x-0 shadow-2xl md:shadow-none",
                 mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
             )}>
                 {/* Store App Brand Header */}
-                <div className="p-6 border-b border-white/5 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-[#a3e635]/10 border border-[#a3e635]/30 flex items-center justify-center text-[#a3e635]">
+                <div className="p-4 sm:p-5 border-b border-white/5 flex items-center justify-between gap-2 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-10 h-10 rounded-2xl bg-[#a3e635]/10 border border-[#a3e635]/30 flex items-center justify-center text-[#a3e635] shrink-0">
                             <Store className="w-5 h-5" />
                         </div>
-                        <div>
-                            <h2 className="font-black text-white text-base tracking-tight truncate max-w-[130px]">
+                        <div className="min-w-0 flex-1">
+                            <h2 className="font-black text-white text-sm sm:text-base tracking-tight truncate">
                                 {store?.store_name || 'Agent Store'}
                             </h2>
-                            <p className="text-[10px] text-slate-400 font-medium">Reseller App Console</p>
+                            <p className="text-[10px] text-slate-400 font-medium truncate">Reseller App Console</p>
                         </div>
                     </div>
                     <button
                         onClick={() => setMobileMenuOpen(false)}
-                        className="md:hidden text-slate-400 hover:text-white"
+                        className="md:hidden p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all shrink-0"
+                        aria-label="Close navigation menu"
                     >
                         <X className="w-5 h-5" />
                     </button>
@@ -295,20 +297,20 @@ export const AgentStoreLayout: React.FC = () => {
 
                 {/* Store Status Indicator Card */}
                 {store && (
-                    <div className="mx-4 mt-4 p-3 bg-[#202227] rounded-2xl border border-white/5 space-y-1.5">
-                        <div className="flex items-center justify-between">
+                    <div className="mx-3.5 mt-3.5 p-3 bg-[#202227] rounded-2xl border border-white/5 space-y-1.5 min-w-0">
+                        <div className="flex items-center justify-between flex-wrap gap-1">
                             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Store Status</span>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                                 Operational
                             </span>
                         </div>
-                        <p className="text-xs font-bold text-white truncate">{store.store_name}</p>
+                        <p className="text-xs font-bold text-white truncate max-w-full">{store.store_name}</p>
                     </div>
                 )}
 
                 {/* Agent Store Nav Menu */}
-                <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+                <nav className="flex-1 overflow-y-auto p-3.5 space-y-1 min-w-0">
                     <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Management</p>
                     {navItems.map((item) => {
                         const Icon = item.icon;
@@ -319,43 +321,43 @@ export const AgentStoreLayout: React.FC = () => {
                                 to={item.href}
                                 onClick={() => setMobileMenuOpen(false)}
                                 className={cn(
-                                    "flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all",
+                                    "flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all min-w-0",
                                     active
                                         ? "bg-[#a3e635] text-black shadow-md shadow-[#a3e635]/20 font-extrabold"
                                         : "text-slate-400 hover:text-white hover:bg-white/5"
                                 )}
                             >
-                                <Icon className="w-4 h-4" />
-                                <span>{item.label}</span>
+                                <Icon className="w-4 h-4 shrink-0" />
+                                <span className="truncate">{item.label}</span>
                             </Link>
                         );
                     })}
 
                     {store?.slug && (
-                        <div className="pt-4 border-t border-white/5 mt-4 space-y-1">
+                        <div className="pt-3.5 border-t border-white/5 mt-3.5 space-y-1 min-w-0">
                             <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Public Storefront</p>
                             <a
                                 href={`/store/${store.slug}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold text-[#a3e635] bg-[#a3e635]/10 border border-[#a3e635]/20 hover:bg-[#a3e635]/20 transition-all"
+                                className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold text-[#a3e635] bg-[#a3e635]/10 border border-[#a3e635]/20 hover:bg-[#a3e635]/20 transition-all min-w-0"
                             >
-                                <Globe className="w-4 h-4" />
+                                <Globe className="w-4 h-4 shrink-0" />
                                 <span className="truncate">View Public Shop</span>
-                                <ExternalLink className="w-3.5 h-3.5 ml-auto" />
+                                <ExternalLink className="w-3.5 h-3.5 ml-auto shrink-0" />
                             </a>
                         </div>
                     )}
                 </nav>
 
                 {/* Sidebar Footer: Return to Main ByteBeacon */}
-                <div className="p-4 border-t border-white/5 space-y-2">
+                <div className="p-3.5 border-t border-white/5 space-y-2 shrink-0">
                     <Link
                         to="/dashboard"
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#202227] hover:bg-[#282a30] text-slate-300 hover:text-white border border-white/5 text-xs font-bold transition-all"
+                        className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-[#202227] hover:bg-[#282a30] text-slate-300 hover:text-white border border-white/5 text-xs font-bold transition-all min-w-0"
                     >
-                        <ArrowLeft className="w-3.5 h-3.5" />
-                        <span>ByteBeacon Dashboard</span>
+                        <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">ByteBeacon Dashboard</span>
                     </Link>
                 </div>
             </aside>
@@ -400,6 +402,9 @@ export const AgentStoreLayout: React.FC = () => {
                             <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
                             <span>ByteBeacon Main</span>
                         </Link>
+
+                        {/* In-App Notification Center */}
+                        <AgentNotificationCenter />
 
                         {/* User Profile Avatar */}
                         <div className="w-8 h-8 rounded-xl bg-[#a3e635]/20 text-[#a3e635] font-bold text-xs flex items-center justify-center border border-[#a3e635]/30 shrink-0">

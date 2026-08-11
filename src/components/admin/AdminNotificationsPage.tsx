@@ -25,7 +25,7 @@ export default function AdminNotificationsPage() {
 
     // New Notification State
     const [showCreateModal, setShowCreateModal] = useState(false);
-    const [createForm, setCreateForm] = useState({ title: '', message: '', type: 'info', userId: '' });
+    const [createForm, setCreateForm] = useState({ title: '', message: '', type: 'info', targetGroup: 'all', userId: '' });
     const [sending, setSending] = useState(false);
     const { socket } = useSocket();
 
@@ -72,16 +72,17 @@ export default function AdminNotificationsPage() {
 
         setSending(true);
         try {
-            await adminService.sendNotification({
+            const res = await adminService.sendNotification({
                 title: createForm.title,
                 message: createForm.message,
                 type: createForm.type,
-                userId: createForm.userId || undefined
+                targetGroup: createForm.targetGroup,
+                userId: createForm.targetGroup === 'individual' ? createForm.userId : undefined
             });
 
-            toast({ title: 'Success', description: 'Notification sent successfully' });
+            toast({ title: 'Success', description: res.message || 'Notification sent successfully' });
             setShowCreateModal(false);
-            setCreateForm({ title: '', message: '', type: 'info', userId: '' });
+            setCreateForm({ title: '', message: '', type: 'info', targetGroup: 'all', userId: '' });
             fetchNotifications();
         } catch (err) {
             console.error('Send notification error:', err);
@@ -304,22 +305,43 @@ export default function AdminNotificationsPage() {
 
             {/* Create Notification Modal */}
             <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-                <DialogContent className="bg-[#1e293b] border-slate-700 text-white">
+                <DialogContent className="bg-[#1e293b] border-slate-700 text-white max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>Send Notification / Update</DialogTitle>
+                        <DialogTitle className="text-lg font-bold text-white">Send Notification / Announcement</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <Label className="text-slate-300">Target User ID (Optional - leave empty for all)</Label>
-                            <Input
-                                value={createForm.userId}
-                                onChange={(e) => setCreateForm({ ...createForm, userId: e.target.value })}
-                                placeholder="User UUID..."
-                                className="bg-slate-700/50 border-slate-600 text-white"
-                            />
+                            <Label className="text-slate-300 font-semibold text-xs uppercase tracking-wider">Target Recipient Group</Label>
+                            <Select value={createForm.targetGroup} onValueChange={(val) => setCreateForm({ ...createForm, targetGroup: val })}>
+                                <SelectTrigger className="w-full bg-slate-700/50 border-slate-600 text-white">
+                                    <SelectValue placeholder="Select target group" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-800 border-slate-600 text-white">
+                                    <SelectItem value="all">Everyone (All Users)</SelectItem>
+                                    <SelectItem value="customers">All Customers</SelectItem>
+                                    <SelectItem value="agents">All Agents</SelectItem>
+                                    <SelectItem value="superagents">All SuperAgents</SelectItem>
+                                    <SelectItem value="agent_store_users">All Agent Store / SuperAgent Resellers</SelectItem>
+                                    <SelectItem value="admins">All Admins</SelectItem>
+                                    <SelectItem value="individual">Specific Individual (by UUID)</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
+
+                        {createForm.targetGroup === 'individual' && (
+                            <div className="space-y-2">
+                                <Label className="text-slate-300">Target User UUID</Label>
+                                <Input
+                                    value={createForm.userId}
+                                    onChange={(e) => setCreateForm({ ...createForm, userId: e.target.value })}
+                                    placeholder="e.g. 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+                                    className="bg-slate-700/50 border-slate-600 text-white font-mono text-xs"
+                                />
+                            </div>
+                        )}
+
                         <div className="space-y-2">
-                            <Label className="text-slate-300">Title</Label>
+                            <Label className="text-slate-300">Notification Title</Label>
                             <Input
                                 value={createForm.title}
                                 onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
@@ -327,36 +349,42 @@ export default function AdminNotificationsPage() {
                                 className="bg-slate-700/50 border-slate-600 text-white"
                             />
                         </div>
+
                         <div className="space-y-2">
-                            <Label className="text-slate-300">Type</Label>
+                            <Label className="text-slate-300">Type / Classification</Label>
                             <Select value={createForm.type} onValueChange={(value) => setCreateForm({ ...createForm, type: value })}>
                                 <SelectTrigger className="w-full bg-slate-700/50 border-slate-600 text-white">
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent className="bg-slate-800 border-slate-600">
-                                    <SelectItem value="info" className="text-white hover:bg-slate-700 focus:bg-slate-700">Info</SelectItem>
-                                    <SelectItem value="success" className="text-white hover:bg-slate-700 focus:bg-slate-700">Success</SelectItem>
-                                    <SelectItem value="warning" className="text-white hover:bg-slate-700 focus:bg-slate-700">Warning</SelectItem>
-                                    <SelectItem value="error" className="text-white hover:bg-slate-700 focus:bg-slate-700">Error</SelectItem>
+                                <SelectContent className="bg-slate-800 border-slate-600 text-white">
+                                    <SelectItem value="info">Info / System Notice</SelectItem>
+                                    <SelectItem value="success">Success / Approval</SelectItem>
+                                    <SelectItem value="warning">Warning / Action Required</SelectItem>
+                                    <SelectItem value="error">Error / Critical Alert</SelectItem>
+                                    <SelectItem value="store">Agent Store Alert</SelectItem>
+                                    <SelectItem value="withdrawal">Withdrawal Notice</SelectItem>
+                                    <SelectItem value="order">Order Update</SelectItem>
+                                    <SelectItem value="announcement">Official Announcement</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
+
                         <div className="space-y-2">
-                            <Label className="text-slate-300">Message</Label>
+                            <Label className="text-slate-300">Message Body</Label>
                             <textarea
                                 value={createForm.message}
                                 onChange={(e) => setCreateForm({ ...createForm, message: e.target.value })}
-                                className="w-full h-32 p-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none resize-none"
+                                className="w-full h-28 p-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none resize-none text-sm"
                                 placeholder="Enter notification message..."
                             />
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowCreateModal(false)} className="border-slate-600">
+                    <DialogFooter className="gap-2">
+                        <Button variant="outline" onClick={() => setShowCreateModal(false)} className="border-slate-600 text-slate-300">
                             Cancel
                         </Button>
-                        <Button onClick={handleSendNotification} disabled={sending} className="bg-emerald-500 hover:bg-emerald-600">
-                            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send Notification'}
+                        <Button onClick={handleSendNotification} disabled={sending} className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Dispatch Notification'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -121,7 +121,7 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
     return (
         <div className="space-y-4 sm:space-y-6 bg-[#141518] text-white p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl font-sans w-full min-w-0">
             {/* Header / Financial Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
                 <div className="bg-[#202227] p-6 rounded-2xl border border-[#a3e635]/20 shadow-xl space-y-2 relative overflow-hidden">
                     <div className="flex justify-between items-center text-slate-400 text-xs">
                         <span>Available Profit</span>

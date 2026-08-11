@@ -522,6 +522,37 @@ exports.updateStoreProducts = async (req, res) => {
     }
 };
 
+// 7b. DELETE / UNLINK STORE PRODUCT
+exports.deleteStoreProduct = async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const userId = req.user.id;
+        const { bundleId } = req.params;
+
+        const [stores] = await connection.execute('SELECT id FROM agent_stores WHERE user_id = ?::uuid', [userId]);
+
+        if (stores.length === 0) {
+            return res.status(404).json({ success: false, error: 'Agent Store not found' });
+        }
+
+        const storeId = stores[0].id;
+
+        await connection.execute(
+            'DELETE FROM agent_store_products WHERE store_id = ?::uuid AND bundle_id = ?::uuid',
+            [storeId, bundleId]
+        );
+
+        logActivity(userId, 'AGENT_PRODUCT_REMOVED', `Removed data bundle product from Agent Store`, { storeId, bundleId }, req.ip);
+
+        res.json({ success: true, message: 'Product removed from store successfully!' });
+    } catch (error) {
+        console.error('Error removing store product:', error);
+        res.status(500).json({ success: false, error: 'Failed to remove store product' });
+    } finally {
+        if (connection) connection.release();
+    }
+};
+
 // 8. GET DASHBOARD STATS
 exports.getDashboardStats = async (req, res) => {
     const connection = await pool.getConnection();

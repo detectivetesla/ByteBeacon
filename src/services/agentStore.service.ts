@@ -125,6 +125,11 @@ export const agentStoreService = {
         return api.post<{ success: boolean; message: string }>('/agent-store/products/update', { products });
     },
 
+    // 7b. Delete / remove store product
+    deleteProduct: async (bundleId: string) => {
+        return api.delete<{ success: boolean; message: string }>(`/agent-store/products/${bundleId}`);
+    },
+
     // 8. Get dashboard stats
     getDashboardStats: async () => {
         return api.get<DashboardStatsResponse>('/agent-store/dashboard');

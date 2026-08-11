@@ -66,16 +66,16 @@ export const AgentOrdersPage: React.FC = () => {
             </div>
 
             {/* Filter Bar */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+            <div className="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center w-full min-w-0">
                 {/* Status Chips */}
-                <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+                <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1.5 sm:pb-0 min-w-0 max-w-full">
                     {['ALL', 'completed', 'processing', 'failed'].map(st => (
                         <button
                             key={st}
                             onClick={() => setStatusFilter(st)}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all uppercase ${
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all uppercase shrink-0 ${
                                 statusFilter === st
-                                    ? 'bg-[#a3e635] text-black shadow-md shadow-[#a3e635]/20'
+                                    ? 'bg-[#a3e635] text-black shadow-md shadow-[#a3e635]/20 font-extrabold'
                                     : 'bg-[#202227] text-slate-400 hover:text-white border border-white/5'
                             }`}
                         >
@@ -85,8 +85,8 @@ export const AgentOrdersPage: React.FC = () => {
                 </div>
 
                 {/* Search */}
-                <form onSubmit={handleSearch} className="relative w-full sm:w-64">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <form onSubmit={handleSearch} className="relative w-full sm:w-64 shrink-0 min-w-0">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 shrink-0" />
                     <input
                         type="text"
                         placeholder="Search phone / reference..."

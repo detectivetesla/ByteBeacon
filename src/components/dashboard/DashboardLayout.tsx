@@ -202,13 +202,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 userRole={role}
             />
 
-            {/* Floating WhatsApp - different links for customer vs agent */}
-            <FloatingWhatsApp
-                link={role === 'agent'
-                    ? 'https://chat.whatsapp.com/IKtOgWHTkXV7fRIB9LUXTW'
-                    : 'https://chat.whatsapp.com/IXbpxXZMqjXE7FeWdqWqdW'
-                }
-            />
+            {/* Floating WhatsApp */}
+            <FloatingWhatsApp link="https://chat.whatsapp.com/Jpmtz6kPYbR6bcYV63MiQi" />
         </div>
     );
 }

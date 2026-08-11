@@ -10,6 +10,7 @@ const {
     verifyActivationPayment,
     getStoreProducts,
     updateStoreProducts,
+    deleteStoreProduct,
     getDashboardStats,
     getAgentOrders,
     getAgentTransactions,
@@ -45,6 +46,7 @@ router.post('/activate/verify', auth, paymentLimiter, verifyActivationPayment);
 // Products & Pricing
 router.get('/products', auth, getStoreProducts);
 router.post('/products/update', auth, agentOrAdmin, updateStoreProducts);
+router.delete('/products/:bundleId', auth, agentOrAdmin, deleteStoreProduct);
 
 // Dashboard & Stats
 router.get('/dashboard', auth, getDashboardStats);

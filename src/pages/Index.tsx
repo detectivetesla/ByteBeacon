@@ -54,7 +54,7 @@ export default function Index() {
         <CTASection isDarkMode={isDarkMode} />
       </main>
       <Footer isDarkMode={isDarkMode} />
-      <FloatingWhatsApp link="https://chat.whatsapp.com/IXbpxXZMqjXE7FeWdqWqdW" />
+      <FloatingWhatsApp link="https://chat.whatsapp.com/Jpmtz6kPYbR6bcYV63MiQi" />
     </div>
   );
 }

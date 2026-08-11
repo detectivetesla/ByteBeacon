@@ -168,7 +168,7 @@ export const adminService = {
     },
 
     // Notifications
-    sendNotification: async (data: { userId?: string; title: string; message: string; type?: string }): Promise<{ message: string }> => {
+    sendNotification: async (data: { userId?: string; targetGroup?: string; title: string; message: string; type?: string }): Promise<{ message: string; sentCount?: number }> => {
         return api.post('/admin/notifications', data);
     },
 
