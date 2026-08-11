@@ -429,8 +429,9 @@ export default function PublicStorefront() {
                                     <div className="flex justify-between items-center border-b border-white/5 pb-2">
                                         <span className="text-slate-400">Status</span>
                                         <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                                            trackedOrder.fulfillment_status === 'COMPLETED' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                                            trackedOrder.fulfillment_status === 'FAILED' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                                            (trackedOrder.fulfillment_status || '').toLowerCase() === 'completed' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                            (trackedOrder.fulfillment_status || '').toLowerCase() === 'refunded' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
+                                            (trackedOrder.fulfillment_status || '').toLowerCase() === 'failed' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
                                             'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse'
                                         }`}>
                                             {trackedOrder.fulfillment_status || 'PROCESSING'}

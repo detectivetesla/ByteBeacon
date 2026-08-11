@@ -69,7 +69,7 @@ export const AgentOrdersPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center w-full min-w-0">
                 {/* Status Chips */}
                 <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1.5 sm:pb-0 min-w-0 max-w-full">
-                    {['ALL', 'completed', 'processing', 'failed'].map(st => (
+                    {['ALL', 'completed', 'processing', 'failed', 'refunded'].map(st => (
                         <button
                             key={st}
                             onClick={() => setStatusFilter(st)}
@@ -120,7 +120,7 @@ export const AgentOrdersPage: React.FC = () => {
                     </div>
                 ) : orders.length === 0 ? (
                     <div className="p-12 text-center text-slate-400 text-sm">
-                        No orders recorded yet. Share your store link to get started!
+                        No store orders found.
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
@@ -129,13 +129,13 @@ export const AgentOrdersPage: React.FC = () => {
                                 <tr>
                                     <th className="p-4">Customer Phone</th>
                                     <th className="p-4">Network</th>
-                                    <th className="p-4">Bundle</th>
-                                    <th className="p-4">Base Cost</th>
-                                    <th className="p-4">Sale Price</th>
+                                    <th className="p-4">Data Package</th>
+                                    <th className="p-4">Wholesale Base</th>
+                                    <th className="p-4">Selling Price</th>
                                     <th className="p-4">Your Profit</th>
-                                    <th className="p-4">Fulfillment Status</th>
-                                    <th className="p-4">Date</th>
-                                    <th className="p-4 text-right">Actions</th>
+                                    <th className="p-4">Status</th>
+                                    <th className="p-4">Date & Time</th>
+                                    <th className="p-4 text-right">Fulfillment Trace</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
@@ -153,6 +153,7 @@ export const AgentOrdersPage: React.FC = () => {
                                             <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                                                 o.fulfillment_status === 'completed' ? 'bg-[#a3e635]/20 text-[#a3e635] border border-[#a3e635]/30' :
                                                 o.fulfillment_status === 'processing' ? 'bg-amber-400/20 text-amber-400 border border-amber-400/30' :
+                                                o.fulfillment_status === 'refunded' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
                                                 'bg-red-400/20 text-red-400 border border-red-400/30'
                                             }`}>
                                                 {o.fulfillment_status}

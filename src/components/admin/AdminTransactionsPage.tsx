@@ -24,6 +24,7 @@ import {
     CheckCircle2,
     Clock,
     XCircle,
+    RotateCcw,
     Package,
     SlidersHorizontal,
     MoreHorizontal,
@@ -328,6 +329,8 @@ export default function AdminTransactionsPage() {
             case 'ongoing':
             case 'queued':
                 return <Clock className="w-4 h-4 text-amber-500 animate-pulse" />;
+            case 'refunded':
+                return <RotateCcw className="w-4 h-4 text-purple-400" />;
             case 'failed':
             default:
                 return <XCircle className="w-4 h-4 text-red-500" />;
@@ -343,6 +346,8 @@ export default function AdminTransactionsPage() {
             case 'ongoing':
             case 'queued':
                 return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
+            case 'refunded':
+                return 'bg-purple-500/10 text-purple-400 border border-purple-500/20';
             case 'failed':
             default:
                 return 'bg-red-500/10 text-red-400 border border-red-500/20';
@@ -505,7 +510,7 @@ export default function AdminTransactionsPage() {
                             />
                         </div>
                         <div className="flex gap-1.5 overflow-x-auto hide-scrollbar">
-                            {['all', 'processing', 'completed', 'failed'].map((status) => (
+                            {['all', 'processing', 'completed', 'failed', 'refunded'].map((status) => (
                                 <Button
                                     key={status}
                                     variant={statusFilter === status ? 'default' : 'outline'}

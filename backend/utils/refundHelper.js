@@ -50,8 +50,8 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
             return { success: false, error: 'Refund amount must be greater than zero' };
         }
 
-        // 2. Check if a refund record has ALREADY been inserted for this transaction ID
-        let alreadyRefunded = tx.paid === 'refunded';
+        // 2. Check if transaction has ALREADY been refunded
+        let alreadyRefunded = tx.status === 'refunded' || tx.paid === 'refunded';
 
         if (!alreadyRefunded && targetUserId) {
             const [existingRefunds] = await connection.execute(
@@ -76,11 +76,40 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
             return { success: false, reason: 'Already refunded' };
         }
 
-        // 3. Mark transaction as failed and paid status as refunded
+        // 3. Mark transaction as REFUNDED (both status and paid status = 'refunded')
         await connection.execute(
-            'UPDATE transactions SET status = \'failed\', paid = \'refunded\', failure_reason = COALESCE(failure_reason, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
+            'UPDATE transactions SET status = \'refunded\', paid = \'refunded\', failure_reason = COALESCE(failure_reason, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
             [reason, transactionId]
         );
+
+        // Check matching agent_orders and update status & handle profit reversal if applicable
+        const [agentOrders] = await connection.execute(
+            'SELECT id, agent_id, store_id, profit_ghc, fulfillment_status FROM agent_orders WHERE paystack_reference = ? OR id = ?::uuid FOR UPDATE',
+            [tx.paystack_reference || transactionId, transactionId]
+        );
+
+        if (agentOrders.length > 0) {
+            const agentOrder = agentOrders[0];
+            if (agentOrder.fulfillment_status === 'completed') {
+                const profitToReverse = parseFloat(agentOrder.profit_ghc || 0);
+                if (profitToReverse > 0) {
+                    await connection.execute(
+                        'UPDATE agent_wallets SET available_balance = available_balance - ?, total_profit_earned = total_profit_earned - ?, updated_at = CURRENT_TIMESTAMP WHERE agent_id = ?::uuid',
+                        [profitToReverse, profitToReverse, agentOrder.agent_id]
+                    );
+                    await connection.execute(
+                        `INSERT INTO agent_wallet_ledger (id, agent_id, store_id, order_id, type, amount_ghc, balance_after, description, reference, created_at)
+                         VALUES (?::uuid, ?::uuid, ?::uuid, ?::uuid, 'PROFIT_REVERSAL', ?, (SELECT available_balance FROM agent_wallets WHERE agent_id = ?::uuid), ?, ?, NOW())`,
+                        [uuidv4(), agentOrder.agent_id, agentOrder.store_id, agentOrder.id, -profitToReverse, agentOrder.agent_id, `Profit reversal for refunded order #${agentOrder.id.slice(0, 8)}`, tx.paystack_reference || transactionId]
+                    );
+                }
+            }
+
+            await connection.execute(
+                'UPDATE agent_orders SET fulfillment_status = \'refunded\', payment_status = \'refunded\', updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
+                [agentOrder.id]
+            );
+        }
 
         // 4. Perform wallet balance credit & refund log insertion
         if (targetUserId) {
@@ -99,12 +128,23 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
                 [refundAmount, targetUserId]
             );
 
-            // Insert into refunds table (ONLY included when transaction commits successfully)
+            // Insert into refunds table
             const refundId = uuidv4();
             const noteText = `Refund for failed order #${transactionId.slice(0, 8)} [${transactionId}] (${reason})`;
             await connection.execute(
                 'INSERT INTO refunds (id, user_id, amount_ghc, notes) VALUES (?::uuid, ?::uuid, ?, ?)',
                 [refundId, targetUserId, refundAmount, noteText]
+            );
+
+            // Send in-app notification confirming refund completion
+            await connection.execute(
+                `INSERT INTO notifications (id, user_id, title, message, type)
+                 VALUES (?::uuid, ?::uuid, 'Order Refunded', ?, 'info')`,
+                [
+                    uuidv4(),
+                    targetUserId,
+                    `Your order #${transactionId.slice(0, 8)} could not be completed and GHS ${refundAmount.toFixed(2)} has been successfully refunded to your wallet.`
+                ]
             );
         } else if (targetPartnerId) {
             // Lock partner row
@@ -127,7 +167,7 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
                     );
                 }
 
-                // Insert into partner_ledger (ONLY included when transaction commits successfully)
+                // Insert into partner_ledger
                 await connection.execute(
                     `INSERT INTO partner_ledger (partner_id, type, amount, description, reference)
                      VALUES (?::uuid, 'refund', ?, ?, ?::uuid)`,
@@ -139,7 +179,7 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
         await connection.commit();
         connection.release();
 
-        console.log(`✅ [REFUND HELPER] Successfully refunded GH₵${refundAmount.toFixed(2)} for transaction ${transactionId}`);
+        console.log(`✅ [REFUND HELPER] Successfully refunded GH₵${refundAmount.toFixed(2)} for transaction ${transactionId} (Status set to REFUNDED)`);
 
         // Log activity (non-blocking)
         if (targetUserId) {
@@ -156,4 +196,39 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
     }
 };
 
-module.exports = { processAutomatedRefund };
+/**
+ * Initiate refund directly via Paystack REST API
+ */
+const processPaystackRefund = async ({ paystackReference, amountGhc, reason = 'Order fulfillment failure refund' }) => {
+    try {
+        const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY;
+        if (!paystackSecretKey) {
+            return { success: false, error: 'Paystack secret key is missing' };
+        }
+
+        const bodyData = { transaction: paystackReference };
+        if (amountGhc && amountGhc > 0) {
+            bodyData.amount = Math.round(amountGhc * 100);
+        }
+
+        const response = await fetch('https://api.paystack.co/refund', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${paystackSecretKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(bodyData)
+        });
+
+        const data = await response.json();
+        if (data.status && (data.data?.status === 'processed' || data.data?.status === 'pending' || data.data?.status === 'processing')) {
+            return { success: true, paystackData: data.data };
+        }
+
+        return { success: false, error: data.message || 'Paystack refund request failed', details: data };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+};
+
+module.exports = { processAutomatedRefund, processPaystackRefund };

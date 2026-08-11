@@ -597,6 +597,16 @@ const initializeTables = async () => {
                 console.log('✅ Seeded default Agent Store pricing rules');
             }
 
+            // Migrate existing confirmed refunded orders to 'refunded' status
+            console.log('🛠️ Migrating historical confirmed refunded records...');
+            await pool.execute(`
+                UPDATE transactions SET status = 'refunded' WHERE paid = 'refunded' AND status = 'failed';
+            `).catch(() => {});
+            await pool.execute(`
+                UPDATE agent_orders SET fulfillment_status = 'refunded', payment_status = 'refunded' WHERE payment_status = 'refunded';
+            `).catch(() => {});
+            console.log('✅ Migrated historical confirmed refunded records');
+
             console.log('✅ Agent Store & Reseller Marketplace tables initialized successfully');
         } catch (colErr) {
             console.error('⚠️ Migration error:', colErr.message);
