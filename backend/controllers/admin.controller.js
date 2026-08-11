@@ -2499,7 +2499,39 @@ const getAllAgentStores = async (req, res) => {
             ORDER BY s.created_at DESC
         `);
 
-        res.json(stores);
+        const formatted = stores.map(s => {
+            let effectiveStatus = 'PENDING';
+            if (s.is_visible === false) effectiveStatus = 'INACTIVE';
+            else if (s.review_status === 'SUSPENDED') effectiveStatus = 'SUSPENDED';
+            else if (s.review_status === 'REJECTED') effectiveStatus = 'REJECTED';
+            else if (s.review_status === 'CHANGES_REQUESTED') effectiveStatus = 'CHANGES_REQUESTED';
+            else if (s.review_status === 'PENDING_REVIEW') effectiveStatus = 'PENDING';
+            else if (s.review_status === 'APPROVED' && s.activation_status === 'PAID') effectiveStatus = 'ACTIVE';
+            else if (s.review_status === 'APPROVED' && s.activation_status !== 'PAID') effectiveStatus = 'APPROVED';
+
+            return {
+                id: s.id,
+                userId: s.user_id,
+                storeName: s.store_name,
+                slug: s.slug,
+                description: s.description,
+                phone: s.phone,
+                logoUrl: s.logo_url,
+                reviewStatus: s.review_status,
+                activationStatus: s.activation_status,
+                effectiveStatus,
+                adminNotes: s.admin_notes,
+                isVisible: s.is_visible,
+                createdAt: s.created_at,
+                updatedAt: s.updated_at,
+                userName: s.owner_name,
+                userEmail: s.owner_email,
+                totalOrders: s.total_orders,
+                totalRevenue: parseFloat(s.total_profit_earned || 0)
+            };
+        });
+
+        res.json(formatted);
     } catch (error) {
         console.error('Error getting all agent stores:', error);
         res.status(500).json({ error: 'Failed to fetch agent stores: ' + error.message });
@@ -2509,9 +2541,10 @@ const getAllAgentStores = async (req, res) => {
 const updateAgentStoreReviewStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const { review_status, admin_notes } = req.body;
+        const { review_status, admin_notes, is_visible } = req.body;
 
-        if (!['PENDING_REVIEW', 'APPROVED', 'REJECTED', 'CHANGES_REQUESTED', 'SUSPENDED'].includes(review_status)) {
+        const validStatuses = ['PENDING_REVIEW', 'APPROVED', 'REJECTED', 'CHANGES_REQUESTED', 'SUSPENDED', 'INACTIVE'];
+        if (!validStatuses.includes(review_status)) {
             return res.status(400).json({ error: 'Invalid review status' });
         }
 
@@ -2519,33 +2552,44 @@ const updateAgentStoreReviewStatus = async (req, res) => {
         if (stores.length === 0) return res.status(404).json({ error: 'Store not found' });
         const store = stores[0];
 
-        await pool.execute(
-            `UPDATE agent_stores 
-             SET review_status = ?, admin_notes = COALESCE(?, admin_notes), updated_at = NOW() 
-             WHERE id = ?::uuid`,
-            [review_status, admin_notes, id]
-        );
+        // Handle INACTIVE toggle
+        let newReviewStatus = review_status;
+        let newIsVisible = is_visible !== undefined ? is_visible : true;
 
-        // If APPROVED, promote store owner's role to 'superagent'
-        if (review_status === 'APPROVED') {
-            await pool.execute(`UPDATE users SET role = 'superagent'::user_role WHERE uuid = ?::uuid`, [store.user_id]).catch(() => {});
-            await pool.execute(`UPDATE user_roles SET role = 'superagent'::user_role WHERE user_id = ?::uuid`, [store.user_id]).catch(() => {});
+        if (review_status === 'INACTIVE') {
+            newIsVisible = false;
+            // Keep review status unchanged or set to APPROVED if it was active
+        } else if (review_status === 'APPROVED') {
+            newIsVisible = true;
         }
 
-        // Notify store owner
+        if (review_status !== 'INACTIVE') {
+            await pool.execute(
+                `UPDATE agent_stores 
+                 SET review_status = ?, is_visible = ?, admin_notes = COALESCE(?, admin_notes), updated_at = NOW() 
+                 WHERE id = ?::uuid`,
+                [newReviewStatus, newIsVisible, admin_notes || null, id]
+            );
+        } else {
+            await pool.execute(
+                `UPDATE agent_stores 
+                 SET is_visible = FALSE, admin_notes = COALESCE(?, admin_notes), updated_at = NOW() 
+                 WHERE id = ?::uuid`,
+                [admin_notes || null, id]
+            );
+        }
+
+        // Send in-app notification to Agent user
+        const notifTitle = `Store Status Update: ${review_status}`;
+        const notifMessage = `Your Agent Store "${store.store_name}" status has been updated to ${review_status}.${admin_notes ? ' Note: ' + admin_notes : ''}`;
         await pool.execute(
             `INSERT INTO notifications (id, user_id, title, message, type, created_at)
              VALUES (?::uuid, ?::uuid, ?, ?, 'info', NOW())`,
-            [
-                uuidv4(),
-                store.user_id,
-                `Agent Store Update: ${review_status.replace('_', ' ')}`,
-                `Your Agent Store "${store.store_name}" status has been updated to ${review_status.replace('_', ' ')}.${admin_notes ? ' Note: ' + admin_notes : ''}`
-            ]
-        );
+            [uuidv4(), store.user_id, notifTitle, notifMessage]
+        ).catch(() => {});
 
         const storeAction = review_status === 'APPROVED' ? 'AGENT_STORE_APPROVED' : (review_status === 'REJECTED' ? 'AGENT_STORE_REJECTED' : 'AGENT_STORE_STATUS_UPDATED');
-        logActivity(req.user?.id, storeAction, `Updated Agent Store "${store.store_name}" review status to ${review_status}`, { storeId: id, storeName: store.store_name, review_status, admin_notes }, req.ip);
+        logActivity(req.user?.id, storeAction, `Updated Agent Store "${store.store_name}" status to ${review_status}`, { storeId: id, storeName: store.store_name, review_status, admin_notes }, req.ip);
 
         res.json({ message: `Store status updated to ${review_status}` });
     } catch (error) {
@@ -2563,10 +2607,17 @@ const manualActivateAgentStore = async (req, res) => {
             const userId = stores[0].user_id;
             await pool.execute(`UPDATE users SET role = 'superagent'::user_role WHERE uuid = ?::uuid`, [userId]).catch(() => {});
             await pool.execute(`UPDATE user_roles SET role = 'superagent'::user_role WHERE user_id = ?::uuid`, [userId]).catch(() => {});
+
+            // Send notification
+            await pool.execute(
+                `INSERT INTO notifications (id, user_id, title, message, type, created_at)
+                 VALUES (?::uuid, ?::uuid, 'Agent Store Activated! 🎉', ?, 'success', NOW())`,
+                [uuidv4(), userId, `Your Agent Store "${stores[0].store_name}" has been activated by Admin. You are now live and can begin selling data!`]
+            ).catch(() => {});
         }
 
         await pool.execute(
-            `UPDATE agent_stores SET activation_status = 'PAID', updated_at = NOW() WHERE id = ?::uuid`,
+            `UPDATE agent_stores SET activation_status = 'PAID', is_visible = TRUE, updated_at = NOW() WHERE id = ?::uuid`,
             [id]
         );
 

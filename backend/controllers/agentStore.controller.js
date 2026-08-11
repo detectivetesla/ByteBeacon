@@ -17,14 +17,15 @@ const slugify = (text) => {
 };
 
 // Helper: Derive effective store status
-const deriveEffectiveStatus = (reviewStatus, activationStatus) => {
+const deriveEffectiveStatus = (reviewStatus, activationStatus, isVisible = true) => {
+    if (isVisible === false) return 'INACTIVE';
     if (reviewStatus === 'SUSPENDED') return 'SUSPENDED';
     if (reviewStatus === 'REJECTED') return 'REJECTED';
     if (reviewStatus === 'CHANGES_REQUESTED') return 'CHANGES_REQUESTED';
-    if (reviewStatus === 'PENDING_REVIEW') return 'PENDING_REVIEW';
+    if (reviewStatus === 'PENDING_REVIEW') return 'PENDING';
     if (reviewStatus === 'APPROVED' && activationStatus === 'PAID') return 'ACTIVE';
-    if (reviewStatus === 'APPROVED' && activationStatus !== 'PAID') return 'AWAITING_ACTIVATION';
-    return 'PENDING_REVIEW';
+    if (reviewStatus === 'APPROVED' && activationStatus !== 'PAID') return 'APPROVED';
+    return 'PENDING';
 };
 
 // 1. CREATE STORE
@@ -1026,7 +1027,15 @@ exports.getPublicStorefront = async (req, res) => {
         }
 
         const store = stores[0];
-        const effectiveStatus = deriveEffectiveStatus(store.review_status, store.activation_status);
+        const effectiveStatus = deriveEffectiveStatus(store.review_status, store.activation_status, store.is_visible);
+
+        if (effectiveStatus !== 'ACTIVE') {
+            return res.status(403).json({
+                success: false,
+                error: `This Agent Store is currently ${effectiveStatus.toLowerCase()} and unavailable for purchases.`,
+                effective_status: effectiveStatus
+            });
+        }
 
         if (effectiveStatus !== 'ACTIVE' || !store.is_visible) {
             return res.status(403).json({
@@ -1080,7 +1089,7 @@ exports.initializeCustomerPurchase = async (req, res) => {
 
         // Fetch store
         const [stores] = await connection.execute(
-            'SELECT id, user_id, store_name, review_status, activation_status FROM agent_stores WHERE slug = ?',
+            'SELECT id, user_id, store_name, review_status, activation_status, is_visible FROM agent_stores WHERE slug = ?',
             [slug]
         );
 
@@ -1089,10 +1098,10 @@ exports.initializeCustomerPurchase = async (req, res) => {
         }
 
         const store = stores[0];
-        const effectiveStatus = deriveEffectiveStatus(store.review_status, store.activation_status);
+        const effectiveStatus = deriveEffectiveStatus(store.review_status, store.activation_status, store.is_visible);
 
         if (effectiveStatus !== 'ACTIVE') {
-            return res.status(400).json({ success: false, error: 'Store is not active for sales' });
+            return res.status(400).json({ success: false, error: `Store is ${effectiveStatus.toLowerCase()} and not active for sales` });
         }
 
         // Fetch product & base price (must be enabled for store AND active in system)

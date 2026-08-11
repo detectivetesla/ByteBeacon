@@ -44,18 +44,20 @@ const ConfirmDialog: React.FC<{
 
 // --- Status Dot ---
 const StatusDot: React.FC<{ status: string }> = ({ status }) => {
-    const config: Record<string, { color: string; label: string }> = {
-        ACTIVE: { color: 'bg-emerald-400', label: 'Active' },
-        PENDING_REVIEW: { color: 'bg-blue-400', label: 'Pending' },
-        AWAITING_ACTIVATION: { color: 'bg-amber-400', label: 'Awaiting Activation' },
-        REJECTED: { color: 'bg-red-400', label: 'Rejected' },
-        SUSPENDED: { color: 'bg-red-400', label: 'Suspended' },
-        CHANGES_REQUESTED: { color: 'bg-amber-400', label: 'Changes Requested' },
+    const config: Record<string, { color: string; pulse: boolean; label: string }> = {
+        ACTIVE: { color: 'bg-emerald-500', pulse: true, label: 'Active' },
+        APPROVED: { color: 'bg-blue-500', pulse: true, label: 'Approved' },
+        PENDING: { color: 'bg-amber-500', pulse: true, label: 'Pending Review' },
+        PENDING_REVIEW: { color: 'bg-amber-500', pulse: true, label: 'Pending Review' },
+        AWAITING_ACTIVATION: { color: 'bg-blue-400', pulse: true, label: 'Awaiting Fee' },
+        REJECTED: { color: 'bg-red-500', pulse: true, label: 'Rejected' },
+        SUSPENDED: { color: 'bg-orange-500', pulse: true, label: 'Suspended' },
+        INACTIVE: { color: 'bg-slate-400', pulse: false, label: 'Inactive' },
     };
-    const c = config[status] || { color: 'bg-slate-400', label: status };
+    const c = config[status] || { color: 'bg-slate-400', pulse: false, label: status };
     return (
         <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-300">
-            <span className={`w-2 h-2 rounded-full ${c.color}`} />
+            <span className={`w-2 h-2 rounded-full ${c.color} ${c.pulse ? 'animate-pulse' : ''}`} />
             {c.label}
         </span>
     );
@@ -341,10 +343,11 @@ export const AdminAgentStoresPage: React.FC = () => {
                             >
                                 <option value="ALL">All Statuses</option>
                                 <option value="ACTIVE">Active</option>
-                                <option value="PENDING_REVIEW">Pending Review</option>
-                                <option value="AWAITING_ACTIVATION">Awaiting Activation</option>
+                                <option value="APPROVED">Approved</option>
+                                <option value="PENDING">Pending Review</option>
                                 <option value="SUSPENDED">Suspended</option>
                                 <option value="REJECTED">Rejected</option>
+                                <option value="INACTIVE">Inactive</option>
                             </select>
                             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                         </div>
