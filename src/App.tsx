@@ -80,7 +80,10 @@ const AppWithMaintenance = () => {
     checkMaintenance();
   }, []);
 
-  if (loading) {
+  // Skip global loading skeleton for public storefront — it has its own skeleton system
+  const isStorefrontPath = window.location.pathname.startsWith('/store/');
+
+  if (loading && !isStorefrontPath) {
     return (
       <div className="min-h-screen bg-[#0f172a] p-6 space-y-6 flex flex-col justify-center items-center">
         <div className="w-full max-w-md space-y-4">
