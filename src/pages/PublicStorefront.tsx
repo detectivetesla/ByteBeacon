@@ -421,7 +421,7 @@ export default function PublicStorefront() {
     const deliveryDuration = activeLiveOrder ? getDeliveryDuration(activeLiveOrder.created_at, activeLiveOrder.fulfillment_status) : null;
 
     return (
-        <div className={`min-h-screen font-sans selection:bg-[#a3e635] selection:text-black flex flex-col transition-colors duration-200 ${
+        <div className={`min-h-screen font-sans selection:bg-[#a3e635] selection:text-black flex flex-col transition-colors duration-200 overflow-x-hidden ${
             isDark ? 'bg-[#141518] text-white' : 'bg-slate-50 text-slate-900'
         }`}>
             {/* Top Store Header */}
@@ -565,7 +565,7 @@ export default function PublicStorefront() {
             )}
 
             {/* Main Content Area */}
-            <main className="max-w-5xl mx-auto py-6 sm:py-8 px-4 sm:px-6 flex-1 w-full space-y-8">
+            <main className="max-w-5xl mx-auto py-6 sm:py-8 px-4 sm:px-6 flex-1 w-full min-w-0 space-y-8">
                 {/* 1. HOME TAB */}
                 {activeTab === 'home' && (
                     <div className="space-y-8">
@@ -992,9 +992,9 @@ export default function PublicStorefront() {
 
                 {/* 2. BUY DATA TAB */}
                 {activeTab === 'purchase' && (
-                    <div className="space-y-6">
-                        {/* Network Chips with Network Branding */}
-                        <div className="flex items-center justify-center gap-2 overflow-x-auto pb-2">
+                    <div className="space-y-6 w-full min-w-0 max-w-full">
+                        {/* Network Chips with Network Branding & Responsive Touch Scroll */}
+                        <div className="w-full max-w-full min-w-0 flex items-center justify-start sm:justify-center gap-2 overflow-x-auto flex-nowrap pb-2 pt-1 scrollbar-none">
                             {['ALL', 'MTN', 'TELECEL', 'AIRTELTIGO'].map(net => {
                                 const isSelected = selectedNetwork === net;
                                 const netTheme = getNetworkTheme(net);
@@ -1009,7 +1009,7 @@ export default function PublicStorefront() {
                                     <button
                                         key={net}
                                         onClick={() => setSelectedNetwork(net)}
-                                        className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all uppercase border ${colorClass}`}
+                                        className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all uppercase border shrink-0 whitespace-nowrap ${colorClass}`}
                                     >
                                         {net === 'ALL' ? 'All Networks' : net}
                                     </button>
@@ -1124,7 +1124,7 @@ export default function PublicStorefront() {
                                             setTrackingError(null);
                                             setHomeTrackInput('');
                                         }}
-                                        className="px-3 py-1 bg-rose-500 text-white font-bold rounded-lg text-[10px] shrink-0"
+                                        className="px-3 py-1 bg-rose-500 text-white font-bold rounded-lg text-[11px] shrink-0"
                                     >
                                         Try Again
                                     </button>
