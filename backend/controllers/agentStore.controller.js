@@ -425,7 +425,8 @@ exports.getStoreProducts = async (req, res) => {
                 base_price_ghc: base,
                 agent_price_ghc: agentPrice,
                 profit_ghc: profit,
-                is_enabled: Boolean(b.is_enabled)
+                is_enabled: Boolean(b.is_enabled),
+                is_added: Boolean(b.agent_product_id)
             };
         });
 
@@ -548,6 +549,98 @@ exports.deleteStoreProduct = async (req, res) => {
     } catch (error) {
         console.error('Error removing store product:', error);
         res.status(500).json({ success: false, error: 'Failed to remove store product' });
+    } finally {
+        if (connection) connection.release();
+    }
+};
+
+// 7c. ADD SINGLE DATA BUNDLE PRODUCT TO STORE
+exports.addStoreProduct = async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const userId = req.user.id;
+        const { bundle_id, agent_price_ghc, is_enabled } = req.body;
+
+        if (!bundle_id) {
+            return res.status(400).json({ success: false, error: 'Data bundle plan is required.' });
+        }
+
+        const [stores] = await connection.execute('SELECT id FROM agent_stores WHERE user_id = ?::uuid', [userId]);
+        if (stores.length === 0) {
+            return res.status(404).json({ success: false, error: 'Agent Store not found' });
+        }
+        const storeId = stores[0].id;
+
+        // Fetch target bundle and check if active
+        const [bundleRows] = await connection.execute(
+            'SELECT id, network, data_amount, price_ghc, is_active FROM data_bundles WHERE id = ?::uuid',
+            [bundle_id]
+        );
+
+        if (bundleRows.length === 0 || !bundleRows[0].is_active) {
+            return res.status(400).json({
+                success: false,
+                error: 'This data bundle plan is currently unavailable or disabled by Administrator.'
+            });
+        }
+
+        const bundle = bundleRows[0];
+        const basePrice = parseFloat(bundle.price_ghc);
+
+        // Fetch pricing rules
+        const [rules] = await connection.execute('SELECT * FROM agent_pricing_rules LIMIT 1');
+        const minMarkup = parseFloat(rules[0]?.min_markup_ghc || 0.50);
+        const maxMarkup = parseFloat(rules[0]?.max_markup_ghc || 50.00);
+
+        const priceNum = parseFloat(agent_price_ghc);
+        const targetSellingPrice = isNaN(priceNum) || priceNum <= 0 ? (basePrice + minMarkup) : priceNum;
+
+        if (targetSellingPrice < basePrice + minMarkup) {
+            return res.status(400).json({
+                success: false,
+                error: `Selling price for ${bundle.network} ${bundle.data_amount} cannot be lower than GHS ${(basePrice + minMarkup).toFixed(2)} (Base: GHS ${basePrice.toFixed(2)} + Min Markup: GHS ${minMarkup.toFixed(2)})`
+            });
+        }
+
+        if (targetSellingPrice > basePrice + maxMarkup) {
+            return res.status(400).json({
+                success: false,
+                error: `Selling price exceeds maximum allowed markup of GHS ${maxMarkup.toFixed(2)} above base price.`
+            });
+        }
+
+        const productId = uuidv4();
+        const enabledStatus = is_enabled !== undefined ? Boolean(is_enabled) : true;
+
+        await connection.execute(
+            `INSERT INTO agent_store_products (id, store_id, bundle_id, agent_price_ghc, is_enabled, created_at, updated_at)
+             VALUES (?::uuid, ?::uuid, ?::uuid, ?, ?, NOW(), NOW())
+             ON CONFLICT (store_id, bundle_id)
+             DO UPDATE SET agent_price_ghc = EXCLUDED.agent_price_ghc,
+                           is_enabled = EXCLUDED.is_enabled,
+                           updated_at = NOW()`,
+            [productId, storeId, bundle_id, targetSellingPrice, enabledStatus]
+        );
+
+        logActivity(userId, 'AGENT_PRODUCT_ADDED', `Added ${bundle.network} ${bundle.data_amount} to Agent Store`, { storeId, bundle_id, targetSellingPrice }, req.ip);
+
+        res.json({
+            success: true,
+            message: `Successfully added ${bundle.network} ${bundle.data_amount} to your Agent Store!`,
+            product: {
+                bundle_id,
+                network: bundle.network,
+                data_amount: bundle.data_amount,
+                base_price_ghc: basePrice,
+                agent_price_ghc: targetSellingPrice,
+                profit_ghc: targetSellingPrice - basePrice,
+                is_enabled: enabledStatus,
+                is_added: true
+            }
+        });
+    } catch (error) {
+        console.error('Error adding store product:', error);
+        res.status(500).json({ success: false, error: error.message || 'Failed to add data bundle to store' });
     } finally {
         if (connection) connection.release();
     }

@@ -27,6 +27,7 @@ export interface AgentProduct {
     agent_price_ghc: number;
     profit_ghc: number;
     is_enabled: boolean;
+    is_added?: boolean;
 }
 
 export interface AgentOrder {
@@ -128,6 +129,11 @@ export const agentStoreService = {
     // 7b. Delete / remove store product
     deleteProduct: async (bundleId: string) => {
         return api.delete<{ success: boolean; message: string }>(`/agent-store/products/${bundleId}`);
+    },
+
+    // 7c. Add single data bundle product to store
+    addProduct: async (data: { bundle_id: string; agent_price_ghc: number; is_enabled?: boolean }) => {
+        return api.post<{ success: boolean; message: string; product: AgentProduct }>('/agent-store/products/add', data);
     },
 
     // 8. Get dashboard stats
