@@ -141,6 +141,133 @@ const LiveTrackerLifecycle = ({ status, isDark }: { status: string; isDark: bool
     );
 };
 
+// ─── REUSABLE SKELETON COMPONENTS ────────────────────────────────────────────
+
+const Sk = ({ className = '', isDark }: { className?: string; isDark: boolean }) => (
+    <div className={`rounded-lg animate-pulse ${isDark ? 'bg-white/[0.07]' : 'bg-slate-200/80'} ${className}`} />
+);
+
+const SkeletonHero = ({ isDark }: { isDark: boolean }) => (
+    <div role="status" aria-label="Loading hero" className={`p-6 sm:p-10 md:p-12 rounded-3xl border text-left flex flex-col items-start justify-center shadow-2xl relative overflow-hidden ${
+        isDark ? 'bg-[#202227] border-white/5' : 'bg-white border-slate-200'
+    }`}>
+        <div className="max-w-xl space-y-5 w-full">
+            <Sk isDark={isDark} className="w-32 h-6 rounded-full" />
+            <div className="space-y-2">
+                <Sk isDark={isDark} className="w-64 sm:w-80 h-9 sm:h-11 rounded-xl" />
+                <Sk isDark={isDark} className="w-48 sm:w-64 h-9 sm:h-11 rounded-xl" />
+            </div>
+            <div className="space-y-2">
+                <Sk isDark={isDark} className="w-full max-w-md h-4 rounded-md" />
+                <Sk isDark={isDark} className="w-3/4 max-w-sm h-4 rounded-md" />
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <Sk isDark={isDark} className="w-36 h-11 rounded-xl" />
+                <Sk isDark={isDark} className="w-32 h-11 rounded-xl" />
+            </div>
+        </div>
+    </div>
+);
+
+const SkeletonTracker = ({ isDark }: { isDark: boolean }) => (
+    <div role="status" aria-label="Loading tracker" className={`p-5 sm:p-6 rounded-3xl border space-y-5 shadow-xl ${
+        isDark ? 'bg-[#202227] border-white/10' : 'bg-white border-slate-200'
+    }`}>
+        <div className="flex items-center justify-between border-b pb-3 border-current/10">
+            <div className="space-y-2">
+                <Sk isDark={isDark} className="w-40 h-5 rounded-md" />
+                <Sk isDark={isDark} className="w-64 h-3 rounded-md" />
+            </div>
+        </div>
+        <div className={`p-5 rounded-2xl border space-y-4 ${isDark ? 'bg-[#18191c] border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+            <div className="space-y-2">
+                <Sk isDark={isDark} className="w-28 h-3 rounded-md" />
+                <Sk isDark={isDark} className="w-40 h-6 rounded-lg" />
+                <Sk isDark={isDark} className="w-56 h-3 rounded-md" />
+            </div>
+            <div className="space-y-2.5 py-1">
+                {[1, 2, 3, 4].map(i => (
+                    <div key={i} className="flex items-center gap-2.5">
+                        <Sk isDark={isDark} className="w-5 h-5 rounded-full shrink-0" />
+                        <Sk isDark={isDark} className="w-32 h-4 rounded-md" />
+                    </div>
+                ))}
+            </div>
+            <div className="flex justify-between pt-2 border-t border-current/10">
+                <Sk isDark={isDark} className="w-36 h-3 rounded-md" />
+                <Sk isDark={isDark} className="w-20 h-3 rounded-md" />
+            </div>
+        </div>
+    </div>
+);
+
+const SkeletonNetworkCard = ({ isDark }: { isDark: boolean }) => (
+    <div role="status" aria-label="Loading network" className={`p-6 rounded-3xl border shadow-xl ${
+        isDark ? 'bg-[#202227] border-white/5' : 'bg-white border-slate-200'
+    }`}>
+        <div className="flex justify-between items-start mb-4">
+            <Sk isDark={isDark} className="w-16 h-6 rounded-xl" />
+            <Sk isDark={isDark} className="w-20 h-6 rounded-lg" />
+        </div>
+        <Sk isDark={isDark} className="w-32 h-7 rounded-lg mb-2" />
+        <Sk isDark={isDark} className="w-48 h-4 rounded-md" />
+        <Sk isDark={isDark} className="w-24 h-5 rounded-md mt-5" />
+    </div>
+);
+
+const SkeletonPopularCard = ({ isDark }: { isDark: boolean }) => (
+    <div role="status" aria-label="Loading bundle" className={`p-5 rounded-3xl border shadow-xl flex flex-col justify-between space-y-4 ${
+        isDark ? 'bg-[#202227] border-white/5' : 'bg-white border-slate-200'
+    }`}>
+        <div className="space-y-2">
+            <div className="flex justify-between items-center">
+                <Sk isDark={isDark} className="w-14 h-5 rounded-lg" />
+                <Sk isDark={isDark} className="w-20 h-4 rounded-md" />
+            </div>
+            <Sk isDark={isDark} className="w-28 h-8 rounded-lg" />
+        </div>
+        <div className="pt-3 border-t border-current/10 flex items-center justify-between">
+            <div className="space-y-1">
+                <Sk isDark={isDark} className="w-16 h-3 rounded-md" />
+                <Sk isDark={isDark} className="w-20 h-6 rounded-md" />
+            </div>
+            <Sk isDark={isDark} className="w-24 h-9 rounded-xl" />
+        </div>
+    </div>
+);
+
+const SkeletonBuyDataCard = ({ isDark }: { isDark: boolean }) => (
+    <div role="status" aria-label="Loading bundle" className={`p-6 rounded-3xl border shadow-xl flex flex-col justify-between space-y-4 ${
+        isDark ? 'bg-[#202227] border-white/5' : 'bg-white border-slate-200'
+    }`}>
+        <div className="space-y-2">
+            <div className="flex justify-between items-center">
+                <Sk isDark={isDark} className="w-16 h-5 rounded-lg" />
+                <Sk isDark={isDark} className="w-24 h-4 rounded-md" />
+            </div>
+            <Sk isDark={isDark} className="w-32 h-9 rounded-lg" />
+        </div>
+        <div className="pt-4 border-t border-current/10 flex items-center justify-between">
+            <div className="space-y-1">
+                <Sk isDark={isDark} className="w-16 h-3 rounded-md" />
+                <Sk isDark={isDark} className="w-20 h-7 rounded-md" />
+            </div>
+            <Sk isDark={isDark} className="w-28 h-10 rounded-xl" />
+        </div>
+    </div>
+);
+
+const SkeletonInfoBlock = ({ isDark }: { isDark: boolean }) => (
+    <div role="status" aria-label="Loading info" className={`p-4 rounded-2xl border space-y-2 ${
+        isDark ? 'bg-[#18191c] border-white/5' : 'bg-slate-50 border-slate-200'
+    }`}>
+        <Sk isDark={isDark} className="w-24 h-3 rounded-md" />
+        <Sk isDark={isDark} className="w-48 h-5 rounded-md" />
+    </div>
+);
+
+// ─── END SKELETON COMPONENTS ─────────────────────────────────────────────────
+
 export default function PublicStorefront() {
     const { slug } = useParams<{ slug: string }>();
     const [searchParams] = useSearchParams();
@@ -379,18 +506,16 @@ export default function PublicStorefront() {
         };
     }, [products]);
 
-    if (loading) {
-        return (
-            <div className={`min-h-screen font-sans flex items-center justify-center p-4 ${
-                isDark ? 'bg-[#141518] text-white' : 'bg-slate-50 text-slate-900'
-            }`}>
-                <div className="text-center space-y-3">
-                    <RefreshCw className="w-8 h-8 animate-spin text-[#a3e635] mx-auto" />
-                    <p className={`text-xs font-bold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Loading Storefront...</p>
-                </div>
-            </div>
-        );
-    }
+    // Computed values available during both loading and loaded states
+    const filteredProducts = products.filter(p => selectedNetwork === 'ALL' || p.network === selectedNetwork);
+    const whatsAppUrl = formatWhatsAppUrl(storeInfo?.phone);
+    const navTabs = [
+        { id: 'home', label: 'Home', icon: Home },
+        { id: 'purchase', label: 'Buy Data', icon: ShoppingCart },
+        { id: 'track', label: 'Track Order', icon: FileText },
+        { id: 'info', label: 'Info', icon: Info },
+    ] as const;
+    const deliveryDuration = activeLiveOrder ? getDeliveryDuration(activeLiveOrder.created_at, activeLiveOrder.fulfillment_status) : null;
 
     if (errorMsg) {
         return (
@@ -408,17 +533,6 @@ export default function PublicStorefront() {
         );
     }
 
-    const filteredProducts = products.filter(p => selectedNetwork === 'ALL' || p.network === selectedNetwork);
-    const whatsAppUrl = formatWhatsAppUrl(storeInfo?.phone);
-
-    const navTabs = [
-        { id: 'home', label: 'Home', icon: Home },
-        { id: 'purchase', label: 'Buy Data', icon: ShoppingCart },
-        { id: 'track', label: 'Track Order', icon: FileText },
-        { id: 'info', label: 'Info', icon: Info },
-    ] as const;
-
-    const deliveryDuration = activeLiveOrder ? getDeliveryDuration(activeLiveOrder.created_at, activeLiveOrder.fulfillment_status) : null;
 
     return (
         <div className={`min-h-screen font-sans selection:bg-[#a3e635] selection:text-black flex flex-col transition-colors duration-200 overflow-x-hidden ${
@@ -565,11 +679,12 @@ export default function PublicStorefront() {
             )}
 
             {/* Main Content Area */}
-            <main className="max-w-5xl mx-auto py-6 sm:py-8 px-4 sm:px-6 flex-1 w-full min-w-0 space-y-8">
+            <main className="max-w-5xl mx-auto py-6 sm:py-8 px-4 sm:px-6 flex-1 w-full min-w-0 space-y-8" aria-busy={loading}>
                 {/* 1. HOME TAB */}
                 {activeTab === 'home' && (
                     <div className="space-y-8">
                         {/* STORE HERO BANNER — REFINED LEFT-ALIGNED COMPOSITION */}
+                        {loading ? <SkeletonHero isDark={isDark} /> : (
                         <div className={`p-6 sm:p-10 md:p-12 rounded-3xl border text-left flex flex-col items-start justify-center shadow-2xl relative overflow-hidden ${
                             isDark ? 'bg-[#202227] border-white/5' : 'bg-white border-slate-200'
                         }`}>
@@ -625,8 +740,10 @@ export default function PublicStorefront() {
                                 </div>
                             </div>
                         </div>
+                        )}
 
                         {/* LIVE REAL-TIME ORDER TRACKER SECTION ON HOMEPAGE */}
+                        {loading ? <SkeletonTracker isDark={isDark} /> : (
                         <div className={`p-5 sm:p-6 rounded-3xl border space-y-5 shadow-xl ${
                             isDark ? 'bg-[#202227] border-white/10' : 'bg-white border-slate-200'
                         }`}>
@@ -751,6 +868,7 @@ export default function PublicStorefront() {
                                 )}
                             </form>
                         </div>
+                        )}
 
                         {/* CHOOSE YOUR NETWORK SECTION */}
                         <div className="space-y-4">
@@ -762,6 +880,10 @@ export default function PublicStorefront() {
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              {loading ? (
+                                <>{[1,2,3].map(i => <SkeletonNetworkCard key={i} isDark={isDark} />)}</>
+                              ) : (
+                              <>
                                 {/* MTN Card — Full Yellow Background */}
                                 <div
                                     onClick={() => {
@@ -833,6 +955,8 @@ export default function PublicStorefront() {
                                         <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                                     </div>
                                 </div>
+                              </>
+                              )}
                             </div>
                         </div>
 
@@ -856,6 +980,10 @@ export default function PublicStorefront() {
 
                             {/* Popular Bundles Grid with Standard Card Appearance */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+                              {loading ? (
+                                <>{[1,2,3].map(i => <SkeletonPopularCard key={i} isDark={isDark} />)}</>
+                              ) : (
+                              <>
                                 {/* MTN Popular Cards */}
                                 {popularBundles.MTN.map(bundle => (
                                     <div key={bundle.bundle_id} className={`p-5 rounded-3xl border shadow-xl flex flex-col justify-between space-y-4 group ${
@@ -960,6 +1088,8 @@ export default function PublicStorefront() {
                                         </div>
                                     </div>
                                 ))}
+                              </>
+                              )}
                             </div>
                         </div>
 
@@ -1018,7 +1148,11 @@ export default function PublicStorefront() {
                         </div>
 
                         {/* Product Grid — FULL NETWORK-SPECIFIC CARD COLORS */}
-                        {filteredProducts.length === 0 ? (
+                        {loading ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                                {[1,2,3,4,5,6].map(i => <SkeletonBuyDataCard key={i} isDark={isDark} />)}
+                            </div>
+                        ) : filteredProducts.length === 0 ? (
                             <div className={`p-12 rounded-3xl border text-center text-xs ${
                                 isDark ? 'bg-[#202227] border-white/5 text-slate-400' : 'bg-white border-slate-200 text-slate-600'
                             }`}>
@@ -1199,6 +1333,10 @@ export default function PublicStorefront() {
                             </div>
 
                             <div className="space-y-4 text-xs">
+                              {loading ? (
+                                <>{[1,2,3,4].map(i => <SkeletonInfoBlock key={i} isDark={isDark} />)}</>
+                              ) : (
+                              <>
                                 <div className={`p-4 rounded-2xl border space-y-1 ${isDark ? 'bg-[#18191c] border-white/5' : 'bg-slate-50 border-slate-200'}`}>
                                     <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Store Name</span>
                                     <p className="text-sm font-black">{storeInfo?.store_name}</p>
@@ -1227,6 +1365,8 @@ export default function PublicStorefront() {
                                     <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Fulfillment Guarantee</span>
                                     <p className="text-slate-400">All data bundles are fulfilled automatically 24/7. In the event of a network error, transactions are automatically queued for retry or refunded.</p>
                                 </div>
+                              </>
+                              )}
                             </div>
                         </div>
                     </div>
