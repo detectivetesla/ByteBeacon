@@ -387,95 +387,115 @@ export const AdminAgentStoresPage: React.FC = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-border">
-                                            {filteredStores.map(s => (
-                                                <tr key={s.id} className="hover:bg-muted/30 transition-colors">
-                                                    <td className="px-4 py-3">
-                                                        <p className="font-semibold text-foreground">{s.store_name}</p>
-                                                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5">/store/{s.slug}</p>
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <p className="font-medium text-foreground">{s.owner_name}</p>
-                                                        <p className="text-[10px] text-muted-foreground mt-0.5">{s.owner_email}</p>
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <StatusDot status={s.effective_status} />
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right font-medium text-foreground">{s.total_orders || 0}</td>
-                                                    <td className="px-4 py-3 text-right font-semibold text-emerald-400">
-                                                        GHS {(parseFloat(s.total_profit_earned as any) || 0).toFixed(2)}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        <div className="flex items-center justify-end gap-1.5">
-                                                            <button
-                                                                onClick={() => setSelectedStore(s)}
-                                                                className="px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10 rounded-md transition-colors"
-                                                            >
-                                                                Review
-                                                            </button>
-                                                            {s.activation_status !== 'PAID' && (
+                                            {filteredStores.map(s => {
+                                                const storeName = s.store_name || (s as any).storeName || 'Store';
+                                                const ownerName = s.owner_name || (s as any).userName || 'Owner';
+                                                const ownerEmail = s.owner_email || (s as any).userEmail || '';
+                                                const effStatus = s.effective_status || (s as any).effectiveStatus || 'PENDING';
+                                                const actStatus = s.activation_status || (s as any).activationStatus || 'UNPAID';
+                                                const totalOrders = s.total_orders || (s as any).totalOrders || 0;
+                                                const totalProfit = s.total_profit_earned || (s as any).totalRevenue || 0;
+
+                                                return (
+                                                    <tr key={s.id} className="hover:bg-muted/30 transition-colors">
+                                                        <td className="px-4 py-3">
+                                                            <p className="font-semibold text-foreground">{storeName}</p>
+                                                            <p className="text-[10px] text-muted-foreground font-mono mt-0.5">/store/{s.slug}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="font-medium text-foreground">{ownerName}</p>
+                                                            <p className="text-[10px] text-muted-foreground mt-0.5">{ownerEmail}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <StatusDot status={effStatus} />
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-medium text-foreground">{totalOrders}</td>
+                                                        <td className="px-4 py-3 text-right font-semibold text-emerald-400">
+                                                            GHS {(parseFloat(totalProfit as any) || 0).toFixed(2)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <div className="flex items-center justify-end gap-1.5">
                                                                 <button
-                                                                    onClick={() => confirmManualActivate(s.id, s.store_name)}
-                                                                    className="px-2.5 py-1 text-[11px] font-semibold text-amber-400 hover:bg-amber-400/10 rounded-md transition-colors"
+                                                                    onClick={() => setSelectedStore(s)}
+                                                                    className="px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10 rounded-md transition-colors"
                                                                 >
-                                                                    Mark Paid
+                                                                    Review
                                                                 </button>
-                                                            )}
-                                                            <button
-                                                                onClick={() => confirmDeleteStore(s.id, s.store_name)}
-                                                                className="px-2 py-1 text-[11px] font-semibold text-red-400 hover:bg-red-500/10 rounded-md transition-colors flex items-center gap-1"
-                                                                title="Delete Store"
-                                                            >
-                                                                <Trash2 className="w-3 h-3" />
-                                                                Delete
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                                                {actStatus !== 'PAID' && (
+                                                                    <button
+                                                                        onClick={() => confirmManualActivate(s.id, storeName)}
+                                                                        className="px-2.5 py-1 text-[11px] font-semibold text-amber-400 hover:bg-amber-400/10 rounded-md transition-colors"
+                                                                    >
+                                                                        Mark Paid
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    onClick={() => confirmDeleteStore(s.id, storeName)}
+                                                                    className="px-2 py-1 text-[11px] font-semibold text-red-400 hover:bg-red-500/10 rounded-md transition-colors flex items-center gap-1"
+                                                                    title="Delete Store"
+                                                                >
+                                                                    <Trash2 className="w-3 h-3" />
+                                                                    Delete
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
 
                                 {/* Mobile Card View */}
                                 <div className="md:hidden divide-y divide-border">
-                                    {filteredStores.map(s => (
-                                        <div key={s.id} className="p-4 space-y-2.5">
-                                            <div className="flex items-start justify-between">
-                                                <div>
-                                                    <p className="font-semibold text-foreground text-sm">{s.store_name}</p>
-                                                    <p className="text-[10px] text-muted-foreground mt-0.5">{s.owner_name} · {s.owner_email}</p>
+                                    {filteredStores.map(s => {
+                                        const storeName = s.store_name || (s as any).storeName || 'Store';
+                                        const ownerName = s.owner_name || (s as any).userName || 'Owner';
+                                        const ownerEmail = s.owner_email || (s as any).userEmail || '';
+                                        const effStatus = s.effective_status || (s as any).effectiveStatus || 'PENDING';
+                                        const actStatus = s.activation_status || (s as any).activationStatus || 'UNPAID';
+                                        const totalOrders = s.total_orders || (s as any).totalOrders || 0;
+                                        const totalProfit = s.total_profit_earned || (s as any).totalRevenue || 0;
+
+                                        return (
+                                            <div key={s.id} className="p-4 space-y-2.5">
+                                                <div className="flex items-start justify-between">
+                                                    <div>
+                                                        <p className="font-semibold text-foreground text-sm">{storeName}</p>
+                                                        <p className="text-[10px] text-muted-foreground mt-0.5">{ownerName} · {ownerEmail}</p>
+                                                    </div>
+                                                    <StatusDot status={effStatus} />
                                                 </div>
-                                                <StatusDot status={s.effective_status} />
-                                            </div>
-                                            <div className="flex items-center justify-between text-xs">
-                                                <span className="text-muted-foreground">{s.total_orders || 0} orders · GHS {(parseFloat(s.total_profit_earned as any) || 0).toFixed(2)} profit</span>
-                                                <div className="flex gap-1.5">
-                                                    <button
-                                                        onClick={() => setSelectedStore(s)}
-                                                        className="px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10 rounded-md transition-colors"
-                                                    >
-                                                        Review
-                                                    </button>
-                                                    {s.activation_status !== 'PAID' && (
+                                                <div className="flex items-center justify-between text-xs">
+                                                    <span className="text-muted-foreground">{totalOrders} orders · GHS {(parseFloat(totalProfit as any) || 0).toFixed(2)} profit</span>
+                                                    <div className="flex gap-1.5">
                                                         <button
-                                                            onClick={() => confirmManualActivate(s.id, s.store_name)}
-                                                            className="px-2.5 py-1 text-[11px] font-semibold text-amber-400 hover:bg-amber-400/10 rounded-md transition-colors"
+                                                            onClick={() => setSelectedStore(s)}
+                                                            className="px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10 rounded-md transition-colors"
                                                         >
-                                                            Mark Paid
+                                                            Review
                                                         </button>
-                                                    )}
-                                                    <button
-                                                        onClick={() => confirmDeleteStore(s.id, s.store_name)}
-                                                        className="px-2 py-1 text-[11px] font-semibold text-red-400 hover:bg-red-500/10 rounded-md transition-colors flex items-center gap-1"
-                                                        title="Delete Store"
-                                                    >
-                                                        <Trash2 className="w-3 h-3" />
-                                                        Delete
-                                                    </button>
+                                                        {actStatus !== 'PAID' && (
+                                                            <button
+                                                                onClick={() => confirmManualActivate(s.id, storeName)}
+                                                                className="px-2.5 py-1 text-[11px] font-semibold text-amber-400 hover:bg-amber-400/10 rounded-md transition-colors"
+                                                            >
+                                                                Mark Paid
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => confirmDeleteStore(s.id, storeName)}
+                                                            className="px-2 py-1 text-[11px] font-semibold text-red-400 hover:bg-red-500/10 rounded-md transition-colors flex items-center gap-1"
+                                                            title="Delete Store"
+                                                        >
+                                                            <Trash2 className="w-3 h-3" />
+                                                            Delete
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </>
                         )}

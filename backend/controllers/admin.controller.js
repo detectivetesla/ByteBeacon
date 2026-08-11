@@ -2527,7 +2527,17 @@ const getAllAgentStores = async (req, res) => {
                 userName: s.owner_name,
                 userEmail: s.owner_email,
                 totalOrders: s.total_orders,
-                totalRevenue: parseFloat(s.total_profit_earned || 0)
+                totalRevenue: parseFloat(s.total_profit_earned || 0),
+                // Snake_case aliases for frontend component compatibility
+                store_name: s.store_name,
+                owner_name: s.owner_name,
+                owner_email: s.owner_email,
+                review_status: s.review_status,
+                activation_status: s.activation_status,
+                effective_status: effectiveStatus,
+                is_visible: s.is_visible,
+                total_orders: s.total_orders,
+                total_profit_earned: parseFloat(s.total_profit_earned || 0)
             };
         });
 
@@ -2558,7 +2568,6 @@ const updateAgentStoreReviewStatus = async (req, res) => {
 
         if (review_status === 'INACTIVE') {
             newIsVisible = false;
-            // Keep review status unchanged or set to APPROVED if it was active
         } else if (review_status === 'APPROVED') {
             newIsVisible = true;
         }
@@ -2617,13 +2626,13 @@ const manualActivateAgentStore = async (req, res) => {
         }
 
         await pool.execute(
-            `UPDATE agent_stores SET activation_status = 'PAID', is_visible = TRUE, updated_at = NOW() WHERE id = ?::uuid`,
+            `UPDATE agent_stores SET review_status = 'APPROVED', activation_status = 'PAID', is_visible = TRUE, updated_at = NOW() WHERE id = ?::uuid`,
             [id]
         );
 
         logActivity(req.user?.id, 'AGENT_STORE_ACTIVATED', `Manually activated Agent Store ${id.slice(0, 8)}`, { storeId: id }, req.ip);
 
-        res.json({ message: 'Store activation status manually marked as PAID' });
+        res.json({ message: 'Store activation status manually marked as PAID & APPROVED. Store is now ACTIVE.' });
     } catch (error) {
         console.error('Error manually activating store:', error);
         res.status(500).json({ error: 'Failed to activate store' });
