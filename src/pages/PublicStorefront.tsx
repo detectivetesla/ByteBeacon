@@ -40,7 +40,7 @@ const formatWhatsAppUrl = (phoneStr?: string) => {
 
 // Generic professional hero description for ALL storefronts
 const GENERIC_HERO_DESCRIPTION = 
-    "Buy affordable data bundles from trusted mobile networks and have your bundle delivered directly to your phone quickly and securely.";
+    "MTN, Telecel & AirtelTigo bundles delivered to your phone within minutes. Safe, fast, and reliable.";
 
 // Helper for Network Theme Classes (Used for Buy Data Cards)
 const getNetworkTheme = (networkName?: string) => {
@@ -569,44 +569,64 @@ export default function PublicStorefront() {
                 {/* 1. HOME TAB */}
                 {activeTab === 'home' && (
                     <div className="space-y-8">
-                        {/* STORE HERO BANNER WITH GENERIC PROFESSIONAL DESCRIPTION */}
-                        <div className={`p-6 sm:p-10 rounded-3xl border text-center space-y-5 shadow-2xl relative overflow-hidden ${
+                        {/* STORE HERO BANNER — REFINED LEFT-ALIGNED COMPOSITION */}
+                        <div className={`p-6 sm:p-10 md:p-12 rounded-3xl border text-left flex flex-col items-start justify-center shadow-2xl relative overflow-hidden ${
                             isDark ? 'bg-[#202227] border-white/5' : 'bg-white border-slate-200'
                         }`}>
-                            <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl border flex items-center justify-center mx-auto ${
-                                isDark ? 'bg-[#a3e635]/10 border-[#a3e635]/30 text-[#a3e635]' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600'
-                            }`}>
-                                <Zap className="w-7 h-7 sm:w-8 sm:h-8 stroke-[2.5]" />
-                            </div>
-                            <div className="space-y-2 max-w-xl mx-auto">
-                                <h2 className={`text-2xl sm:text-3xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{storeInfo?.store_name}</h2>
-                                <p className={`text-xs sm:text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                            <div className="max-w-xl space-y-4">
+                                {/* Hero Badge */}
+                                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold border ${
+                                    isDark
+                                        ? 'bg-[#a3e635]/10 border-[#a3e635]/30 text-[#a3e635]'
+                                        : 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                }`}>
+                                    <Zap className="w-3.5 h-3.5 fill-current" />
+                                    <span>Instant Delivery</span>
+                                </div>
+
+                                {/* Main Heading */}
+                                <h2 className={`text-3xl sm:text-4xl md:text-5xl font-black tracking-tight leading-[1.15] ${
+                                    isDark ? 'text-white' : 'text-slate-900'
+                                }`}>
+                                    Buy Data Bundles
+                                    <span className={`block mt-1 ${isDark ? 'text-[#a3e635]' : 'text-emerald-600'}`}>
+                                        At Unbeatable Prices
+                                    </span>
+                                </h2>
+
+                                {/* Generic Hero Description */}
+                                <p className={`text-xs sm:text-sm md:text-base leading-relaxed max-w-lg ${
+                                    isDark ? 'text-slate-300' : 'text-slate-600'
+                                }`}>
                                     {GENERIC_HERO_DESCRIPTION}
                                 </p>
-                            </div>
-                            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                                <button
-                                    onClick={() => setActiveTab('purchase')}
-                                    className="px-6 py-3 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-extrabold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-[#a3e635]/20 transition-all"
-                                >
-                                    <ShoppingCart className="w-4 h-4 stroke-[2.5]" />
-                                    <span>Buy Data Now</span>
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('track')}
-                                    className={`px-6 py-3 font-bold rounded-xl text-xs border flex items-center gap-2 transition-all ${
-                                        isDark
-                                            ? 'bg-[#18191c] hover:bg-[#26282e] text-slate-300 border-white/10'
-                                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                                    }`}
-                                >
-                                    <FileText className="w-4 h-4 stroke-[2.5]" />
-                                    <span>Track Order</span>
-                                </button>
+
+                                {/* CTA Buttons */}
+                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2 w-full sm:w-auto">
+                                    <button
+                                        onClick={() => setActiveTab('purchase')}
+                                        className="px-6 py-3.5 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-extrabold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#a3e635]/20 transition-all"
+                                    >
+                                        <ShoppingCart className="w-4 h-4 stroke-[2.5]" />
+                                        <span>Buy Data Now</span>
+                                        <ArrowRight className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('track')}
+                                        className={`px-6 py-3.5 font-bold rounded-xl text-xs sm:text-sm border flex items-center justify-center gap-2 transition-all ${
+                                            isDark
+                                                ? 'bg-[#18191c] hover:bg-[#26282e] text-slate-300 border-white/10'
+                                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                                        }`}
+                                    >
+                                        <FileText className="w-4 h-4 stroke-[2.5]" />
+                                        <span>Track Order</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
-                        {/* NEW LIVE ORDER TRACKER SECTION ON HOMEPAGE */}
+                        {/* LIVE REAL-TIME ORDER TRACKER SECTION ON HOMEPAGE */}
                         <div className={`p-5 sm:p-6 rounded-3xl border space-y-5 shadow-xl ${
                             isDark ? 'bg-[#202227] border-white/10' : 'bg-white border-slate-200'
                         }`}>
@@ -723,7 +743,7 @@ export default function PublicStorefront() {
                                                 setTrackingError(null);
                                                 setHomeTrackInput('');
                                             }}
-                                            className="px-2.5 py-1 bg-rose-500 text-white font-bold rounded-md text-[10px] shrink-0"
+                                            className="px-2.5 py-1 bg-rose-500 text-white font-bold rounded-lg text-[10px] shrink-0"
                                         >
                                             Try Again
                                         </button>
@@ -1104,7 +1124,7 @@ export default function PublicStorefront() {
                                             setTrackingError(null);
                                             setHomeTrackInput('');
                                         }}
-                                        className="px-3 py-1 bg-rose-500 text-white font-bold rounded-lg text-[11px] shrink-0"
+                                        className="px-3 py-1 bg-rose-500 text-white font-bold rounded-lg text-[10px] shrink-0"
                                     >
                                         Try Again
                                     </button>
