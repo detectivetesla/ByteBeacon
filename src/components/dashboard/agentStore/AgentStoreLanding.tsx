@@ -217,11 +217,11 @@ export const AgentStoreLanding: React.FC<AgentStoreLandingProps> = ({ existingSt
                 <Card className="bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40 transition-all duration-300 shadow-md group">
                     <CardContent className="p-6 space-y-3">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
-                            <DollarSign className="w-6 h-6 stroke-[2.5]" />
+                            <Zap className="w-6 h-6 stroke-[2.5]" />
                         </div>
-                        <h3 className="font-display font-bold text-foreground text-base">Markup-Only Model</h3>
+                        <h3 className="font-display font-bold text-foreground text-base">Instant Setup</h3>
                         <p className="text-xs text-muted-foreground leading-relaxed font-medium">
-                            No percentage deductions. You choose your retail markup price above ByteBeacon base cost and pocket the entire difference.
+                            Create your personalized storefront in seconds. Get a custom store link, set your own prices, and start selling data bundles immediately — no technical skills needed.
                         </p>
                     </CardContent>
                 </Card>
@@ -229,11 +229,11 @@ export const AgentStoreLanding: React.FC<AgentStoreLandingProps> = ({ existingSt
                 <Card className="bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40 transition-all duration-300 shadow-md group">
                     <CardContent className="p-6 space-y-3">
                         <div className="w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 group-hover:scale-105 transition-transform">
-                            <ShieldCheck className="w-6 h-6 stroke-[2.5]" />
+                            <DollarSign className="w-6 h-6 stroke-[2.5]" />
                         </div>
-                        <h3 className="font-display font-bold text-foreground text-base">Automated Fulfillment</h3>
+                        <h3 className="font-display font-bold text-foreground text-base">Earn Profit</h3>
                         <p className="text-xs text-muted-foreground leading-relaxed font-medium">
-                            Orders placed on your storefront are processed automatically by ByteBeacon's backend provider network. Zero manual effort required.
+                            Set your own retail markup on every data bundle and keep 100% of the profit. Orders are fulfilled automatically by ByteBeacon — you earn while the system does the work.
                         </p>
                     </CardContent>
                 </Card>
@@ -241,11 +241,11 @@ export const AgentStoreLanding: React.FC<AgentStoreLandingProps> = ({ existingSt
                 <Card className="bg-purple-500/5 border-purple-500/20 hover:border-purple-500/40 transition-all duration-300 shadow-md group">
                     <CardContent className="p-6 space-y-3">
                         <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:scale-105 transition-transform">
-                            <Zap className="w-6 h-6 stroke-[2.5]" />
+                            <ShieldCheck className="w-6 h-6 stroke-[2.5]" />
                         </div>
-                        <h3 className="font-display font-bold text-foreground text-base">Instant Profit Ledger</h3>
+                        <h3 className="font-display font-bold text-foreground text-base">Easy Withdrawals</h3>
                         <p className="text-xs text-muted-foreground leading-relaxed font-medium">
-                            Earned profits are credited to your Agent Wallet instantly upon delivery and can be withdrawn directly to Mobile Money or Bank Account.
+                            Your earned profits are credited to your Agent Wallet instantly upon every successful delivery. Withdraw anytime directly to Mobile Money or your Bank Account.
                         </p>
                     </CardContent>
                 </Card>
