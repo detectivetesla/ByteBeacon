@@ -21,7 +21,8 @@ import {
     Menu,
     X,
     Search,
-    RotateCcw
+    Clock,
+    Check
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -41,7 +42,7 @@ const formatWhatsAppUrl = (phoneStr?: string) => {
 const GENERIC_HERO_DESCRIPTION = 
     "Buy affordable data bundles from trusted mobile networks and have your bundle delivered directly to your phone quickly and securely.";
 
-// Helper for Network Theme Classes (Full Network Colors)
+// Helper for Network Theme Classes (Used for Buy Data Cards)
 const getNetworkTheme = (networkName?: string) => {
     const net = (networkName || '').toUpperCase();
     if (net === 'MTN') {
@@ -78,72 +79,63 @@ const getNetworkTheme = (networkName?: string) => {
     };
 };
 
-// Delivery Progress UI Component
-const DeliveryProgress = ({ status, isDark }: { status: string; isDark: boolean }) => {
+// Calculate elapsed delivery duration from order timestamp
+const getDeliveryDuration = (created_at?: string, status?: string) => {
+    if (!created_at) return null;
+    const start = new Date(created_at).getTime();
+    if (isNaN(start)) return null;
+    const now = Date.now();
+    const diffMs = Math.max(0, now - start);
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffSecs = Math.floor((diffMs % 60000) / 1000);
+    
     const s = (status || '').toLowerCase();
+    if (s === 'completed' || s === 'delivered') {
+        if (diffMins === 0) return `Delivered in ${diffSecs}s`;
+        return `Delivered in ${diffMins}m ${diffSecs}s`;
+    }
+    if (s === 'refunded') return `Refunded`;
+    if (s === 'failed') return `Failed`;
+    if (diffMins === 0) return `Processing for ${diffSecs}s`;
+    return `Processing for ${diffMins}m ${diffSecs}s`;
+};
 
-    const isProcessingDone = s === 'completed' || s === 'delivered' || s === 'processing' || s === 'refunded';
-    const isDeliveryDone = s === 'completed' || s === 'delivered';
+// Live Tracker Lifecycle Stages Component
+const LiveTrackerLifecycle = ({ status, isDark }: { status: string; isDark: boolean }) => {
+    const s = (status || '').toLowerCase();
+    const isCompleted = s === 'completed' || s === 'delivered';
     const isFailed = s === 'failed';
     const isRefunded = s === 'refunded';
 
     return (
-        <div className="py-3 px-2">
-            <div className="flex items-center justify-between relative max-w-md mx-auto">
-                {/* Connecting Line */}
-                <div className={`absolute top-3.5 left-4 right-4 h-0.5 -translate-y-1/2 -z-0 ${
-                    isDark ? 'bg-white/10' : 'bg-slate-200'
-                }`} />
-
-                {/* Stage 1: Order Received */}
-                <div className="flex flex-col items-center gap-1 z-10">
-                    <div className="w-7 h-7 rounded-full bg-emerald-500 text-black flex items-center justify-center font-black text-xs shadow-md">
-                        ✓
-                    </div>
-                    <span className="text-[10px] font-bold text-emerald-500">Order Received</span>
-                </div>
-
-                {/* Stage 2: Payment Confirmed */}
-                <div className="flex flex-col items-center gap-1 z-10">
-                    <div className="w-7 h-7 rounded-full bg-emerald-500 text-black flex items-center justify-center font-black text-xs shadow-md">
-                        ✓
-                    </div>
-                    <span className="text-[10px] font-bold text-emerald-500">Payment Confirmed</span>
-                </div>
-
-                {/* Stage 3: Processing Data Bundle */}
-                <div className="flex flex-col items-center gap-1 z-10">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs shadow-md ${
-                        isProcessingDone
-                            ? 'bg-emerald-500 text-black'
-                            : isFailed
-                            ? 'bg-rose-500 text-white'
-                            : 'bg-amber-400 text-black animate-pulse'
-                    }`}>
-                        {isProcessingDone ? '✓' : isFailed ? '✕' : '●'}
-                    </div>
-                    <span className={`text-[10px] font-bold ${
-                        isProcessingDone ? 'text-emerald-500' : isFailed ? 'text-rose-500' : 'text-amber-500'
-                    }`}>Processing</span>
-                </div>
-
-                {/* Stage 4: Bundle Delivered / Refunded */}
-                <div className="flex flex-col items-center gap-1 z-10">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs shadow-md ${
-                        isDeliveryDone
-                            ? 'bg-emerald-500 text-black'
-                            : isRefunded
-                            ? 'bg-purple-500 text-white'
-                            : isFailed
-                            ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
-                            : isDark ? 'bg-[#18191c] text-slate-500 border border-white/10' : 'bg-slate-100 text-slate-400 border border-slate-300'
-                    }`}>
-                        {isDeliveryDone ? '✓' : isRefunded ? '↩' : isFailed ? '✕' : '○'}
-                    </div>
-                    <span className={`text-[10px] font-bold ${
-                        isDeliveryDone ? 'text-emerald-500' : isRefunded ? 'text-purple-400' : isFailed ? 'text-rose-500' : 'text-slate-400'
-                    }`}>{isRefunded ? 'Refunded' : isFailed ? 'Failed' : 'Delivered'}</span>
-                </div>
+        <div className="space-y-2.5 text-xs py-1">
+            <div className="flex items-center gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-500 text-black flex items-center justify-center text-[10px] font-black shrink-0">✓</span>
+                <span className="font-semibold text-emerald-500">Order Placed</span>
+            </div>
+            <div className="flex items-center gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-500 text-black flex items-center justify-center text-[10px] font-black shrink-0">✓</span>
+                <span className="font-semibold text-emerald-500">Queue Validation</span>
+            </div>
+            <div className="flex items-center gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-500 text-black flex items-center justify-center text-[10px] font-black shrink-0">✓</span>
+                <span className="font-semibold text-emerald-500">Gateway Processing</span>
+            </div>
+            <div className="flex items-center gap-2.5">
+                {isCompleted ? (
+                    <span className="w-5 h-5 rounded-full bg-emerald-500 text-black flex items-center justify-center text-[10px] font-black shrink-0">✓</span>
+                ) : isRefunded ? (
+                    <span className="w-5 h-5 rounded-full bg-purple-500 text-white flex items-center justify-center text-[10px] font-black shrink-0">↩</span>
+                ) : isFailed ? (
+                    <span className="w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[10px] font-black shrink-0">✕</span>
+                ) : (
+                    <span className="w-5 h-5 rounded-full bg-amber-400 text-black flex items-center justify-center text-[10px] font-black animate-pulse shrink-0">●</span>
+                )}
+                <span className={`font-bold ${
+                    isCompleted ? 'text-emerald-500' : isRefunded ? 'text-purple-400' : isFailed ? 'text-rose-500' : 'text-amber-400'
+                }`}>
+                    {isCompleted ? 'Bundle Delivered Successfully' : isRefunded ? 'Refunded' : isFailed ? 'Order Failed' : 'Delivery Processing...'}
+                </span>
             </div>
         </div>
     );
@@ -197,9 +189,8 @@ export default function PublicStorefront() {
     const [trackingLoading, setTrackingLoading] = useState(false);
     const [trackedOrder, setTrackedOrder] = useState<AgentOrder | null>(null);
     const [trackingError, setTrackingError] = useState<string | null>(null);
-    const [lastTrackedTime, setLastTrackedTime] = useState<string | null>(null);
 
-    // Recent order persisted locally
+    // Recent order persisted locally for Home page tracking
     const [recentOrder, setRecentOrder] = useState<AgentOrder | null>(() => {
         try {
             const saved = localStorage.getItem(`store_last_order_${slug}`);
@@ -243,21 +234,20 @@ export default function PublicStorefront() {
         }
     }, [referenceFromUrl]);
 
-    // Real-Time Polling (every 8 seconds) for active processing order until terminal state
-    const currentActiveOrder = trackedOrder || recentOrder;
+    // Real-Time Controlled Polling (every 8 seconds) for active processing order until terminal state
+    const activeLiveOrder = trackedOrder || recentOrder;
 
     useEffect(() => {
-        if (!currentActiveOrder) return;
-        const s = (currentActiveOrder.fulfillment_status || '').toLowerCase();
+        if (!activeLiveOrder) return;
+        const s = (activeLiveOrder.fulfillment_status || '').toLowerCase();
         if (s === 'completed' || s === 'delivered' || s === 'refunded' || s === 'failed') return;
 
         const interval = setInterval(async () => {
             try {
-                const res = await agentStoreService.trackPublicOrder(currentActiveOrder.id);
+                const res = await agentStoreService.trackPublicOrder(activeLiveOrder.id);
                 if (res.success && res.order) {
                     setRecentOrder(res.order);
                     setTrackedOrder(res.order);
-                    setLastTrackedTime(new Date().toLocaleTimeString());
                     if (slug) localStorage.setItem(`store_last_order_${slug}`, JSON.stringify(res.order));
                 }
             } catch (e) {
@@ -266,7 +256,7 @@ export default function PublicStorefront() {
         }, 8000);
 
         return () => clearInterval(interval);
-    }, [currentActiveOrder, slug]);
+    }, [activeLiveOrder, slug]);
 
     const verifyPayment = async (ref: string) => {
         setVerifying(true);
@@ -283,7 +273,6 @@ export default function PublicStorefront() {
                     if (orderRes.success && orderRes.order) {
                         setRecentOrder(orderRes.order);
                         setTrackedOrder(orderRes.order);
-                        setLastTrackedTime(new Date().toLocaleTimeString());
                         if (slug) localStorage.setItem(`store_last_order_${slug}`, JSON.stringify(orderRes.order));
                     }
                 } catch (e) {
@@ -341,12 +330,11 @@ export default function PublicStorefront() {
             if (res.success && res.order) {
                 setTrackedOrder(res.order);
                 setRecentOrder(res.order);
-                setLastTrackedTime(new Date().toLocaleTimeString());
                 if (slug) {
                     localStorage.setItem(`store_last_order_${slug}`, JSON.stringify(res.order));
                 }
             } else {
-                setTrackingError('Order not found. Please check your order reference or phone number and try again.');
+                setTrackingError('Order not found. Please check your order reference and try again.');
                 setTrackedOrder(null);
             }
         } catch (err: any) {
@@ -369,7 +357,7 @@ export default function PublicStorefront() {
         return counts;
     }, [products]);
 
-    // Popular Bundles
+    // Popular Bundles: Standard card appearance preserved
     const popularBundles = useMemo(() => {
         const getTop = (netKey: string, count = 3) => {
             return products
@@ -429,6 +417,8 @@ export default function PublicStorefront() {
         { id: 'track', label: 'Track Order', icon: FileText },
         { id: 'info', label: 'Info', icon: Info },
     ] as const;
+
+    const deliveryDuration = activeLiveOrder ? getDeliveryDuration(activeLiveOrder.created_at, activeLiveOrder.fulfillment_status) : null;
 
     return (
         <div className={`min-h-screen font-sans selection:bg-[#a3e635] selection:text-black flex flex-col transition-colors duration-200 ${
@@ -616,125 +606,133 @@ export default function PublicStorefront() {
                             </div>
                         </div>
 
-                        {/* LIVE REAL-TIME ORDER TRACKING SECTION ON HOMEPAGE */}
+                        {/* NEW LIVE ORDER TRACKER SECTION ON HOMEPAGE */}
                         <div className={`p-5 sm:p-6 rounded-3xl border space-y-5 shadow-xl ${
                             isDark ? 'bg-[#202227] border-white/10' : 'bg-white border-slate-200'
                         }`}>
                             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b pb-3 border-current/10">
                                 <div>
                                     <h3 className="text-base font-black flex items-center gap-2">
-                                        <FileText className="w-4 h-4 text-[#a3e635]" />
-                                        Track Your Order
+                                        <Clock className="w-4 h-4 text-[#a3e635]" />
+                                        Live Order Tracker
                                     </h3>
                                     <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                                        Enter your Order Reference ID or payment reference to check live status
+                                        Automated real-time tracking for your current purchase
                                     </p>
                                 </div>
 
-                                {lastTrackedTime && (
-                                    <span className="text-[10px] text-slate-400 font-mono">
-                                        Last updated: {lastTrackedTime}
+                                {deliveryDuration && (
+                                    <span className="px-3 py-1 bg-[#a3e635]/10 text-[#a3e635] border border-[#a3e635]/20 rounded-full text-[11px] font-bold">
+                                        {deliveryDuration}
                                     </span>
                                 )}
                             </div>
 
-                            {/* Tracking Input Form */}
-                            <form onSubmit={handleTrackSubmit} className="flex gap-2">
-                                <div className="relative flex-1">
-                                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                                    <input
-                                        type="text"
-                                        value={homeTrackInput}
-                                        onChange={(e) => setHomeTrackInput(e.target.value)}
-                                        placeholder="Enter Order ID or Reference (e.g. BB-123456)"
-                                        className={`w-full pl-10 pr-4 py-2.5 border rounded-xl text-xs font-mono focus:outline-none focus:border-[#a3e635] ${
-                                            isDark ? 'bg-[#18191c] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                                        }`}
-                                    />
-                                </div>
-                                <button
-                                    type="submit"
-                                    disabled={trackingLoading || !homeTrackInput.trim()}
-                                    className="px-5 py-2.5 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-extrabold rounded-xl text-xs transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-50"
-                                >
-                                    {trackingLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : 'Track Order'}
-                                </button>
-                            </form>
-
-                            {/* Tracking Error / Invalid Reference state */}
-                            {trackingError && (
-                                <div className={`p-4 rounded-2xl border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
-                                    isDark ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 'bg-rose-50 border-rose-200 text-rose-700'
+                            {/* Active Order Details & Live Progress */}
+                            {activeLiveOrder && !trackingError ? (
+                                <div className={`p-5 rounded-2xl border space-y-4 text-xs ${
+                                    isDark ? 'bg-[#18191c] border-white/5' : 'bg-slate-50 border-slate-200'
                                 }`}>
-                                    <div className="flex items-center gap-2">
-                                        <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
-                                        <span>{trackingError}</span>
+                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 border-current/10">
+                                        <div>
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                                {activeLiveOrder.network} Bundle Order
+                                            </span>
+                                            <h4 className="text-base font-black text-[#a3e635]">
+                                                {activeLiveOrder.data_amount} {activeLiveOrder.network}
+                                            </h4>
+                                            <p className="text-[11px] text-slate-400 mt-0.5">
+                                                Recipient: <strong className="text-current font-mono">{activeLiveOrder.customer_phone}</strong> • Price: <strong className="text-[#a3e635]">GHS {(parseFloat(activeLiveOrder.selling_price_ghc as any) || 0).toFixed(2)}</strong>
+                                            </p>
+                                        </div>
+
+                                        <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                                            (activeLiveOrder.fulfillment_status || '').toLowerCase() === 'completed' ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30' :
+                                            (activeLiveOrder.fulfillment_status || '').toLowerCase() === 'refunded' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
+                                            (activeLiveOrder.fulfillment_status || '').toLowerCase() === 'failed' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                                            'bg-amber-400/20 text-amber-500 border border-amber-400/30 animate-pulse'
+                                        }`}>
+                                            {(activeLiveOrder.fulfillment_status || 'PROCESSING').toUpperCase() === 'REFUNDED' ? 'REFUNDED' : (activeLiveOrder.fulfillment_status || 'PROCESSING').toUpperCase()}
+                                        </span>
+                                    </div>
+
+                                    {/* Detailed Live Order Lifecycle Stages */}
+                                    <LiveTrackerLifecycle status={activeLiveOrder.fulfillment_status} isDark={isDark} />
+
+                                    <div className="pt-2 border-t border-current/10 flex flex-wrap items-center justify-between text-[11px] text-slate-400 gap-2">
+                                        <span>Order Reference: <strong className="font-mono text-current">{activeLiveOrder.id}</strong></span>
+                                        <span>Placed at {new Date(activeLiveOrder.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                    </div>
+                                </div>
+                            ) : (
+                                /* No Active Order State */
+                                <div className={`p-6 rounded-2xl border text-center space-y-3 ${
+                                    isDark ? 'bg-[#18191c] border-white/5' : 'bg-slate-50 border-slate-200'
+                                }`}>
+                                    <Clock className="w-8 h-8 mx-auto text-slate-500 opacity-60" />
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-400">No active orders found.</p>
+                                        <p className="text-[11px] text-slate-500 mt-1">When you place an order, live tracking will automatically appear here.</p>
                                     </div>
                                     <button
-                                        onClick={() => {
-                                            setTrackingError(null);
-                                            setHomeTrackInput('');
-                                        }}
-                                        className="px-3 py-1 bg-rose-500 text-white font-bold rounded-lg text-[11px] shrink-0"
+                                        onClick={() => setActiveTab('purchase')}
+                                        className="px-5 py-2 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-extrabold rounded-xl text-xs inline-flex items-center gap-1.5 transition-all shadow-md"
                                     >
-                                        Try Again
+                                        <ShoppingCart className="w-3.5 h-3.5" />
+                                        <span>Buy Data Now</span>
                                     </button>
                                 </div>
                             )}
 
-                            {/* Display Tracked/Recent Order Information */}
-                            {currentActiveOrder && !trackingError && (
-                                <div className={`p-4 rounded-2xl border space-y-4 text-xs ${
-                                    isDark ? 'bg-[#18191c] border-white/5' : 'bg-slate-50 border-slate-200'
-                                }`}>
-                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2.5 border-current/10">
-                                        <div>
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Order #{currentActiveOrder.id.slice(0, 14)}</span>
-                                            <h4 className="text-sm font-black">
-                                                {currentActiveOrder.network} • {currentActiveOrder.data_amount}
-                                            </h4>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                                                (currentActiveOrder.fulfillment_status || '').toLowerCase() === 'completed' ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30' :
-                                                (currentActiveOrder.fulfillment_status || '').toLowerCase() === 'refunded' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
-                                                (currentActiveOrder.fulfillment_status || '').toLowerCase() === 'failed' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
-                                                'bg-amber-400/20 text-amber-500 border border-amber-400/30 animate-pulse'
-                                            }`}>
-                                                {(currentActiveOrder.fulfillment_status || 'PROCESSING').toUpperCase() === 'REFUNDED' ? 'REFUNDED' : (currentActiveOrder.fulfillment_status || 'PROCESSING').toUpperCase()}
-                                            </span>
-                                        </div>
+                            {/* Manual Lookup Form for optional reference tracking */}
+                            <form onSubmit={handleTrackSubmit} className="pt-2 border-t border-current/10 space-y-2">
+                                <span className="text-[11px] font-semibold text-slate-400 block">Look up another order manually:</span>
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                                        <input
+                                            type="text"
+                                            value={homeTrackInput}
+                                            onChange={(e) => setHomeTrackInput(e.target.value)}
+                                            placeholder="Enter Order ID or Reference (e.g. BB-123456)"
+                                            className={`w-full pl-10 pr-4 py-2 border rounded-xl text-xs font-mono focus:outline-none focus:border-[#a3e635] ${
+                                                isDark ? 'bg-[#18191c] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                                            }`}
+                                        />
                                     </div>
-
-                                    {/* Detailed Delivery Progress Indicator */}
-                                    <DeliveryProgress status={currentActiveOrder.fulfillment_status} isDark={isDark} />
-
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] border-t pt-3 border-current/10">
-                                        <div>
-                                            <span className="text-slate-400 block">Recipient</span>
-                                            <span className="font-mono font-bold">{currentActiveOrder.customer_phone}</span>
-                                        </div>
-                                        <div>
-                                            <span className="text-slate-400 block">Amount Paid</span>
-                                            <span className="font-bold text-[#a3e635]">GHS {(parseFloat(currentActiveOrder.selling_price_ghc as any) || 0).toFixed(2)}</span>
-                                        </div>
-                                        <div>
-                                            <span className="text-slate-400 block">Date</span>
-                                            <span>{new Date(currentActiveOrder.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                        </div>
-                                        <div>
-                                            <span className="text-slate-400 block">Live Status</span>
-                                            <span className="font-bold uppercase text-emerald-500 flex items-center gap-1">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping inline-block" />
-                                                {currentActiveOrder.fulfillment_status}
-                                            </span>
-                                        </div>
-                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={trackingLoading || !homeTrackInput.trim()}
+                                        className="px-4 py-2 bg-[#202227] hover:bg-[#2a2b30] text-white border border-white/10 font-bold rounded-xl text-xs transition-all flex items-center gap-1 shrink-0 disabled:opacity-50"
+                                    >
+                                        {trackingLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : 'Search'}
+                                    </button>
                                 </div>
-                            )}
+
+                                {trackingError && (
+                                    <div className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-2 mt-2 ${
+                                        isDark ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 'bg-rose-50 border-rose-200 text-rose-700'
+                                    }`}>
+                                        <div className="flex items-center gap-1.5">
+                                            <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                                            <span>{trackingError}</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setTrackingError(null);
+                                                setHomeTrackInput('');
+                                            }}
+                                            className="px-2.5 py-1 bg-rose-500 text-white font-bold rounded-md text-[10px] shrink-0"
+                                        >
+                                            Try Again
+                                        </button>
+                                    </div>
+                                )}
+                            </form>
                         </div>
 
-                        {/* CHOOSE YOUR NETWORK SECTION — FULL BRAND COLORS */}
+                        {/* CHOOSE YOUR NETWORK SECTION */}
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <div>
@@ -818,7 +816,7 @@ export default function PublicStorefront() {
                             </div>
                         </div>
 
-                        {/* POPULAR DATA BUNDLES SECTION (Full Network Background Cards) */}
+                        {/* POPULAR DATA BUNDLES SECTION — PRESERVED EXISTING CARD APPEARANCE (NOT Full Network Colors) */}
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <div>
@@ -836,115 +834,112 @@ export default function PublicStorefront() {
                                 </button>
                             </div>
 
-                            {/* Popular Bundles Grid with Full Network Card Background Colors */}
+                            {/* Popular Bundles Grid with Standard Card Appearance */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
                                 {/* MTN Popular Cards */}
-                                {popularBundles.MTN.map(bundle => {
-                                    const netTheme = getNetworkTheme(bundle.network);
-                                    return (
-                                        <div key={bundle.bundle_id} className={`p-5 rounded-3xl border ${netTheme.bg} flex flex-col justify-between space-y-4 group transition-transform hover:scale-[1.02]`}>
-                                            <div className="space-y-2">
-                                                <div className="flex justify-between items-center">
-                                                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase ${netTheme.badge}`}>
-                                                        MTN
-                                                    </span>
-                                                    <span className="text-[10px] font-semibold opacity-80">Popular Choice</span>
-                                                </div>
-                                                <h4 className="text-2xl font-black">
-                                                    {bundle.data_amount}
-                                                </h4>
+                                {popularBundles.MTN.map(bundle => (
+                                    <div key={bundle.bundle_id} className={`p-5 rounded-3xl border shadow-xl flex flex-col justify-between space-y-4 group ${
+                                        isDark ? 'bg-[#202227] border-white/5 hover:border-amber-400/40' : 'bg-white border-slate-200 hover:border-amber-400'
+                                    }`}>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-amber-400 text-black">
+                                                    MTN
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 font-medium">Popular Choice</span>
                                             </div>
-
-                                            <div className="pt-3 border-t border-current/20 flex items-center justify-between">
-                                                <div>
-                                                    <span className="text-[10px] opacity-80 block">Retail Price</span>
-                                                    <span className="text-lg font-black">
-                                                        GHS {(parseFloat(bundle.agent_price_ghc as any) || 0).toFixed(2)}
-                                                    </span>
-                                                </div>
-                                                <button
-                                                    onClick={() => handleBuyClick(bundle)}
-                                                    className={`px-4 py-2 font-extrabold rounded-xl text-xs transition-all flex items-center gap-1 shadow-md ${netTheme.button}`}
-                                                >
-                                                    Buy Data
-                                                    <ArrowRight className="w-3.5 h-3.5" />
-                                                </button>
-                                            </div>
+                                            <h4 className="text-2xl font-black group-hover:text-amber-500 transition-colors">
+                                                {bundle.data_amount}
+                                            </h4>
                                         </div>
-                                    );
-                                })}
+
+                                        <div className="pt-3 border-t border-current/10 flex items-center justify-between">
+                                            <div>
+                                                <span className="text-[10px] text-slate-400 block">Retail Price</span>
+                                                <span className="text-lg font-black text-amber-500">
+                                                    GHS {(parseFloat(bundle.agent_price_ghc as any) || 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                            <button
+                                                onClick={() => handleBuyClick(bundle)}
+                                                className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black font-extrabold rounded-xl text-xs transition-all flex items-center gap-1"
+                                            >
+                                                Buy Data
+                                                <ArrowRight className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
 
                                 {/* Telecel Popular Cards */}
-                                {popularBundles.TELECEL.map(bundle => {
-                                    const netTheme = getNetworkTheme(bundle.network);
-                                    return (
-                                        <div key={bundle.bundle_id} className={`p-5 rounded-3xl border ${netTheme.bg} flex flex-col justify-between space-y-4 group transition-transform hover:scale-[1.02]`}>
-                                            <div className="space-y-2">
-                                                <div className="flex justify-between items-center">
-                                                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase ${netTheme.badge}`}>
-                                                        Telecel
-                                                    </span>
-                                                    <span className="text-[10px] font-semibold opacity-80">Popular Choice</span>
-                                                </div>
-                                                <h4 className="text-2xl font-black">
-                                                    {bundle.data_amount}
-                                                </h4>
+                                {popularBundles.TELECEL.map(bundle => (
+                                    <div key={bundle.bundle_id} className={`p-5 rounded-3xl border shadow-xl flex flex-col justify-between space-y-4 group ${
+                                        isDark ? 'bg-[#202227] border-white/5 hover:border-red-500/40' : 'bg-white border-slate-200 hover:border-red-500'
+                                    }`}>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-red-600 text-white">
+                                                    Telecel
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 font-medium">Popular Choice</span>
                                             </div>
-
-                                            <div className="pt-3 border-t border-current/20 flex items-center justify-between">
-                                                <div>
-                                                    <span className="text-[10px] opacity-80 block">Retail Price</span>
-                                                    <span className="text-lg font-black">
-                                                        GHS {(parseFloat(bundle.agent_price_ghc as any) || 0).toFixed(2)}
-                                                    </span>
-                                                </div>
-                                                <button
-                                                    onClick={() => handleBuyClick(bundle)}
-                                                    className={`px-4 py-2 font-extrabold rounded-xl text-xs transition-all flex items-center gap-1 shadow-md ${netTheme.button}`}
-                                                >
-                                                    Buy Data
-                                                    <ArrowRight className="w-3.5 h-3.5" />
-                                                </button>
-                                            </div>
+                                            <h4 className="text-2xl font-black group-hover:text-red-500 transition-colors">
+                                                {bundle.data_amount}
+                                            </h4>
                                         </div>
-                                    );
-                                })}
+
+                                        <div className="pt-3 border-t border-current/10 flex items-center justify-between">
+                                            <div>
+                                                <span className="text-[10px] text-slate-400 block">Retail Price</span>
+                                                <span className="text-lg font-black text-red-500">
+                                                    GHS {(parseFloat(bundle.agent_price_ghc as any) || 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                            <button
+                                                onClick={() => handleBuyClick(bundle)}
+                                                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl text-xs transition-all flex items-center gap-1"
+                                            >
+                                                Buy Data
+                                                <ArrowRight className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
 
                                 {/* AirtelTigo Popular Cards */}
-                                {popularBundles.AIRTELTIGO.map(bundle => {
-                                    const netTheme = getNetworkTheme(bundle.network);
-                                    return (
-                                        <div key={bundle.bundle_id} className={`p-5 rounded-3xl border ${netTheme.bg} flex flex-col justify-between space-y-4 group transition-transform hover:scale-[1.02]`}>
-                                            <div className="space-y-2">
-                                                <div className="flex justify-between items-center">
-                                                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase ${netTheme.badge}`}>
-                                                        AirtelTigo
-                                                    </span>
-                                                    <span className="text-[10px] font-semibold opacity-80">Popular Choice</span>
-                                                </div>
-                                                <h4 className="text-2xl font-black">
-                                                    {bundle.data_amount}
-                                                </h4>
+                                {popularBundles.AIRTELTIGO.map(bundle => (
+                                    <div key={bundle.bundle_id} className={`p-5 rounded-3xl border shadow-xl flex flex-col justify-between space-y-4 group ${
+                                        isDark ? 'bg-[#202227] border-white/5 hover:border-blue-500/40' : 'bg-white border-slate-200 hover:border-blue-500'
+                                    }`}>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-blue-600 text-white">
+                                                    AirtelTigo
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 font-medium">Popular Choice</span>
                                             </div>
-
-                                            <div className="pt-3 border-t border-current/20 flex items-center justify-between">
-                                                <div>
-                                                    <span className="text-[10px] opacity-80 block">Retail Price</span>
-                                                    <span className="text-lg font-black">
-                                                        GHS {(parseFloat(bundle.agent_price_ghc as any) || 0).toFixed(2)}
-                                                    </span>
-                                                </div>
-                                                <button
-                                                    onClick={() => handleBuyClick(bundle)}
-                                                    className={`px-4 py-2 font-extrabold rounded-xl text-xs transition-all flex items-center gap-1 shadow-md ${netTheme.button}`}
-                                                >
-                                                    Buy Data
-                                                    <ArrowRight className="w-3.5 h-3.5" />
-                                                </button>
-                                            </div>
+                                            <h4 className="text-2xl font-black group-hover:text-blue-500 transition-colors">
+                                                {bundle.data_amount}
+                                            </h4>
                                         </div>
-                                    );
-                                })}
+
+                                        <div className="pt-3 border-t border-current/10 flex items-center justify-between">
+                                            <div>
+                                                <span className="text-[10px] text-slate-400 block">Retail Price</span>
+                                                <span className="text-lg font-black text-blue-500">
+                                                    GHS {(parseFloat(bundle.agent_price_ghc as any) || 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                            <button
+                                                onClick={() => handleBuyClick(bundle)}
+                                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl text-xs transition-all flex items-center gap-1"
+                                            >
+                                                Buy Data
+                                                <ArrowRight className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
 
@@ -1104,6 +1099,7 @@ export default function PublicStorefront() {
                                         <span>{trackingError}</span>
                                     </div>
                                     <button
+                                        type="button"
                                         onClick={() => {
                                             setTrackingError(null);
                                             setHomeTrackInput('');
@@ -1131,8 +1127,8 @@ export default function PublicStorefront() {
                                         </span>
                                     </div>
 
-                                    {/* Detailed Delivery Progress */}
-                                    <DeliveryProgress status={trackedOrder.fulfillment_status} isDark={isDark} />
+                                    {/* Detailed Delivery Lifecycle */}
+                                    <LiveTrackerLifecycle status={trackedOrder.fulfillment_status} isDark={isDark} />
 
                                     <div className="space-y-2 border-t pt-3 border-current/10">
                                         <div className="flex justify-between">
