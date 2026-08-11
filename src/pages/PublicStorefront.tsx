@@ -11,18 +11,16 @@ import {
     ArrowRight,
     RefreshCw,
     AlertTriangle,
-    Search,
     Home,
     FileText,
     Info,
-    CheckCircle,
-    XCircle,
-    RotateCcw,
     Sun,
     Moon,
     MessageCircle,
-    Check,
-    Flame
+    Flame,
+    Menu,
+    X,
+    Wifi
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -97,7 +95,7 @@ const DeliveryProgress = ({ status, isDark }: { status: string; isDark: boolean 
                     }`}>Delivery</span>
                 </div>
 
-                {/* Step 4: Delivered */}
+                {/* Step 4: Delivered / Refunded */}
                 <div className="flex flex-col items-center gap-1 z-10">
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs shadow-md ${
                         isDeliveryDone
@@ -151,6 +149,7 @@ export default function PublicStorefront() {
 
     // Navigation Tab state ('home' | 'purchase' | 'track' | 'info')
     const [activeTab, setActiveTab] = useState<'home' | 'purchase' | 'track' | 'info'>('home');
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     // Purchase Modal states
     const [selectedBundle, setSelectedBundle] = useState<AgentProduct | null>(null);
@@ -200,7 +199,7 @@ export default function PublicStorefront() {
 
     useEffect(() => {
         if (storeInfo?.store_name) {
-            document.title = `${storeInfo.store_name} - Data Storefront`;
+            document.title = `${storeInfo.store_name} - Data Marketplace`;
         }
     }, [storeInfo]);
 
@@ -210,6 +209,28 @@ export default function PublicStorefront() {
             verifyPayment(referenceFromUrl);
         }
     }, [referenceFromUrl]);
+
+    // Real-time polling for order status updates if order is pending/processing
+    useEffect(() => {
+        if (!recentOrder) return;
+        const s = (recentOrder.fulfillment_status || '').toLowerCase();
+        if (s === 'completed' || s === 'delivered' || s === 'refunded' || s === 'failed') return;
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await agentStoreService.trackPublicOrder(recentOrder.id);
+                if (res.success && res.order) {
+                    setRecentOrder(res.order);
+                    if (trackedOrder?.id === res.order.id) setTrackedOrder(res.order);
+                    if (slug) localStorage.setItem(`store_last_order_${slug}`, JSON.stringify(res.order));
+                }
+            } catch (e) {
+                // silent background update error
+            }
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [recentOrder, trackedOrder, slug]);
 
     const verifyPayment = async (ref: string) => {
         setVerifying(true);
@@ -227,7 +248,7 @@ export default function PublicStorefront() {
                     if (orderRes.success && orderRes.order) {
                         setRecentOrder(orderRes.order);
                         setTrackedOrder(orderRes.order);
-                        localStorage.setItem(`store_last_order_${slug}`, JSON.stringify(orderRes.order));
+                        if (slug) localStorage.setItem(`store_last_order_${slug}`, JSON.stringify(orderRes.order));
                     }
                 } catch (e) {
                     console.error('Error fetching verified order details:', e);
@@ -309,9 +330,9 @@ export default function PublicStorefront() {
         return counts;
     }, [products]);
 
-    // Popular Bundles: exactly 3 bundles per network (max 9 total)
+    // Popular Bundles: top bundles sorted by price
     const popularBundles = useMemo(() => {
-        const getTop3 = (netKey: string) => {
+        const getTop = (netKey: string, count = 3) => {
             return products
                 .filter(p => {
                     const n = (p.network || '').toUpperCase();
@@ -321,17 +342,15 @@ export default function PublicStorefront() {
                     return false;
                 })
                 .sort((a, b) => (parseFloat(a.agent_price_ghc as any) || 0) - (parseFloat(b.agent_price_ghc as any) || 0))
-                .slice(0, 3);
+                .slice(0, count);
         };
 
         return {
-            MTN: getTop3('MTN'),
-            TELECEL: getTop3('TELECEL'),
-            AIRTELTIGO: getTop3('AIRTELTIGO')
+            MTN: getTop('MTN'),
+            TELECEL: getTop('TELECEL'),
+            AIRTELTIGO: getTop('AIRTELTIGO')
         };
     }, [products]);
-
-    const availableNetworks = Array.from(new Set(products.map(p => p.network)));
 
     if (loading) {
         return (
@@ -363,91 +382,139 @@ export default function PublicStorefront() {
     }
 
     const filteredProducts = products.filter(p => selectedNetwork === 'ALL' || p.network === selectedNetwork);
-
     const whatsAppUrl = formatWhatsAppUrl(storeInfo?.phone);
+
+    const storeDescription = storeInfo?.description ||
+        "Fast and reliable data bundles delivered directly to your phone. Choose your network, select a bundle, complete your payment, and track your order from purchase to delivery.";
+
+    const navTabs = [
+        { id: 'home', label: 'Home', icon: Home },
+        { id: 'purchase', label: 'Buy Data', icon: ShoppingCart },
+        { id: 'track', label: 'Track Data', icon: FileText },
+        { id: 'info', label: 'Info', icon: Info },
+    ] as const;
 
     return (
         <div className={`min-h-screen font-sans selection:bg-[#a3e635] selection:text-black flex flex-col transition-colors duration-200 ${
             isDark ? 'bg-[#141518] text-white' : 'bg-slate-50 text-slate-900'
         }`}>
             {/* Top Store Header */}
-            <header className={`border-b py-5 px-4 sm:px-6 shadow-xl relative ${
-                isDark ? 'bg-[#202227] border-white/5' : 'bg-white border-slate-200'
+            <header className={`border-b py-4 px-4 sm:px-6 shadow-xl sticky top-0 z-40 backdrop-blur-md ${
+                isDark ? 'bg-[#202227]/95 border-white/5' : 'bg-white/95 border-slate-200'
             }`}>
-                <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-4 text-center sm:text-left">
+                <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
+                    {/* Branding */}
+                    <div className="flex items-center gap-3.5">
                         {storeInfo?.logo_url ? (
-                            <img src={storeInfo.logo_url} alt={storeInfo.store_name} className={`w-14 h-14 rounded-2xl object-cover border ${
+                            <img src={storeInfo.logo_url} alt={storeInfo.store_name} className={`w-11 h-11 rounded-2xl object-cover border ${
                                 isDark ? 'border-white/10' : 'border-slate-200'
                             }`} />
                         ) : (
-                            <div className={`w-14 h-14 rounded-2xl border flex items-center justify-center ${
+                            <div className={`w-11 h-11 rounded-2xl border flex items-center justify-center ${
                                 isDark ? 'bg-[#a3e635]/10 border-[#a3e635]/30 text-[#a3e635]' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600'
                             }`}>
-                                <StoreIcon className="w-7 h-7" />
+                                <StoreIcon className="w-6 h-6" />
                             </div>
                         )}
                         <div>
-                            <h1 className={`text-xl sm:text-2xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{storeInfo?.store_name}</h1>
-                            <p className={`text-xs max-w-md ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{storeInfo?.description || 'Instant Automated Data Bundles'}</p>
+                            <h1 className={`text-lg sm:text-xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{storeInfo?.store_name}</h1>
+                            <p className={`text-[11px] hidden sm:block max-w-sm truncate ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                                Instant Automated Telecommunications Data
+                            </p>
                         </div>
                     </div>
 
-                    {/* Right side controls: Security badge + Theme Switcher */}
+                    {/* Right Side: Desktop Nav + Security Badge + Theme Toggle + Mobile Menu Trigger */}
                     <div className="flex items-center gap-3">
-                        <div className={`px-3.5 py-1.5 rounded-xl border text-[11px] flex items-center gap-2 ${
+                        {/* Desktop Navigation */}
+                        <nav className="hidden md:flex items-center gap-1">
+                            {navTabs.map(tab => {
+                                const Icon = tab.icon;
+                                const active = activeTab === tab.id;
+                                return (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id as any)}
+                                        className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 ${
+                                            active
+                                                ? 'bg-[#a3e635] text-black shadow-md shadow-[#a3e635]/20 font-black'
+                                                : isDark
+                                                ? 'text-slate-400 hover:text-white hover:bg-white/5'
+                                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                                        }`}
+                                    >
+                                        <Icon className="w-3.5 h-3.5 stroke-[2.5]" />
+                                        <span>{tab.label}</span>
+                                    </button>
+                                );
+                            })}
+                        </nav>
+
+                        {/* Security Badge (Desktop) */}
+                        <div className={`hidden lg:flex px-3 py-1.5 rounded-xl border text-[11px] items-center gap-1.5 ${
                             isDark ? 'bg-[#18191c] border-white/5 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-600'
                         }`}>
-                            <ShieldCheck className={`w-4 h-4 ${isDark ? 'text-[#a3e635]' : 'text-emerald-600'}`} />
-                            <span className="font-medium">Instant & Secure</span>
+                            <ShieldCheck className={`w-3.5 h-3.5 ${isDark ? 'text-[#a3e635]' : 'text-emerald-600'}`} />
+                            <span className="font-semibold">Instant Delivery</span>
                         </div>
 
                         {/* Theme Switcher Toggle */}
                         <button
                             onClick={toggleTheme}
                             aria-label="Toggle Theme"
-                            className={`p-2.5 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-bold ${
+                            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-bold ${
                                 isDark
                                     ? 'bg-[#18191c] border-white/10 text-amber-300 hover:bg-white/10'
                                     : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
                             }`}
                         >
                             {isDark ? <Sun className="w-4 h-4 stroke-[2.5]" /> : <Moon className="w-4 h-4 stroke-[2.5]" />}
-                            <span className="hidden sm:inline">{isDark ? 'Light' : 'Dark'}</span>
+                            <span className="hidden sm:inline text-[11px]">{isDark ? 'Light' : 'Dark'}</span>
+                        </button>
+
+                        {/* Mobile Hamburger Menu Icon */}
+                        <button
+                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                            aria-label="Open Navigation Menu"
+                            className={`md:hidden p-2 rounded-xl border transition-all ${
+                                isDark ? 'bg-[#18191c] border-white/10 text-white hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
+                            }`}
+                        >
+                            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
                         </button>
                     </div>
                 </div>
 
-                {/* Minimalist Navigation Bar */}
-                <div className={`max-w-5xl mx-auto mt-5 pt-4 border-t flex items-center justify-center sm:justify-start gap-2 overflow-x-auto ${
-                    isDark ? 'border-white/5' : 'border-slate-200'
-                }`}>
-                    {[
-                        { id: 'home', label: 'Home', icon: Home },
-                        { id: 'purchase', label: 'Buy Data', icon: ShoppingCart },
-                        { id: 'track', label: 'Track Data', icon: FileText },
-                        { id: 'info', label: 'Info', icon: Info },
-                    ].map(tab => {
-                        const Icon = tab.icon;
-                        const active = activeTab === tab.id;
-                        return (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id as any)}
-                                className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 ${
-                                    active
-                                        ? 'bg-[#a3e635] text-black shadow-md shadow-[#a3e635]/20 font-black'
-                                        : isDark
-                                        ? 'text-slate-400 hover:text-white hover:bg-white/5'
-                                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                                }`}
-                            >
-                                <Icon className="w-4 h-4 stroke-[2.5]" />
-                                <span>{tab.label}</span>
-                            </button>
-                        );
-                    })}
-                </div>
+                {/* Mobile Dropdown Navigation Menu */}
+                {mobileMenuOpen && (
+                    <div className={`md:hidden mt-3 pt-3 border-t grid grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-2 duration-150 ${
+                        isDark ? 'border-white/5' : 'border-slate-200'
+                    }`}>
+                        {navTabs.map(tab => {
+                            const Icon = tab.icon;
+                            const active = activeTab === tab.id;
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => {
+                                        setActiveTab(tab.id as any);
+                                        setMobileMenuOpen(false);
+                                    }}
+                                    className={`p-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-2 ${
+                                        active
+                                            ? 'bg-[#a3e635] text-black shadow-md font-black'
+                                            : isDark
+                                            ? 'bg-[#18191c] text-slate-300 hover:bg-white/5 border border-white/5'
+                                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                                    }`}
+                                >
+                                    <Icon className="w-4 h-4 stroke-[2.5]" />
+                                    <span>{tab.label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
             </header>
 
             {/* Payment Verification Banner Result */}
@@ -472,36 +539,36 @@ export default function PublicStorefront() {
             )}
 
             {/* Main Content Area */}
-            <main className="max-w-5xl mx-auto py-8 px-4 sm:px-6 flex-1 w-full space-y-8">
+            <main className="max-w-5xl mx-auto py-6 sm:py-8 px-4 sm:px-6 flex-1 w-full space-y-8">
                 {/* 1. HOME TAB */}
                 {activeTab === 'home' && (
                     <div className="space-y-8">
-                        {/* Store Hero Banner */}
-                        <div className={`p-8 sm:p-10 rounded-3xl border text-center space-y-5 shadow-2xl relative overflow-hidden ${
+                        {/* Store Hero Banner & Concise Delivery Description */}
+                        <div className={`p-6 sm:p-10 rounded-3xl border text-center space-y-5 shadow-2xl relative overflow-hidden ${
                             isDark ? 'bg-[#202227] border-white/5' : 'bg-white border-slate-200'
                         }`}>
-                            <div className={`w-16 h-16 rounded-2xl border flex items-center justify-center mx-auto ${
+                            <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl border flex items-center justify-center mx-auto ${
                                 isDark ? 'bg-[#a3e635]/10 border-[#a3e635]/30 text-[#a3e635]' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600'
                             }`}>
-                                <Zap className="w-8 h-8 stroke-[2.5]" />
+                                <Zap className="w-7 h-7 sm:w-8 sm:h-8 stroke-[2.5]" />
                             </div>
-                            <div className="space-y-2 max-w-lg mx-auto">
-                                <h2 className={`text-2xl sm:text-3xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{storeInfo?.store_name}</h2>
-                                <p className={`text-xs sm:text-sm leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                                    {storeInfo?.description || 'Fast, reliable, and instant telecommunications data bundle reseller storefront.'}
+                            <div className="space-y-2 max-w-xl mx-auto">
+                                <h2 className={`text-2xl sm:text-3xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{storeInfo?.store_name}</h2>
+                                <p className={`text-xs sm:text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                                    {storeDescription}
                                 </p>
                             </div>
                             <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                                 <button
                                     onClick={() => setActiveTab('purchase')}
-                                    className="px-6 py-3.5 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-extrabold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-[#a3e635]/20 transition-all"
+                                    className="px-6 py-3 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-extrabold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-[#a3e635]/20 transition-all"
                                 >
                                     <ShoppingCart className="w-4 h-4 stroke-[2.5]" />
-                                    <span>Buy Data</span>
+                                    <span>Buy Data Now</span>
                                 </button>
                                 <button
                                     onClick={() => setActiveTab('track')}
-                                    className={`px-6 py-3.5 font-bold rounded-xl text-xs border flex items-center gap-2 transition-all ${
+                                    className={`px-6 py-3 font-bold rounded-xl text-xs border flex items-center gap-2 transition-all ${
                                         isDark
                                             ? 'bg-[#18191c] hover:bg-[#26282e] text-slate-300 border-white/10'
                                             : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
@@ -513,15 +580,15 @@ export default function PublicStorefront() {
                             </div>
                         </div>
 
-                        {/* Recent / Active Order & Progress Tracking on Home Page */}
+                        {/* Order Tracking & Status / Progress Indicator on Home Page */}
                         {recentOrder && (
-                            <div className={`p-6 rounded-3xl border space-y-4 shadow-xl ${
+                            <div className={`p-5 sm:p-6 rounded-3xl border space-y-4 shadow-xl ${
                                 isDark ? 'bg-[#202227] border-white/10' : 'bg-white border-slate-200'
                             }`}>
                                 <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 border-current/10">
                                     <div>
                                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                            {(recentOrder.fulfillment_status || '').toLowerCase() === 'completed' ? 'Last Delivered Order' : 'Current Order'}
+                                            {(recentOrder.fulfillment_status || '').toLowerCase() === 'completed' ? 'Last Delivered Order' : 'Active Order Status'}
                                         </span>
                                         <h3 className="text-base font-black">
                                             {recentOrder.network} {recentOrder.data_amount}
@@ -533,7 +600,7 @@ export default function PublicStorefront() {
                                         (recentOrder.fulfillment_status || '').toLowerCase() === 'failed' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
                                         'bg-amber-400/20 text-amber-500 border border-amber-400/30 animate-pulse'
                                     }`}>
-                                        {(recentOrder.fulfillment_status || 'PROCESSING').toUpperCase()}
+                                        {(recentOrder.fulfillment_status || 'PROCESSING').toUpperCase() === 'REFUNDED' ? 'REFUNDED' : (recentOrder.fulfillment_status || 'PROCESSING').toUpperCase()}
                                     </span>
                                 </div>
 
@@ -561,109 +628,91 @@ export default function PublicStorefront() {
                             </div>
                         )}
 
-                        {/* SECTION 10: CHOOSE YOUR NETWORK */}
+                        {/* CHOOSE YOUR NETWORK SECTION — FULL BRAND COLORS */}
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <h3 className="text-lg font-black tracking-tight">Choose Your Network</h3>
-                                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Select a telecommunications provider to view available bundles</p>
+                                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Select a network provider to explore available bundles</p>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                {/* MTN Card */}
+                                {/* MTN Card — Full Yellow Background */}
                                 <div
                                     onClick={() => {
                                         setSelectedNetwork('MTN');
                                         setActiveTab('purchase');
                                     }}
-                                    className={`p-6 rounded-3xl border cursor-pointer transition-all duration-300 shadow-lg group relative overflow-hidden ${
-                                        selectedNetwork === 'MTN'
-                                            ? 'bg-amber-400/10 border-amber-400 ring-2 ring-amber-400/40'
-                                            : isDark
-                                            ? 'bg-[#202227] border-white/5 hover:border-amber-400/40 hover:bg-amber-400/5'
-                                            : 'bg-white border-slate-200 hover:border-amber-400 hover:bg-amber-50'
-                                    }`}
+                                    className="p-6 rounded-3xl cursor-pointer transition-all duration-300 shadow-xl group relative overflow-hidden bg-amber-400 text-[#0f172a] hover:scale-[1.02] hover:shadow-amber-400/20"
                                 >
                                     <div className="flex justify-between items-start mb-4">
-                                        <span className="px-3 py-1 rounded-xl text-xs font-black bg-amber-400 text-black shadow-md">
+                                        <span className="px-3 py-1 rounded-xl text-xs font-black bg-[#0f172a] text-amber-400 shadow-md">
                                             MTN
                                         </span>
-                                        <span className="text-xs font-bold text-amber-500">
-                                            {networkCounts.MTN} Bundles
+                                        <span className="text-xs font-black bg-black/10 px-2.5 py-1 rounded-lg">
+                                            {networkCounts.MTN} available
                                         </span>
                                     </div>
-                                    <h4 className="text-xl font-extrabold group-hover:text-amber-500 transition-colors">MTN Ghana</h4>
-                                    <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>High-speed 4G LTE internet data bundles.</p>
-                                    <div className="mt-4 flex items-center text-xs font-bold text-amber-500 gap-1">
-                                        <span>Browse MTN</span>
-                                        <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                                    <h4 className="text-xl font-black">MTN Ghana</h4>
+                                    <p className="text-xs mt-1 font-medium text-[#0f172a]/80">High-speed 4G LTE internet data bundles.</p>
+                                    <div className="mt-5 flex items-center text-xs font-black text-[#0f172a] gap-1">
+                                        <span>View Bundles</span>
+                                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                                     </div>
                                 </div>
 
-                                {/* Telecel Card */}
+                                {/* Telecel Card — Full Red Background */}
                                 <div
                                     onClick={() => {
                                         setSelectedNetwork('TELECEL');
                                         setActiveTab('purchase');
                                     }}
-                                    className={`p-6 rounded-3xl border cursor-pointer transition-all duration-300 shadow-lg group relative overflow-hidden ${
-                                        selectedNetwork === 'TELECEL'
-                                            ? 'bg-rose-500/10 border-rose-500 ring-2 ring-rose-500/40'
-                                            : isDark
-                                            ? 'bg-[#202227] border-white/5 hover:border-rose-500/40 hover:bg-rose-500/5'
-                                            : 'bg-white border-slate-200 hover:border-rose-500 hover:bg-rose-50'
-                                    }`}
+                                    className="p-6 rounded-3xl cursor-pointer transition-all duration-300 shadow-xl group relative overflow-hidden bg-red-600 text-white hover:scale-[1.02] hover:shadow-red-600/20"
                                 >
                                     <div className="flex justify-between items-start mb-4">
-                                        <span className="px-3 py-1 rounded-xl text-xs font-black bg-rose-500 text-white shadow-md">
+                                        <span className="px-3 py-1 rounded-xl text-xs font-black bg-white text-red-600 shadow-md">
                                             Telecel
                                         </span>
-                                        <span className="text-xs font-bold text-rose-500">
-                                            {networkCounts.TELECEL} Bundles
+                                        <span className="text-xs font-black bg-black/20 px-2.5 py-1 rounded-lg">
+                                            {networkCounts.TELECEL} available
                                         </span>
                                     </div>
-                                    <h4 className="text-xl font-extrabold group-hover:text-rose-500 transition-colors">Telecel Ghana</h4>
-                                    <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Fast and reliable non-expiring data packages.</p>
-                                    <div className="mt-4 flex items-center text-xs font-bold text-rose-500 gap-1">
-                                        <span>Browse Telecel</span>
-                                        <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                                    <h4 className="text-xl font-black">Telecel Ghana</h4>
+                                    <p className="text-xs mt-1 font-medium text-white/90">Fast and reliable non-expiring data packages.</p>
+                                    <div className="mt-5 flex items-center text-xs font-black text-white gap-1">
+                                        <span>View Bundles</span>
+                                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                                     </div>
                                 </div>
 
-                                {/* AirtelTigo Card */}
+                                {/* AirtelTigo Card — Full Blue Background */}
                                 <div
                                     onClick={() => {
                                         setSelectedNetwork('AIRTELTIGO');
                                         setActiveTab('purchase');
                                     }}
-                                    className={`p-6 rounded-3xl border cursor-pointer transition-all duration-300 shadow-lg group relative overflow-hidden ${
-                                        selectedNetwork === 'AIRTELTIGO'
-                                            ? 'bg-blue-500/10 border-blue-500 ring-2 ring-blue-500/40'
-                                            : isDark
-                                            ? 'bg-[#202227] border-white/5 hover:border-blue-500/40 hover:bg-blue-500/5'
-                                            : 'bg-white border-slate-200 hover:border-blue-500 hover:bg-blue-50'
-                                    }`}
+                                    className="p-6 rounded-3xl cursor-pointer transition-all duration-300 shadow-xl group relative overflow-hidden bg-blue-600 text-white hover:scale-[1.02] hover:shadow-blue-600/20"
                                 >
                                     <div className="flex justify-between items-start mb-4">
-                                        <span className="px-3 py-1 rounded-xl text-xs font-black bg-blue-500 text-white shadow-md">
+                                        <span className="px-3 py-1 rounded-xl text-xs font-black bg-white text-blue-600 shadow-md">
                                             AirtelTigo
                                         </span>
-                                        <span className="text-xs font-bold text-blue-500">
-                                            {networkCounts.AIRTELTIGO} Bundles
+                                        <span className="text-xs font-black bg-black/20 px-2.5 py-1 rounded-lg">
+                                            {networkCounts.AIRTELTIGO} available
                                         </span>
                                     </div>
-                                    <h4 className="text-xl font-extrabold group-hover:text-blue-500 transition-colors">AT Ghana</h4>
-                                    <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Affordable and instant data bundle delivery.</p>
-                                    <div className="mt-4 flex items-center text-xs font-bold text-blue-500 gap-1">
-                                        <span>Browse AirtelTigo</span>
-                                        <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                                    <h4 className="text-xl font-black">AT Ghana</h4>
+                                    <p className="text-xs mt-1 font-medium text-white/90">Affordable and instant data bundle delivery.</p>
+                                    <div className="mt-5 flex items-center text-xs font-black text-white gap-1">
+                                        <span>View Bundles</span>
+                                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* SECTION 15 & 16: POPULAR DATA BUNDLES (Exactly 3 per network) */}
+                        {/* POPULAR DATA BUNDLES SECTION (Uses Real Store Products) */}
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <div>
@@ -671,11 +720,17 @@ export default function PublicStorefront() {
                                         <Flame className="w-5 h-5 text-amber-500" />
                                         Popular Data Bundles
                                     </h3>
-                                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Featured bundles from MTN, Telecel, and AirtelTigo</p>
+                                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Featured active bundles from MTN, Telecel, and AirtelTigo</p>
                                 </div>
+                                <button
+                                    onClick={() => setActiveTab('purchase')}
+                                    className="text-xs font-bold text-[#a3e635] hover:underline flex items-center gap-1"
+                                >
+                                    View All Bundles →
+                                </button>
                             </div>
 
-                            {/* Popular Grid */}
+                            {/* Popular Bundles Grid */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
                                 {/* MTN Popular */}
                                 {popularBundles.MTN.map(bundle => (
@@ -687,9 +742,9 @@ export default function PublicStorefront() {
                                                 <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-amber-400 text-black">
                                                     MTN
                                                 </span>
-                                                <span className="text-[10px] text-slate-400">Popular</span>
+                                                <span className="text-[10px] text-slate-400 font-medium">Popular Choice</span>
                                             </div>
-                                            <h4 className="text-2xl font-black group-hover:text-amber-400 transition-colors">
+                                            <h4 className="text-2xl font-black group-hover:text-amber-500 transition-colors">
                                                 {bundle.data_amount}
                                             </h4>
                                         </div>
@@ -715,16 +770,16 @@ export default function PublicStorefront() {
                                 {/* Telecel Popular */}
                                 {popularBundles.TELECEL.map(bundle => (
                                     <div key={bundle.bundle_id} className={`p-5 rounded-3xl border shadow-xl flex flex-col justify-between space-y-4 group ${
-                                        isDark ? 'bg-[#202227] border-white/5 hover:border-rose-500/40' : 'bg-white border-slate-200 hover:border-rose-500'
+                                        isDark ? 'bg-[#202227] border-white/5 hover:border-red-500/40' : 'bg-white border-slate-200 hover:border-red-500'
                                     }`}>
                                         <div className="space-y-2">
                                             <div className="flex justify-between items-center">
-                                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-rose-500 text-white">
+                                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-red-600 text-white">
                                                     Telecel
                                                 </span>
-                                                <span className="text-[10px] text-slate-400">Popular</span>
+                                                <span className="text-[10px] text-slate-400 font-medium">Popular Choice</span>
                                             </div>
-                                            <h4 className="text-2xl font-black group-hover:text-rose-500 transition-colors">
+                                            <h4 className="text-2xl font-black group-hover:text-red-500 transition-colors">
                                                 {bundle.data_amount}
                                             </h4>
                                         </div>
@@ -732,13 +787,13 @@ export default function PublicStorefront() {
                                         <div className="pt-3 border-t border-current/10 flex items-center justify-between">
                                             <div>
                                                 <span className="text-[10px] text-slate-400 block">Retail Price</span>
-                                                <span className="text-lg font-black text-rose-500">
+                                                <span className="text-lg font-black text-red-500">
                                                     GHS {(parseFloat(bundle.agent_price_ghc as any) || 0).toFixed(2)}
                                                 </span>
                                             </div>
                                             <button
                                                 onClick={() => handleBuyClick(bundle)}
-                                                className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white font-extrabold rounded-xl text-xs transition-all flex items-center gap-1"
+                                                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl text-xs transition-all flex items-center gap-1"
                                             >
                                                 Buy Data
                                                 <ArrowRight className="w-3.5 h-3.5" />
@@ -754,10 +809,10 @@ export default function PublicStorefront() {
                                     }`}>
                                         <div className="space-y-2">
                                             <div className="flex justify-between items-center">
-                                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-blue-500 text-white">
+                                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-blue-600 text-white">
                                                     AirtelTigo
                                                 </span>
-                                                <span className="text-[10px] text-slate-400">Popular</span>
+                                                <span className="text-[10px] text-slate-400 font-medium">Popular Choice</span>
                                             </div>
                                             <h4 className="text-2xl font-black group-hover:text-blue-500 transition-colors">
                                                 {bundle.data_amount}
@@ -773,7 +828,7 @@ export default function PublicStorefront() {
                                             </div>
                                             <button
                                                 onClick={() => handleBuyClick(bundle)}
-                                                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-extrabold rounded-xl text-xs transition-all flex items-center gap-1"
+                                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl text-xs transition-all flex items-center gap-1"
                                             >
                                                 Buy Data
                                                 <ArrowRight className="w-3.5 h-3.5" />
@@ -821,10 +876,10 @@ export default function PublicStorefront() {
                                 let colorClass = isDark ? 'bg-[#202227] text-slate-400 border-white/5' : 'bg-white text-slate-600 border-slate-200';
                                 
                                 if (isSelected) {
-                                    if (net === 'MTN') colorClass = 'bg-amber-400 text-black font-extrabold border-amber-400 shadow-lg shadow-amber-400/20';
-                                    else if (net === 'TELECEL') colorClass = 'bg-rose-500 text-white font-extrabold border-rose-500 shadow-lg shadow-rose-500/20';
-                                    else if (net === 'AIRTELTIGO') colorClass = 'bg-blue-500 text-white font-extrabold border-blue-500 shadow-lg shadow-blue-500/20';
-                                    else colorClass = 'bg-[#a3e635] text-black font-extrabold border-[#a3e635] shadow-lg shadow-[#a3e635]/20';
+                                    if (net === 'MTN') colorClass = 'bg-amber-400 text-[#0f172a] font-black border-amber-400 shadow-lg shadow-amber-400/20';
+                                    else if (net === 'TELECEL') colorClass = 'bg-red-600 text-white font-black border-red-600 shadow-lg shadow-red-600/20';
+                                    else if (net === 'AIRTELTIGO') colorClass = 'bg-blue-600 text-white font-black border-blue-600 shadow-lg shadow-blue-600/20';
+                                    else colorClass = 'bg-[#a3e635] text-black font-black border-[#a3e635] shadow-lg shadow-[#a3e635]/20';
                                 }
 
                                 return (
@@ -858,9 +913,9 @@ export default function PublicStorefront() {
                                         <div className="space-y-2">
                                             <div className="flex justify-between items-center">
                                                 <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase ${
-                                                    bundle.network === 'MTN' ? 'bg-amber-400 text-black' :
-                                                    bundle.network === 'TELECEL' || bundle.network === 'VODA' ? 'bg-rose-500 text-white' :
-                                                    'bg-blue-500 text-white'
+                                                    bundle.network === 'MTN' ? 'bg-amber-400 text-[#0f172a]' :
+                                                    bundle.network === 'TELECEL' || bundle.network === 'VODA' ? 'bg-red-600 text-white' :
+                                                    'bg-blue-600 text-white'
                                                 }`}>
                                                     {bundle.network}
                                                 </span>
@@ -877,7 +932,9 @@ export default function PublicStorefront() {
                                             <div>
                                                 <span className="text-[10px] text-slate-400 block">Retail Price</span>
                                                 <span className={`text-xl font-extrabold ${
-                                                    isDark ? 'text-[#a3e635]' : 'text-emerald-600'
+                                                    bundle.network === 'MTN' ? 'text-amber-500' :
+                                                    bundle.network === 'TELECEL' || bundle.network === 'VODA' ? 'text-red-500' :
+                                                    'text-blue-500'
                                                 }`}>
                                                     GHS {(parseFloat(bundle.agent_price_ghc as any) || 0).toFixed(2)}
                                                 </span>
@@ -885,7 +942,11 @@ export default function PublicStorefront() {
 
                                             <button
                                                 onClick={() => handleBuyClick(bundle)}
-                                                className="px-5 py-2.5 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-extrabold rounded-xl text-xs shadow-md shadow-[#a3e635]/20 transition-all flex items-center gap-1.5"
+                                                className={`px-5 py-2.5 font-extrabold rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5 ${
+                                                    bundle.network === 'MTN' ? 'bg-amber-400 hover:bg-amber-300 text-[#0f172a]' :
+                                                    bundle.network === 'TELECEL' || bundle.network === 'VODA' ? 'bg-red-600 hover:bg-red-700 text-white' :
+                                                    'bg-blue-600 hover:bg-blue-700 text-white'
+                                                }`}
                                             >
                                                 Buy Data
                                                 <ArrowRight className="w-3.5 h-3.5" />
@@ -910,7 +971,7 @@ export default function PublicStorefront() {
                                     Track Order Status
                                 </h2>
                                 <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                                    Enter your Order ID or Paystack payment reference below to verify order delivery.
+                                    Enter your Order ID or payment reference to check status and delivery progress.
                                 </p>
                             </div>
 
@@ -958,7 +1019,7 @@ export default function PublicStorefront() {
                                             (trackedOrder.fulfillment_status || '').toLowerCase() === 'failed' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
                                             'bg-amber-400/20 text-amber-500 border border-amber-400/30 animate-pulse'
                                         }`}>
-                                            {trackedOrder.fulfillment_status || 'PROCESSING'}
+                                            {(trackedOrder.fulfillment_status || 'PROCESSING').toUpperCase() === 'REFUNDED' ? 'REFUNDED' : (trackedOrder.fulfillment_status || 'PROCESSING').toUpperCase()}
                                         </span>
                                     </div>
 
@@ -1020,8 +1081,8 @@ export default function PublicStorefront() {
                                 </div>
 
                                 <div className={`p-4 rounded-2xl border space-y-1 ${isDark ? 'bg-[#18191c] border-white/5' : 'bg-slate-50 border-slate-200'}`}>
-                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Description</span>
-                                    <p className="leading-relaxed">{storeInfo?.description || 'Official data reseller storefront'}</p>
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Service Overview</span>
+                                    <p className="leading-relaxed">{storeDescription}</p>
                                 </div>
 
                                 {storeInfo?.phone && (
@@ -1048,7 +1109,7 @@ export default function PublicStorefront() {
                 <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div className="text-center sm:text-left space-y-1">
                         <p className="font-black text-sm">{storeInfo?.store_name || 'Storefront'}</p>
-                        <p className="text-[11px] text-slate-400 max-w-sm">{storeInfo?.description || 'Instant Automated Telecommunications Data Marketplace'}</p>
+                        <p className="text-[11px] text-slate-400 max-w-sm">{storeDescription}</p>
                     </div>
 
                     <div className="flex flex-wrap items-center justify-center gap-4">
@@ -1097,7 +1158,11 @@ export default function PublicStorefront() {
                         <div className="flex justify-between items-center border-b pb-3 border-current/10">
                             <div>
                                 <h3 className="font-bold text-lg">Purchase Data Package</h3>
-                                <p className="text-xs text-[#a3e635] font-semibold">{selectedBundle.network} {selectedBundle.data_amount}</p>
+                                <p className={`text-xs font-bold ${
+                                    selectedBundle.network === 'MTN' ? 'text-amber-500' :
+                                    selectedBundle.network === 'TELECEL' || selectedBundle.network === 'VODA' ? 'text-red-500' :
+                                    'text-blue-500'
+                                }`}>{selectedBundle.network} {selectedBundle.data_amount}</p>
                             </div>
                             <button onClick={() => setSelectedBundle(null)} className="text-slate-400 hover:text-current text-xl">✕</button>
                         </div>
@@ -1115,7 +1180,7 @@ export default function PublicStorefront() {
                                         isDark ? 'bg-[#18191c] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
                                     }`}
                                 />
-                                <p className="text-[10px] text-slate-400">Data bundle will be delivered directly to this number.</p>
+                                <p className="text-[10px] text-slate-400">Data bundle will be delivered directly to this recipient number.</p>
                             </div>
 
                             <div className={`p-4 rounded-2xl border space-y-2 text-xs ${
@@ -1146,4 +1211,3 @@ export default function PublicStorefront() {
         </div>
     );
 }
-
