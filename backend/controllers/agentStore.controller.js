@@ -1140,6 +1140,8 @@ exports.initializeCustomerPurchase = async (req, res) => {
                     agent_id: store.user_id,
                     bundle_id: bundleId,
                     customer_phone: customerPhone,
+                    network: prod.network,
+                    data_amount: prod.data_amount,
                     base_price_ghc: basePrice,
                     selling_price_ghc: sellingPrice,
                     profit_ghc: profit
@@ -1153,20 +1155,13 @@ exports.initializeCustomerPurchase = async (req, res) => {
             return res.status(400).json({ success: false, error: paystackData.message || 'Payment initialization failed' });
         }
 
-        const orderId = uuidv4();
-
-        // Record agent order
-        await connection.execute(
-            `INSERT INTO agent_orders (id, store_id, agent_id, bundle_id, customer_phone, network, data_amount, base_price_ghc, selling_price_ghc, profit_ghc, paystack_reference, payment_status, fulfillment_status, created_at, updated_at)
-             VALUES (?::uuid, ?::uuid, ?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', NOW(), NOW())`,
-            [orderId, store.id, store.user_id, bundleId, customerPhone, prod.network, prod.data_amount, basePrice, sellingPrice, profit, reference]
-        );
+        // NOTE: Order is NOT inserted into agent_orders here.
+        // It will only be inserted after Paystack confirms successful payment (in verify or webhook).
 
         res.json({
             success: true,
             authorization_url: paystackData.data.authorization_url,
-            reference,
-            order_id: orderId
+            reference
         });
     } catch (error) {
         console.error('Error initializing customer purchase:', error);
@@ -1202,7 +1197,7 @@ exports.verifyCustomerPurchase = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Payment verification failed' });
         }
 
-        const [orders] = await connection.execute(
+        let [orders] = await connection.execute(
             `SELECT o.*, b.provider_slug 
              FROM agent_orders o
              LEFT JOIN data_bundles b ON o.bundle_id = b.id::uuid
@@ -1210,11 +1205,49 @@ exports.verifyCustomerPurchase = async (req, res) => {
             [reference]
         );
 
-        if (orders.length === 0) {
-            return res.status(404).json({ success: false, error: 'Order reference not found' });
-        }
+        let order;
 
-        const order = orders[0];
+        // If order was not yet created (since initialization no longer pre-inserts orders), create it now!
+        if (orders.length === 0) {
+            const meta = verifyData.data.metadata || {};
+            if (!meta.store_id || !meta.agent_id || !meta.bundle_id || !meta.customer_phone) {
+                return res.status(400).json({ success: false, error: 'Invalid order metadata in payment verification' });
+            }
+
+            const orderId = uuidv4();
+            const sellingPrice = parseFloat(meta.selling_price_ghc || (verifyData.data.amount / 100));
+            const basePrice = parseFloat(meta.base_price_ghc || 0);
+            const profit = parseFloat(meta.profit_ghc || Math.max(0, sellingPrice - basePrice));
+
+            // Fetch bundle provider slug
+            const [bundleRows] = await connection.execute('SELECT provider_slug FROM data_bundles WHERE id = ?::uuid', [meta.bundle_id]);
+            const providerSlug = bundleRows.length > 0 ? bundleRows[0].provider_slug : null;
+
+            await connection.execute(
+                `INSERT INTO agent_orders (id, store_id, agent_id, bundle_id, customer_phone, network, data_amount, base_price_ghc, selling_price_ghc, profit_ghc, paystack_reference, payment_status, fulfillment_status, created_at, updated_at)
+                 VALUES (?::uuid, ?::uuid, ?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, 'paid', 'processing', NOW(), NOW())`,
+                [orderId, meta.store_id, meta.agent_id, meta.bundle_id, meta.customer_phone, meta.network, meta.data_amount, basePrice, sellingPrice, profit, reference]
+            );
+
+            order = {
+                id: orderId,
+                store_id: meta.store_id,
+                agent_id: meta.agent_id,
+                bundle_id: meta.bundle_id,
+                customer_phone: meta.customer_phone,
+                network: meta.network,
+                data_amount: meta.data_amount,
+                base_price_ghc: basePrice,
+                selling_price_ghc: sellingPrice,
+                profit_ghc: profit,
+                paystack_reference: reference,
+                payment_status: 'paid',
+                fulfillment_status: 'processing',
+                provider_slug: providerSlug
+            };
+        } else {
+            order = orders[0];
+        }
 
         if (order.fulfillment_status === 'completed') {
             return res.json({
@@ -1227,7 +1260,7 @@ exports.verifyCustomerPurchase = async (req, res) => {
 
         // SECURITY: Verify currency and amount matches expected order price in pesewas
         const expectedPesewas = Math.round(parseFloat(order.selling_price_ghc) * 100);
-        if (verifyData.data.currency !== 'GHS' || verifyData.data.amount !== expectedPesewas) {
+        if (verifyData.data.currency !== 'GHS' || Math.abs(verifyData.data.amount - expectedPesewas) > 1) {
             console.error(`🚨 Security Alert: Customer purchase amount/currency mismatch for order ${order.id}. Expected: ${expectedPesewas} GHS pesewas, Received: ${verifyData.data.amount} ${verifyData.data.currency}`);
             return res.status(400).json({ success: false, error: 'Customer payment verification failed: Amount or currency mismatch' });
         }
@@ -1269,6 +1302,7 @@ exports.verifyCustomerPurchase = async (req, res) => {
             const currentAvail = wallets.length > 0 ? parseFloat(wallets[0].available_balance) : 0.00;
             const newAvail = currentAvail + profitGhc;
 
+            // Atomically update wallet balance
             await connection.execute(
                 `UPDATE agent_wallets 
                  SET available_balance = available_balance + ?,
@@ -1278,7 +1312,7 @@ exports.verifyCustomerPurchase = async (req, res) => {
                 [profitGhc, profitGhc, order.agent_id]
             );
 
-            // Record in agent_wallet_ledger
+            // Record ledger entry
             await connection.execute(
                 `INSERT INTO agent_wallet_ledger (id, agent_id, store_id, order_id, type, amount_ghc, balance_after, description, reference, created_at)
                  VALUES (?::uuid, ?::uuid, ?::uuid, ?::uuid, 'SALE_PROFIT', ?, ?, ?, ?, NOW())`,

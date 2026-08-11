@@ -282,31 +282,69 @@ const toggleUserStatus = async (req, res) => {
     }
 };
 
-// Get all transactions (admin)
+// Get all transactions (admin - unified view of direct & agent store orders)
 const getAllTransactions = async (req, res) => {
     try {
         const { status, limit = 100, offset = 0 } = req.query;
 
         let query = `
-            SELECT t.id, t.recipient_phone, t.amount_ghc, t.status, t.created_at, t.updated_at,
-                   t.serial_id, t.balance_before, t.balance_after, t.source, t.paid, t.source_provider,
-                   d.network, d.data_amount,
-                   COALESCE(p.full_name, u.name) as user_name, 
-                   COALESCE(p.email, u.email) as user_email
-            FROM transactions t
-            LEFT JOIN data_bundles d ON t.bundle_id::text = d.id::text
-            LEFT JOIN users u ON t.user_id::text = u.uuid::text
-            LEFT JOIN profiles p ON t.user_id::text = p.id::text
+            SELECT * FROM (
+                SELECT 
+                    t.id::text as id, 
+                    t.recipient_phone, 
+                    t.amount_ghc, 
+                    t.status, 
+                    t.created_at, 
+                    t.updated_at,
+                    t.serial_id, 
+                    t.balance_before, 
+                    t.balance_after, 
+                    COALESCE(t.source, 'BYTEBEACON') as source, 
+                    t.paid, 
+                    t.source_provider,
+                    d.network, 
+                    d.data_amount,
+                    COALESCE(p.full_name, u.name, 'Customer') as user_name, 
+                    COALESCE(p.email, u.email, 'N/A') as user_email
+                FROM transactions t
+                LEFT JOIN data_bundles d ON t.bundle_id::text = d.id::text
+                LEFT JOIN users u ON t.user_id::text = u.uuid::text
+                LEFT JOIN profiles p ON t.user_id::text = p.id::text
+
+                UNION ALL
+
+                SELECT 
+                    o.id::text as id,
+                    o.customer_phone as recipient_phone,
+                    o.selling_price_ghc as amount_ghc,
+                    o.fulfillment_status as status,
+                    o.created_at,
+                    o.updated_at,
+                    NULL as serial_id,
+                    NULL as balance_before,
+                    NULL as balance_after,
+                    'AGENT_STORE' as source,
+                    o.payment_status as paid,
+                    COALESCE(b.provider_slug, 'datahouse') as source_provider,
+                    o.network,
+                    o.data_amount,
+                    CONCAT(s.store_name, ' (Storefront)') as user_name,
+                    COALESCE(u.email, 'storefront@bytebeacon.online') as user_email
+                FROM agent_orders o
+                LEFT JOIN agent_stores s ON o.store_id = s.id
+                LEFT JOIN users u ON o.agent_id = u.uuid
+                LEFT JOIN data_bundles b ON o.bundle_id = b.id::uuid
+            ) combined_orders
             WHERE 1=1
         `;
         const params = [];
 
         if (status && status !== 'all') {
-            query += ' AND t.status = ?';
+            query += ' AND status = ?';
             params.push(status);
         }
 
-        query += ' ORDER BY t.created_at DESC LIMIT ? OFFSET ?';
+        query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
         params.push(parseInt(limit), parseInt(offset));
 
         const [transactions] = await pool.execute(query, params);
@@ -347,8 +385,12 @@ const getTransactionStats = async (req, res) => {
                 SUM(CASE WHEN status NOT IN ('failed', 'error', 'cancelled', 'rejected') THEN amount_ghc ELSE 0 END) as "completedValue",
                 SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as "completedCount",
                 SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as "pendingCount",
-                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as "failedCount"
-            FROM transactions
+                SUM(CASE WHEN status IN ('failed', 'refunded') THEN 1 ELSE 0 END) as "failedCount"
+            FROM (
+                SELECT amount_ghc, status FROM transactions
+                UNION ALL
+                SELECT selling_price_ghc as amount_ghc, fulfillment_status as status FROM agent_orders
+            ) combined
         `);
 
         const result = stats[0];

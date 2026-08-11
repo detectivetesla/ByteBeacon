@@ -1,6 +1,7 @@
 const pool = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 const { placeDataOrder, getSourcingConfig } = require('../utils/sourcing');
+const { processAutomatedRefund } = require('../utils/refundHelper');
 
 // Paystack API base URL
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
@@ -203,23 +204,30 @@ exports.verifyPayment = async (req, res) => {
         const finalStatus = fulfillment.status;
         const orderData = fulfillment.apiResponse;
 
-        // Check if network is unavailable
-        if (fulfillment.networkUnavailable) {
-            // Refund logic could go here in the future
+        // Check if network is unavailable or fulfillment failed
+        if (fulfillment.networkUnavailable || finalStatus === 'failed') {
+            // Trigger automated refund to credit user's wallet
+            await processAutomatedRefund({
+                transactionId: transaction.id,
+                userId: transaction.user_id,
+                amountGhc: transaction.amount_ghc,
+                reason: fulfillment.message || 'Data bundle delivery failed'
+            });
+
             await connection.execute(
-                `UPDATE transactions SET status = 'failed', api_response = ? WHERE id = ?::uuid`,
+                `UPDATE transactions SET status = 'refunded', paid = 'refunded', api_response = ? WHERE id = ?::uuid`,
                 [JSON.stringify({
                     paystack: verifyData,
-                    error: fulfillment.error,
-                    networkUnavailable: true
+                    error: fulfillment.error || fulfillment.message,
+                    networkUnavailable: !!fulfillment.networkUnavailable
                 }), transaction.id]
             );
 
             return res.json({
                 success: false,
-                status: 'failed',
-                message: fulfillment.message,
-                networkUnavailable: true,
+                status: 'refunded',
+                message: `${fulfillment.message || 'Data delivery failed'}. GHS ${parseFloat(transaction.amount_ghc).toFixed(2)} has been refunded to your wallet.`,
+                networkUnavailable: !!fulfillment.networkUnavailable,
                 transaction_id: transaction.id,
             });
         }
@@ -310,7 +318,7 @@ exports.paystackWebhook = async (req, res) => {
             } else if (reference.startsWith('AG-ORD-')) {
                 // Agent Store Customer Purchase
                 console.log(`🛒 Webhook: Processing Agent Customer Purchase for reference ${reference}`);
-                const [orders] = await connection.execute(
+                let [orders] = await connection.execute(
                     `SELECT o.*, b.provider_slug 
                      FROM agent_orders o
                      LEFT JOIN data_bundles b ON o.bundle_id = b.id::uuid
@@ -318,57 +326,95 @@ exports.paystackWebhook = async (req, res) => {
                     [reference]
                 );
 
-                if (orders.length > 0) {
-                    const order = orders[0];
-                    if (order.fulfillment_status !== 'completed' && order.fulfillment_status !== 'processing') {
+                let order;
+
+                // Lazy order creation if webhook arrives before frontend verify call
+                if (orders.length === 0) {
+                    const meta = event.data.metadata || {};
+                    if (meta.store_id && meta.agent_id && meta.bundle_id && meta.customer_phone) {
+                        const orderId = uuidv4();
+                        const sellingPrice = parseFloat(meta.selling_price_ghc || (event.data.amount / 100));
+                        const basePrice = parseFloat(meta.base_price_ghc || 0);
+                        const profit = parseFloat(meta.profit_ghc || Math.max(0, sellingPrice - basePrice));
+
+                        const [bundleRows] = await connection.execute('SELECT provider_slug FROM data_bundles WHERE id = ?::uuid', [meta.bundle_id]);
+                        const providerSlug = bundleRows.length > 0 ? bundleRows[0].provider_slug : null;
+
                         await connection.execute(
-                            `UPDATE agent_orders SET payment_status = 'paid', fulfillment_status = 'processing', updated_at = NOW() WHERE id = ?::uuid`,
+                            `INSERT INTO agent_orders (id, store_id, agent_id, bundle_id, customer_phone, network, data_amount, base_price_ghc, selling_price_ghc, profit_ghc, paystack_reference, payment_status, fulfillment_status, created_at, updated_at)
+                             VALUES (?::uuid, ?::uuid, ?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, 'paid', 'processing', NOW(), NOW())`,
+                            [orderId, meta.store_id, meta.agent_id, meta.bundle_id, meta.customer_phone, meta.network, meta.data_amount, basePrice, sellingPrice, profit, reference]
+                        );
+
+                        order = {
+                            id: orderId,
+                            store_id: meta.store_id,
+                            agent_id: meta.agent_id,
+                            bundle_id: meta.bundle_id,
+                            customer_phone: meta.customer_phone,
+                            network: meta.network,
+                            data_amount: meta.data_amount,
+                            base_price_ghc: basePrice,
+                            selling_price_ghc: sellingPrice,
+                            profit_ghc: profit,
+                            paystack_reference: reference,
+                            payment_status: 'paid',
+                            fulfillment_status: 'processing',
+                            provider_slug: providerSlug
+                        };
+                    }
+                } else {
+                    order = orders[0];
+                }
+
+                if (order && order.fulfillment_status !== 'completed' && order.fulfillment_status !== 'processing') {
+                    await connection.execute(
+                        `UPDATE agent_orders SET payment_status = 'paid', fulfillment_status = 'processing', updated_at = NOW() WHERE id = ?::uuid`,
+                        [order.id]
+                    );
+
+                    const fulfillment = await placeDataOrder({
+                        network: order.network,
+                        dataAmount: order.data_amount,
+                        recipientPhone: order.customer_phone,
+                        transactionId: order.id,
+                        providerSlug: order.provider_slug
+                    });
+
+                    if (fulfillment.status === 'completed') {
+                        await connection.beginTransaction();
+
+                        await connection.execute(
+                            `UPDATE agent_orders SET fulfillment_status = 'completed', updated_at = NOW() WHERE id = ?::uuid`,
                             [order.id]
                         );
 
-                        const fulfillment = await placeDataOrder({
-                            network: order.network,
-                            dataAmount: order.data_amount,
-                            recipientPhone: order.customer_phone,
-                            transactionId: order.id,
-                            providerSlug: order.provider_slug
-                        });
+                        const profitGhc = parseFloat(order.profit_ghc);
+                        const [wallets] = await connection.execute('SELECT available_balance FROM agent_wallets WHERE agent_id = ?::uuid', [order.agent_id]);
+                        const currentAvail = wallets.length > 0 ? parseFloat(wallets[0].available_balance) : 0.00;
+                        const newAvail = currentAvail + profitGhc;
 
-                        if (fulfillment.status === 'completed') {
-                            await connection.beginTransaction();
+                        await connection.execute(
+                            `UPDATE agent_wallets 
+                             SET available_balance = available_balance + ?,
+                                 total_profit_earned = total_profit_earned + ?,
+                                 updated_at = NOW()
+                             WHERE agent_id = ?::uuid`,
+                            [profitGhc, profitGhc, order.agent_id]
+                        );
 
-                            await connection.execute(
-                                `UPDATE agent_orders SET fulfillment_status = 'completed', updated_at = NOW() WHERE id = ?::uuid`,
-                                [order.id]
-                            );
+                        await connection.execute(
+                            `INSERT INTO agent_wallet_ledger (id, agent_id, store_id, order_id, type, amount_ghc, balance_after, description, reference, created_at)
+                             VALUES (?::uuid, ?::uuid, ?::uuid, ?::uuid, 'SALE_PROFIT', ?, ?, ?, ?, NOW())`,
+                            [uuidv4(), order.agent_id, order.store_id, order.id, profitGhc, newAvail, `Markup profit for ${order.network} ${order.data_amount} sale`, reference]
+                        );
 
-                            const profitGhc = parseFloat(order.profit_ghc);
-                            const [wallets] = await connection.execute('SELECT available_balance FROM agent_wallets WHERE agent_id = ?::uuid', [order.agent_id]);
-                            const currentAvail = wallets.length > 0 ? parseFloat(wallets[0].available_balance) : 0.00;
-                            const newAvail = currentAvail + profitGhc;
-
-                            await connection.execute(
-                                `UPDATE agent_wallets 
-                                 SET available_balance = available_balance + ?,
-                                     total_profit_earned = total_profit_earned + ?,
-                                     updated_at = NOW()
-                                 WHERE agent_id = ?::uuid`,
-                                [profitGhc, profitGhc, order.agent_id]
-                            );
-
-                            await connection.execute(
-                                `INSERT INTO agent_wallet_ledger (id, agent_id, store_id, order_id, type, amount_ghc, balance_after, description, reference, created_at)
-                                 VALUES (?::uuid, ?::uuid, ?::uuid, ?::uuid, 'SALE_PROFIT', ?, ?, ?, ?, NOW())`,
-                                [uuidv4(), order.agent_id, order.store_id, order.id, profitGhc, newAvail, `Markup profit for ${order.network} ${order.data_amount} sale`, reference]
-                            );
-
-                            await connection.commit();
-                        } else {
-                            await connection.execute(
-                                `UPDATE agent_orders SET fulfillment_status = 'failed', updated_at = NOW() WHERE id = ?::uuid`,
-                                [order.id]
-                            );
-                        }
+                        await connection.commit();
+                    } else {
+                        await connection.execute(
+                            `UPDATE agent_orders SET fulfillment_status = 'failed', updated_at = NOW() WHERE id = ?::uuid`,
+                            [order.id]
+                        );
                     }
                 }
             } else if (reference.startsWith('DEP-')) {
@@ -469,13 +515,20 @@ exports.paystackWebhook = async (req, res) => {
                         const finalStatus = fulfillment.status;
                         const orderData = fulfillment.apiResponse;
 
-                        if (fulfillment.networkUnavailable) {
+                        if (fulfillment.networkUnavailable || finalStatus === 'failed') {
+                            await processAutomatedRefund({
+                                transactionId: transaction.id,
+                                userId: transaction.user_id,
+                                amountGhc: transaction.amount_ghc,
+                                reason: fulfillment.message || 'Data bundle delivery failed'
+                            });
+
                             await connection.execute(
-                                `UPDATE transactions SET status = 'failed', api_response = ? WHERE id = ?::uuid`,
+                                `UPDATE transactions SET status = 'refunded', paid = 'refunded', api_response = ? WHERE id = ?::uuid`,
                                 [JSON.stringify({
                                     paystack: event,
-                                    error: fulfillment.error,
-                                    networkUnavailable: true
+                                    error: fulfillment.error || fulfillment.message,
+                                    networkUnavailable: !!fulfillment.networkUnavailable
                                 }), transaction.id]
                             );
                         } else {
@@ -490,9 +543,9 @@ exports.paystackWebhook = async (req, res) => {
                         if (io) {
                             io.to(transaction.user_id).emit('transactionUpdate', {
                                 id: transaction.id,
-                                status: fulfillment.networkUnavailable ? 'failed' : finalStatus,
-                                message: fulfillment.networkUnavailable
-                                    ? fulfillment.message
+                                status: fulfillment.networkUnavailable || finalStatus === 'failed' ? 'refunded' : finalStatus,
+                                message: fulfillment.networkUnavailable || finalStatus === 'failed'
+                                    ? `Order failed. GH₵${parseFloat(transaction.amount_ghc).toFixed(2)} refunded to your wallet.`
                                     : finalStatus === 'completed'
                                         ? `Data bundle delivered: ${transaction.data_amount}`
                                         : `Order ${finalStatus}`
