@@ -24,7 +24,7 @@ const processOrderQueue = async (io) => {
         // Fetch orders that are in 'processing' state and due for (re)try
         // We only pick up orders that haven't reached max retries
         const [orders] = await pool.execute(`
-            SELECT t.*, d.network, d.data_amount 
+            SELECT t.*, d.network, d.data_amount, d.provider_slug 
             FROM transactions t
             LEFT JOIN data_bundles d ON t.bundle_id = d.id::uuid
             WHERE t.status IN ('processing', 'pending')
@@ -69,12 +69,13 @@ const processSingleOrder = async (order, io) => {
             return;
         }
 
-        // 2. Call Datahouse API
+        // 2. Call Sourcing Router to place order with assigned provider
         const fulfillment = await placeDataOrder({
             network: order.network,
             dataAmount: order.data_amount,
             recipientPhone: order.recipient_phone,
-            transactionId: transactionId
+            transactionId: transactionId,
+            providerSlug: order.provider_slug || order.source_provider
         });
 
         const newStatus = fulfillment.status;

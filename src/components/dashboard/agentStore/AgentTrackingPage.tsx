@@ -28,9 +28,9 @@ export const AgentTrackingPage: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6 bg-[#141518] text-white p-6 rounded-3xl font-sans max-w-3xl mx-auto">
+        <div className="space-y-4 sm:space-y-6 bg-[#141518] text-white p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl font-sans max-w-3xl mx-auto w-full min-w-0">
             {/* Header */}
-            <div className="bg-[#202227] p-6 rounded-2xl border border-white/5 space-y-4 text-center">
+            <div className="bg-[#202227] p-4 sm:p-6 rounded-2xl border border-white/5 space-y-4 text-center">
                 <h2 className="text-xl font-bold text-white">Order Fulfillment Tracker</h2>
                 <p className="text-xs text-slate-400">Enter an Order ID or Paystack Reference to trace real-time fulfillment state.</p>
 

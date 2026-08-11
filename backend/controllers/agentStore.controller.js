@@ -1,6 +1,7 @@
 const pool = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
-const { placeDataOrder } = require('../utils/portal02');
+const { placeDataOrder } = require('../utils/sourcing');
+const { logActivity } = require('../utils/activityLogger');
 
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 
@@ -112,6 +113,9 @@ exports.createStore = async (req, res) => {
 
         const effectiveStatus = deriveEffectiveStatus('PENDING_REVIEW', 'UNPAID');
 
+        // Log activity (non-blocking)
+        logActivity(userId, 'AGENT_STORE_CREATED', `Created Agent Store "${store_name}" (slug: ${slug})`, { storeId, store_name, slug, phone }, req.ip);
+
         res.json({
             success: true,
             message: 'Agent Store submitted successfully',
@@ -205,6 +209,9 @@ exports.updateStoreSettings = async (req, res) => {
              WHERE id = ?::uuid`,
             [store_name, description, phone, logo_url, is_visible, storeId]
         );
+
+        // Log activity (non-blocking)
+        logActivity(userId, 'AGENT_STORE_SETTINGS_UPDATED', `Updated Agent Store settings`, { storeId, store_name, phone, is_visible }, req.ip);
 
         res.json({ success: true, message: 'Store settings updated successfully' });
     } catch (error) {
@@ -502,6 +509,9 @@ exports.updateStoreProducts = async (req, res) => {
                 [productId, storeId, item.bundle_id, item.agent_price_ghc, item.is_enabled]
             );
         }
+
+        // Log activity (non-blocking)
+        logActivity(userId, 'AGENT_STORE_PRICES_UPDATED', `Updated pricing for ${products.length} store product(s)`, { storeId, productCount: products.length }, req.ip);
 
         res.json({ success: true, message: 'Products and prices updated successfully!' });
     } catch (error) {
@@ -833,6 +843,9 @@ exports.requestWithdrawal = async (req, res) => {
 
         await connection.commit();
 
+        // Log activity (non-blocking)
+        logActivity(userId, 'AGENT_WITHDRAWAL_REQUESTED', `Requested withdrawal of GHS ${amount.toFixed(2)} to ${bank_momo_provider.toUpperCase()} (${account_number})`, { withdrawalId, amount, payment_method, bank_momo_provider }, req.ip);
+
         res.json({
             success: true,
             message: 'Withdrawal request submitted successfully!',
@@ -958,12 +971,12 @@ exports.initializeCustomerPurchase = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Store is not active for sales' });
         }
 
-        // Fetch product & base price
+        // Fetch product & base price (must be enabled for store AND active in system)
         const [products] = await connection.execute(
             `SELECT ap.agent_price_ghc, b.id as bundle_id, b.network, b.data_amount, b.price_ghc as base_price_ghc
              FROM agent_store_products ap
              INNER JOIN data_bundles b ON ap.bundle_id = b.id
-             WHERE ap.store_id = ?::uuid AND ap.bundle_id = ?::uuid AND ap.is_enabled = TRUE`,
+             WHERE ap.store_id = ?::uuid AND ap.bundle_id = ?::uuid AND ap.is_enabled = TRUE AND b.is_active = TRUE`,
             [store.id, bundleId]
         );
 
@@ -1065,7 +1078,13 @@ exports.verifyCustomerPurchase = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Payment verification failed' });
         }
 
-        const [orders] = await connection.execute('SELECT * FROM agent_orders WHERE paystack_reference = ?', [reference]);
+        const [orders] = await connection.execute(
+            `SELECT o.*, b.provider_slug 
+             FROM agent_orders o
+             LEFT JOIN data_bundles b ON o.bundle_id = b.id::uuid
+             WHERE o.paystack_reference = ?`,
+            [reference]
+        );
 
         if (orders.length === 0) {
             return res.status(404).json({ success: false, error: 'Order reference not found' });
@@ -1097,12 +1116,13 @@ exports.verifyCustomerPurchase = async (req, res) => {
             [order.id]
         );
 
-        // Place Data Bundle order with Provider
+        // Place Data Bundle order with Provider via Sourcing router
         const fulfillment = await placeDataOrder({
             network: order.network,
             dataAmount: order.data_amount,
             recipientPhone: order.customer_phone,
-            transactionId: order.id
+            transactionId: order.id,
+            providerSlug: order.provider_slug
         });
 
         const finalFulfillmentStatus = fulfillment.status;

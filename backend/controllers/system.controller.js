@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const { logActivity } = require('../utils/activityLogger');
 
 // Orders placed before this date were fulfilled via Portal-02 (now decommissioned).
 const DATAHOUSE_MIGRATION_DATE = '2026-07-01T00:00:00Z';
@@ -80,6 +81,8 @@ const updateMaintenanceStatus = async (req, res) => {
         );
 
         console.log(`🛠️ Maintenance mode ${isActive ? 'ENABLED' : 'DISABLED'} by admin`);
+        logActivity(req.user?.id, 'MAINTENANCE_TOGGLED', `Maintenance mode ${isActive ? 'enabled' : 'disabled'}`, { maintenanceMode: isActive }, req.ip);
+
         res.json({ success: true, maintenanceMode: isActive, message: `Maintenance mode ${isActive ? 'enabled' : 'disabled'}` });
     } catch (error) {
         console.error('Update maintenance status error:', error);
@@ -347,6 +350,9 @@ const updateSourcingSettings = async (req, res) => {
             }
 
             await connection.commit();
+
+            logActivity(req.user?.id, 'SOURCING_SETTINGS_UPDATED', `Updated API sourcing provider settings (Active provider: ${active_sourcing_api || 'unchanged'})`, { active_sourcing_api }, req.ip);
+
             res.json({ success: true, message: 'Sourcing settings updated successfully' });
         } catch (error) {
             if (connection) await connection.rollback().catch(() => {});
@@ -464,6 +470,9 @@ const activateSourcingProvider = async (req, res) => {
             await connection.execute("UPDATE sourcing_providers SET is_active = (id = ?::uuid), updated_at = NOW()", [id]);
 
             await connection.commit();
+
+            logActivity(req.user?.id, 'SOURCING_PROVIDER_ACTIVATED', `Activated sourcing provider "${existing[0].name}"`, { providerId: id, name: existing[0].name }, req.ip);
+
             res.json({ success: true, message: `Activated provider ${existing[0].name}` });
         } catch (error) {
             if (connection) await connection.rollback().catch(() => {});

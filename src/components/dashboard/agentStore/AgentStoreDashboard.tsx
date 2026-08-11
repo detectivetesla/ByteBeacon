@@ -7,12 +7,13 @@ import { StoreLinkSection } from './StoreLinkSection';
 import { AgentOrdersPage } from './AgentOrdersPage';
 import { AgentWalletPage } from './AgentWalletPage';
 import { AgentAnalyticsPage } from './AgentAnalyticsPage';
-import { AgentReportsPage } from './AgentReportsPage';
-import { AgentTrackingPage } from './AgentTrackingPage';
+import { AgentCustomersPage } from './AgentCustomersPage';
+import { AgentSettingsPage } from './AgentSettingsPage';
 import {
     Store, Search, Bell, Copy, Share2, DollarSign, TrendingUp, ShoppingCart,
     Wallet, Package, ShieldCheck, Tag, ArrowRight, UserCheck, ChevronRight,
-    Award, BarChart3, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText
+    Award, BarChart3, Clock, CheckCircle2, AlertCircle, RefreshCw, FileText,
+    Users, Settings
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -58,22 +59,22 @@ export const AgentStoreDashboard: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#141518] text-white p-4 sm:p-6 space-y-6 font-sans">
+            <div className="min-h-screen bg-[#141518] text-white p-3.5 sm:p-6 space-y-4 sm:space-y-6 font-sans w-full max-w-full min-w-0">
                 {/* Skeleton: Header Bar */}
-                <div className="bg-[#202227] p-4 rounded-2xl border border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
-                    <div className="h-9 w-full md:w-80 bg-[#2a2b30] rounded-xl animate-pulse" />
-                    <div className="flex items-center gap-3">
-                        <div className="h-7 w-28 bg-[#2a2b30] rounded-lg animate-pulse" />
-                        <div className="h-7 w-24 bg-[#2a2b30] rounded-lg animate-pulse" />
-                        <div className="h-8 w-28 bg-[#2a2b30] rounded-xl animate-pulse" />
-                        <div className="h-9 w-9 bg-[#2a2b30] rounded-xl animate-pulse" />
-                        <div className="h-9 w-9 bg-[#2a2b30] rounded-xl animate-pulse" />
+                <div className="bg-[#202227] p-3.5 sm:p-4 rounded-2xl border border-white/5 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4 w-full min-w-0">
+                    <div className="h-9 w-full md:w-80 lg:w-96 bg-[#2a2b30] rounded-xl animate-pulse shrink-0" />
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto justify-between sm:justify-end shrink-0 min-w-0">
+                        <div className="h-7 w-24 sm:w-28 bg-[#2a2b30] rounded-lg animate-pulse shrink-0" />
+                        <div className="h-7 w-20 sm:w-24 bg-[#2a2b30] rounded-lg animate-pulse shrink-0" />
+                        <div className="h-8 w-28 sm:w-32 bg-[#2a2b30] rounded-xl animate-pulse shrink-0" />
+                        <div className="h-8 sm:h-9 w-8 sm:w-9 bg-[#2a2b30] rounded-xl animate-pulse shrink-0" />
+                        <div className="h-8 sm:h-9 w-8 sm:w-9 bg-[#2a2b30] rounded-xl animate-pulse shrink-0" />
                     </div>
                 </div>
                 {/* Skeleton: Tab Navigation */}
-                <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-2 pt-1 w-full min-w-0">
                     {Array.from({ length: 7 }).map((_, i) => (
-                        <div key={i} className={`h-9 rounded-xl animate-pulse ${i === 0 ? 'w-24 bg-[#a3e635]/20' : 'w-28 bg-[#2a2b30]'}`} />
+                        <div key={i} className={`h-9 rounded-xl animate-pulse shrink-0 ${i === 0 ? 'w-24 bg-[#a3e635]/20' : 'w-28 bg-[#2a2b30]'}`} />
                     ))}
                 </div>
                 {/* Skeleton: Greeting */}
@@ -87,7 +88,7 @@ export const AgentStoreDashboard: React.FC = () => {
                         <div className="h-3 w-40 bg-[#2a2b30] rounded animate-pulse" />
                         <div className="h-3 w-28 bg-[#2a2b30] rounded animate-pulse" />
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
                         {Array.from({ length: 5 }).map((_, i) => (
                             <div key={i} className="bg-[#202227] p-4 rounded-2xl border border-white/5 space-y-3 animate-pulse">
                                 <div className="flex justify-between">
@@ -124,78 +125,86 @@ export const AgentStoreDashboard: React.FC = () => {
     const totalWithdrawn = parseFloat(store.total_withdrawn as any || 0);
 
     return (
-        <div className="min-h-screen bg-[#141518] text-white p-4 sm:p-6 space-y-6 font-sans">
+        <div className="min-h-screen bg-[#141518] text-white p-3.5 sm:p-6 space-y-4 sm:space-y-6 font-sans w-full max-w-full min-w-0">
             {/* 1. TOP HEADER BAR */}
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-[#202227] p-4 rounded-2xl border border-white/5 shadow-xl">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4 bg-[#202227] p-3.5 sm:p-4 rounded-2xl border border-white/5 shadow-xl w-full min-w-0">
                 {/* Search Box */}
-                <div className="relative w-full md:w-80">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <div className="relative w-full md:w-80 lg:w-96 min-w-0 shrink">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                         type="text"
                         placeholder="Search products, orders..."
-                        className="w-full pl-10 pr-4 py-2 bg-[#18191c] border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#a3e635]"
+                        className="w-full pl-10 pr-4 py-2 bg-[#18191c] border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#a3e635] transition-colors"
                     />
                 </div>
 
                 {/* Header Controls & Profile */}
-                <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full md:w-auto min-w-0">
                     {/* Role Chips */}
-                    <span className="px-3 py-1 bg-[#18191c] border border-white/10 rounded-lg text-xs font-semibold text-slate-300">
-                        Reseller Agent
-                    </span>
-                    <span className="px-3 py-1 bg-[#a3e635]/20 text-[#a3e635] border border-[#a3e635]/30 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#a3e635] animate-pulse" />
-                        Store Active
-                    </span>
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap min-w-0">
+                        <span className="px-2.5 sm:px-3 py-1 bg-[#18191c] border border-white/10 rounded-lg text-[11px] sm:text-xs font-semibold text-slate-300 shrink-0 whitespace-nowrap">
+                            Reseller Agent
+                        </span>
+                        <span className="px-2.5 sm:px-3 py-1 bg-[#a3e635]/20 text-[#a3e635] border border-[#a3e635]/30 rounded-lg text-[11px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-1 shrink-0 whitespace-nowrap">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#a3e635] animate-pulse" />
+                            Store Active
+                        </span>
+                    </div>
 
-                    {/* Store Link Button */}
-                    <a
-                        href={`/store/${store.slug}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-4 py-2 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-[#a3e635]/20"
-                    >
-                        + Storefront Link
-                    </a>
+                    {/* Actions: Storefront Button, Notification, Avatar */}
+                    <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0 shrink-0">
+                        {/* Store Link Button */}
+                        <a
+                            href={`/store/${store.slug}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-3.5 sm:px-4 py-1.5 sm:py-2 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-[#a3e635]/20 whitespace-nowrap shrink-0"
+                        >
+                            + Storefront Link
+                        </a>
 
-                    {/* Notification Bell */}
-                    <button className="p-2 rounded-xl bg-[#18191c] text-slate-400 hover:text-[#a3e635] border border-white/10 relative transition-all">
-                        <Bell className="w-4 h-4" />
-                        <span className="w-2 h-2 rounded-full bg-[#a3e635] absolute top-1.5 right-1.5" />
-                    </button>
+                        {/* Notification Bell */}
+                        <button
+                            className="p-0 w-8 sm:w-9 h-8 sm:h-9 rounded-xl bg-[#18191c] text-slate-400 hover:text-[#a3e635] border border-white/10 relative transition-all flex items-center justify-center shrink-0"
+                            aria-label="Notifications"
+                        >
+                            <Bell className="w-4 h-4 shrink-0" />
+                            <span className="w-2 h-2 rounded-full bg-[#a3e635] absolute top-1.5 right-1.5" />
+                        </button>
 
-                    {/* User Avatar */}
-                    <div className="w-9 h-9 rounded-xl bg-[#a3e635]/20 text-[#a3e635] font-bold text-xs flex items-center justify-center border border-[#a3e635]/30">
-                        {user?.name?.slice(0, 2).toUpperCase() || 'AG'}
+                        {/* User Avatar */}
+                        <div className="w-8 sm:w-9 h-8 sm:h-9 rounded-xl bg-[#a3e635]/20 text-[#a3e635] font-bold text-xs flex items-center justify-center border border-[#a3e635]/30 shrink-0">
+                            {user?.name?.slice(0, 2).toUpperCase() || 'AG'}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* 2. SUB NAVIGATION TABS — pinned to top for visibility */}
-            <div className="flex items-center gap-2 border-b border-white/5 pb-2 overflow-x-auto">
+            {/* 2. SUB NAVIGATION TABS — consolidated minimalist menu */}
+            <div className="flex items-center gap-1.5 sm:gap-2 border-b border-white/5 pb-2.5 pt-1 overflow-x-auto no-scrollbar scroll-smooth w-full min-w-0">
                 {[
                     { id: 'Overview', label: 'Overview', icon: BarChart3 },
-                    { id: 'Pricing', label: 'Agent Prices', icon: Tag },
+                    { id: 'Products', label: 'Products & Prices', icon: Tag },
                     { id: 'Orders', label: 'Orders', icon: ShoppingCart },
-                    { id: 'Wallet', label: 'Wallet & Profit', icon: Wallet },
+                    { id: 'Wallet', label: 'Wallet', icon: Wallet },
+                    { id: 'Customers', label: 'Customers', icon: Users },
                     { id: 'Analytics', label: 'Analytics', icon: TrendingUp },
-                    { id: 'Reports', label: 'Reports', icon: FileText },
-                    { id: 'Tracking', label: 'Tracking', icon: ShieldCheck },
+                    { id: 'Settings', label: 'Store Settings', icon: Settings },
                 ].map(tab => {
                     const IconComp = tab.icon;
-                    const isActive = activeTab === tab.id;
+                    const isActive = activeTab === tab.id || (tab.id === 'Products' && activeTab === 'Pricing');
 
                     return (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                            className={`px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#a3e635]/50 ${
                                 isActive
                                     ? 'bg-[#a3e635] text-black shadow-md shadow-[#a3e635]/20 font-extrabold'
                                     : 'bg-[#202227] text-slate-400 hover:text-white border border-white/5'
                             }`}
                         >
-                            <IconComp className="w-3.5 h-3.5" />
+                            <IconComp className="w-3.5 h-3.5 shrink-0" />
                             {tab.label}
                         </button>
                     );
@@ -221,7 +230,7 @@ export const AgentStoreDashboard: React.FC = () => {
             <div className="space-y-3">
                 <div className="flex justify-between items-center text-xs">
                     <h3 className="font-bold text-white uppercase tracking-wider text-[11px] text-slate-400">Featured Network Products</h3>
-                    <span className="text-[#a3e635] hover:underline cursor-pointer font-semibold" onClick={() => setActiveTab('Pricing')}>View All Packages →</span>
+                    <span className="text-[#a3e635] hover:underline cursor-pointer font-semibold" onClick={() => setActiveTab('Products')}>View All Packages →</span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
@@ -412,8 +421,8 @@ export const AgentStoreDashboard: React.FC = () => {
                 </div>
             )}
 
-            {activeTab === 'Pricing' && <AgentPricesPage />}
-            {activeTab === 'Orders' && <AgentOrdersPage />}
+            {(activeTab === 'Products' || activeTab === 'Pricing') && <AgentPricesPage />}
+            {(activeTab === 'Orders' || activeTab === 'Tracking') && <AgentOrdersPage />}
             {activeTab === 'Wallet' && (
                 <AgentWalletPage
                     availableBalance={availableBalance}
@@ -422,9 +431,9 @@ export const AgentStoreDashboard: React.FC = () => {
                     onRefresh={loadStore}
                 />
             )}
-            {activeTab === 'Analytics' && <AgentAnalyticsPage />}
-            {activeTab === 'Reports' && <AgentReportsPage />}
-            {activeTab === 'Tracking' && <AgentTrackingPage />}
+            {activeTab === 'Customers' && <AgentCustomersPage />}
+            {(activeTab === 'Analytics' || activeTab === 'Reports') && <AgentAnalyticsPage />}
+            {activeTab === 'Settings' && <AgentSettingsPage />}
         </div>
     );
 };

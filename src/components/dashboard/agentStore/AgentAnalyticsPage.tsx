@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { agentStoreService } from '@/services/agentStore.service';
-import { BarChart3, TrendingUp, RefreshCw, Award, Activity } from 'lucide-react';
+import { BarChart3, TrendingUp, RefreshCw, Award, Activity, Download, FileSpreadsheet } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 export const AgentAnalyticsPage: React.FC = () => {
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
+    const [exporting, setExporting] = useState<string | null>(null);
     const [dailyStats, setDailyStats] = useState<{ date: string; orders: number; sales: number; profit: number }[]>([]);
     const [networkShare, setNetworkShare] = useState<{ network: string; count: number; total_profit: number }[]>([]);
 
@@ -28,28 +29,132 @@ export const AgentAnalyticsPage: React.FC = () => {
         loadAnalytics();
     }, []);
 
+    const downloadCSV = (filename: string, rows: object[]) => {
+        if (!rows || rows.length === 0) {
+            toast({ title: 'No Data', description: 'No records available to export.', variant: 'destructive' });
+            return;
+        }
+
+        const headers = Object.keys(rows[0]).join(',');
+        const csvContent = [
+            headers,
+            ...rows.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `${filename}_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleExportOrders = async () => {
+        setExporting('orders');
+        try {
+            const res = await agentStoreService.getOrders();
+            if (res.success && res.orders) {
+                downloadCSV('agent_store_orders', res.orders);
+                toast({ title: 'Export Complete', description: 'Orders CSV downloaded.' });
+            }
+        } catch (err: any) {
+            toast({ title: 'Export Failed', description: err.message, variant: 'destructive' });
+        } finally {
+            setExporting(null);
+        }
+    };
+
+    const handleExportLedger = async () => {
+        setExporting('ledger');
+        try {
+            const res = await agentStoreService.getTransactions();
+            if (res.success && res.ledger) {
+                downloadCSV('agent_wallet_ledger', res.ledger);
+                toast({ title: 'Export Complete', description: 'Wallet Ledger CSV downloaded.' });
+            }
+        } catch (err: any) {
+            toast({ title: 'Export Failed', description: err.message, variant: 'destructive' });
+        } finally {
+            setExporting(null);
+        }
+    };
+
+    const handleExportWithdrawals = async () => {
+        setExporting('withdrawals');
+        try {
+            const res = await agentStoreService.getWithdrawalHistory();
+            if (res.success && res.withdrawals) {
+                downloadCSV('agent_withdrawals', res.withdrawals);
+                toast({ title: 'Export Complete', description: 'Withdrawals CSV downloaded.' });
+            }
+        } catch (err: any) {
+            toast({ title: 'Export Failed', description: err.message, variant: 'destructive' });
+        } finally {
+            setExporting(null);
+        }
+    };
+
     const maxProfit = Math.max(...dailyStats.map(d => parseFloat(d.profit as any) || 0), 1);
 
     return (
-        <div className="space-y-6 bg-[#141518] text-white p-6 rounded-3xl font-sans">
+        <div className="space-y-4 sm:space-y-6 bg-[#141518] text-white p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl font-sans w-full min-w-0">
             {/* Header */}
-            <div className="flex justify-between items-center bg-[#202227] p-6 rounded-2xl border border-white/5">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 bg-[#202227] p-4 sm:p-6 rounded-2xl border border-white/5">
                 <div>
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
                         <BarChart3 className="w-5 h-5 text-[#a3e635]" />
-                        Store Performance Analytics
+                        Store Performance & Analytics
                     </h2>
                     <p className="text-xs text-slate-400 mt-1">
-                        Detailed sales trends, profit breakdown, and network metrics.
+                        Sales trend overview, profit distribution, and one-click financial report exports.
                     </p>
                 </div>
                 <button
                     onClick={loadAnalytics}
-                    className="p-2.5 bg-[#18191c] hover:bg-white/5 text-slate-300 rounded-xl border border-white/10 text-xs flex items-center gap-2"
+                    disabled={loading}
+                    className="px-3.5 py-2 bg-[#18191c] hover:bg-white/5 text-slate-300 rounded-xl border border-white/10 text-xs flex items-center gap-2 font-semibold disabled:opacity-50"
                 >
-                    <RefreshCw className="w-4 h-4 text-[#a3e635]" />
+                    <RefreshCw className={`w-3.5 h-3.5 text-[#a3e635] ${loading ? 'animate-spin' : ''}`} />
                     Refresh
                 </button>
+            </div>
+
+            {/* One-Click CSV Reports Bar */}
+            <div className="bg-[#202227] p-4 sm:p-5 rounded-2xl border border-white/5 space-y-3 shadow-xl">
+                <div className="flex items-center gap-2 text-xs font-bold text-white uppercase tracking-wider">
+                    <FileSpreadsheet className="w-4 h-4 text-[#a3e635]" />
+                    Export Financial CSV Reports
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <button
+                        onClick={handleExportOrders}
+                        disabled={exporting === 'orders'}
+                        className="py-2.5 px-4 bg-[#18191c] hover:bg-white/5 text-white font-bold rounded-xl text-xs border border-white/10 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                    >
+                        {exporting === 'orders' ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#a3e635]" /> : <Download className="w-3.5 h-3.5 text-[#a3e635]" />}
+                        Export Orders CSV
+                    </button>
+
+                    <button
+                        onClick={handleExportLedger}
+                        disabled={exporting === 'ledger'}
+                        className="py-2.5 px-4 bg-[#18191c] hover:bg-white/5 text-white font-bold rounded-xl text-xs border border-white/10 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                    >
+                        {exporting === 'ledger' ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#a3e635]" /> : <Download className="w-3.5 h-3.5 text-[#a3e635]" />}
+                        Export Ledger CSV
+                    </button>
+
+                    <button
+                        onClick={handleExportWithdrawals}
+                        disabled={exporting === 'withdrawals'}
+                        className="py-2.5 px-4 bg-[#18191c] hover:bg-white/5 text-white font-bold rounded-xl text-xs border border-white/10 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                    >
+                        {exporting === 'withdrawals' ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#a3e635]" /> : <Download className="w-3.5 h-3.5 text-[#a3e635]" />}
+                        Export Payouts CSV
+                    </button>
+                </div>
             </div>
 
             {loading ? (
@@ -147,3 +252,5 @@ export const AgentAnalyticsPage: React.FC = () => {
         </div>
     );
 };
+
+export default AgentAnalyticsPage;

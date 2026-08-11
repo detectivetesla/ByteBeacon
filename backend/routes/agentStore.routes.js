@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, agentOrAdmin } = require('../middleware/auth');
 const { withdrawalLimiter, storeCreationLimiter, paymentLimiter } = require('../middleware/security');
 const {
     createStore,
@@ -34,9 +34,9 @@ router.get('/public/track/:orderId', trackPublicOrder);
 // =============================================
 // AUTHENTICATED AGENT STORE ENDPOINTS (User Login Required)
 // =============================================
-router.post('/create', auth, storeCreationLimiter, createStore);
+router.post('/create', auth, agentOrAdmin, storeCreationLimiter, createStore);
 router.get('/my-store', auth, getMyStore);
-router.put('/settings', auth, updateStoreSettings);
+router.put('/settings', auth, agentOrAdmin, updateStoreSettings);
 
 // Activation Payment (GHS 100)
 router.post('/activate/initialize', auth, paymentLimiter, initializeActivationPayment);
@@ -44,7 +44,7 @@ router.post('/activate/verify', auth, paymentLimiter, verifyActivationPayment);
 
 // Products & Pricing
 router.get('/products', auth, getStoreProducts);
-router.post('/products/update', auth, updateStoreProducts);
+router.post('/products/update', auth, agentOrAdmin, updateStoreProducts);
 
 // Dashboard & Stats
 router.get('/dashboard', auth, getDashboardStats);
@@ -54,7 +54,7 @@ router.get('/customers', auth, getAgentCustomers);
 router.get('/analytics', auth, getAgentAnalytics);
 
 // Financial Ledger & Withdrawals
-router.post('/withdrawals', auth, withdrawalLimiter, requestWithdrawal);
+router.post('/withdrawals', auth, agentOrAdmin, withdrawalLimiter, requestWithdrawal);
 router.get('/withdrawals', auth, getWithdrawalHistory);
 
 module.exports = router;

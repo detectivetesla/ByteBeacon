@@ -23,7 +23,10 @@ import {
     Globe,
     AlertCircle,
     ChevronRight,
-    RefreshCw
+    RefreshCw,
+    Users,
+    Settings,
+    UserCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -60,13 +63,17 @@ export const AgentStoreLayout: React.FC = () => {
 
     const navItems = [
         { label: 'Overview', href: '/agent-store', icon: BarChart3, exact: true },
-        { label: 'Agent Prices', href: '/agent-store/prices', icon: Tag },
+        { label: 'Products & Prices', href: '/agent-store/products', icon: Tag },
         { label: 'Orders', href: '/agent-store/orders', icon: ShoppingCart },
-        { label: 'Wallet & Profit', href: '/agent-store/wallet', icon: Wallet },
+        { label: 'Wallet', href: '/agent-store/wallet', icon: Wallet },
+        { label: 'Customers', href: '/agent-store/customers', icon: Users },
         { label: 'Analytics', href: '/agent-store/analytics', icon: TrendingUp },
-        { label: 'Reports', href: '/agent-store/reports', icon: FileText },
-        { label: 'Tracking', href: '/agent-store/tracking', icon: ShieldCheck },
+        { label: 'Store Settings', href: '/agent-store/settings', icon: Settings },
     ];
+
+    if (user?.role === 'SUPERAGENT' || user?.role === 'ADMIN') {
+        navItems.splice(5, 0, { label: 'Sub-Agents', href: '/agent-store/agents', icon: UserCheck });
+    }
 
     const isActive = (href: string, exact?: boolean) => {
         if (exact) {
@@ -354,13 +361,14 @@ export const AgentStoreLayout: React.FC = () => {
             </aside>
 
             {/* Main Application Area */}
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden w-full">
                 {/* Standalone Header Bar */}
-                <header className="bg-[#18191c] border-b border-white/5 py-3 px-4 sm:px-6 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
+                <header className="bg-[#18191c] border-b border-white/5 py-3 px-3.5 sm:px-6 flex items-center justify-between gap-3 min-w-0 w-full">
+                    <div className="flex items-center gap-3 shrink-0">
                         <button
                             onClick={() => setMobileMenuOpen(true)}
-                            className="md:hidden p-2 rounded-xl bg-[#202227] text-slate-400 hover:text-white border border-white/5"
+                            className="md:hidden p-2 rounded-xl bg-[#202227] text-slate-400 hover:text-white border border-white/5 shrink-0"
+                            aria-label="Open navigation menu"
                         >
                             <Menu className="w-5 h-5" />
                         </button>
@@ -371,15 +379,15 @@ export const AgentStoreLayout: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
                         {store?.slug && (
                             <a
                                 href={`/store/${store.slug}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="px-3.5 py-1.5 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-[#a3e635]/20"
+                                className="px-3.5 py-1.5 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-[#a3e635]/20 whitespace-nowrap shrink-0"
                             >
-                                <ExternalLink className="w-3.5 h-3.5" />
+                                <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                                 <span className="hidden sm:inline">+ Storefront Link</span>
                                 <span className="sm:hidden">Store</span>
                             </a>
@@ -387,21 +395,21 @@ export const AgentStoreLayout: React.FC = () => {
 
                         <Link
                             to="/dashboard"
-                            className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#202227] text-slate-400 hover:text-white border border-white/5 text-xs font-semibold transition-all"
+                            className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#202227] text-slate-400 hover:text-white border border-white/5 text-xs font-semibold transition-all whitespace-nowrap shrink-0"
                         >
-                            <ArrowLeft className="w-3.5 h-3.5" />
+                            <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
                             <span>ByteBeacon Main</span>
                         </Link>
 
                         {/* User Profile Avatar */}
-                        <div className="w-8 h-8 rounded-xl bg-[#a3e635]/20 text-[#a3e635] font-bold text-xs flex items-center justify-center border border-[#a3e635]/30">
+                        <div className="w-8 h-8 rounded-xl bg-[#a3e635]/20 text-[#a3e635] font-bold text-xs flex items-center justify-center border border-[#a3e635]/30 shrink-0">
                             {getInitials(user?.name || user?.email || 'AG')}
                         </div>
                     </div>
                 </header>
 
                 {/* Child Routes Container */}
-                <main className="flex-1 overflow-y-auto">
+                <main className="flex-1 overflow-y-auto min-w-0 w-full">
                     <AgentStoreContainer />
                 </main>
             </div>

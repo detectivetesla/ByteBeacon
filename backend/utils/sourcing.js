@@ -16,12 +16,13 @@ const getSourcingConfig = async () => {
         const providers = {};
 
         for (const row of rows) {
+            const resolvedApiKey = (row.api_key && row.api_key.trim()) ? row.api_key.trim() : (row.slug === 'portal02' ? portal02_api_key : (row.slug === 'datahouse' ? datahouse_api_key : ''));
             providers[row.slug] = {
                 slug: row.slug,
                 name: row.name,
                 provider_type: row.provider_type,
                 base_url: row.base_url,
-                api_key: row.api_key,
+                api_key: resolvedApiKey,
                 is_active: row.is_active,
                 config: typeof row.config === 'string' ? JSON.parse(row.config) : (row.config || {})
             };
@@ -29,10 +30,10 @@ const getSourcingConfig = async () => {
                 active_sourcing_api = row.slug;
             }
             if (row.slug === 'portal02') {
-                portal02_api_key = row.api_key || portal02_api_key;
+                portal02_api_key = resolvedApiKey || portal02_api_key;
             }
             if (row.slug === 'datahouse') {
-                datahouse_api_key = row.api_key || datahouse_api_key;
+                datahouse_api_key = resolvedApiKey || datahouse_api_key;
             }
         }
 

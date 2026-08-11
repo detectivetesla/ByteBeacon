@@ -56,7 +56,7 @@ const purchaseData = async (req, res) => {
 
         // Get bundle details
         const [bundles] = await pool.execute(
-            'SELECT id, network, data_amount, price_ghc, agent_price_ghc FROM data_bundles WHERE id = ?::uuid AND is_active = true',
+            'SELECT id, network, data_amount, price_ghc, agent_price_ghc, provider_slug FROM data_bundles WHERE id = ?::uuid AND is_active = true',
             [planIdField]
         );
 
@@ -220,6 +220,7 @@ const purchaseData = async (req, res) => {
         const transactionId = uuidv4();
         const sourcingConfig = await getSourcingConfig();
         const activeProviderSlug = sourcingConfig.active_sourcing_api || 'datahouse';
+        const assignedProvider = bundle.provider_slug || activeProviderSlug;
         
         const balanceBefore = activePartner.wallet_balance;
         const balanceAfter = req.isTest || activePartner.credit_enabled || activePartner.allow_unlimited_purchases
@@ -240,7 +241,7 @@ const purchaseData = async (req, res) => {
                 req.isTest ? 'completed' : 'processing',
                 balanceBefore,
                 balanceAfter,
-                activeProviderSlug
+                assignedProvider
             ]
         );
 
@@ -268,7 +269,8 @@ const purchaseData = async (req, res) => {
                     network: bundle.network,
                     dataAmount: bundle.data_amount,
                     recipientPhone: phoneField,
-                    transactionId: transactionId
+                    transactionId: transactionId,
+                    providerSlug: bundle.provider_slug
                 });
 
                 apiResponse = fulfillment.apiResponse || { error: fulfillment.message || fulfillment.error };

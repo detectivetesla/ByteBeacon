@@ -58,6 +58,8 @@ const createUser = async (req, res) => {
 
             await connection.commit();
 
+            logActivity(req.user?.id || userId, 'USER_CREATED', `Created user account for ${fullName} (${email}) with role ${role}`, { targetUserId: userId, email, role }, req.ip);
+
             res.status(201).json({
                 message: 'User created successfully',
                 id: userId,
@@ -143,6 +145,9 @@ const changeUserRole = async (req, res) => {
             return res.status(400).json({ error: 'Invalid role' });
         }
 
+        const [userRows] = await pool.execute('SELECT email, role FROM users WHERE uuid = ?::uuid', [id]);
+        const oldRole = userRows.length > 0 ? userRows[0].role : 'unknown';
+
         // Update the role in the main users table
         await pool.execute(
             'UPDATE users SET role = ?::user_role, updated_at = CURRENT_TIMESTAMP WHERE uuid = ?::uuid',
@@ -166,6 +171,8 @@ const changeUserRole = async (req, res) => {
                 [uuidv4(), id, role]
             );
         }
+
+        logActivity(req.user?.id, 'USER_ROLE_CHANGED', `Changed user ${id.slice(0, 8)} role from ${oldRole} to ${role}`, { targetUserId: id, oldRole, newRole: role }, req.ip);
 
         res.json({ message: `User role changed to ${role}` });
 
@@ -202,6 +209,9 @@ const updateUser = async (req, res) => {
         );
 
         await connection.commit();
+
+        logActivity(req.user?.id, 'USER_UPDATED', `Updated account details for ${fullName} (${email})`, { targetUserId: id, fullName, email, phone }, req.ip);
+
         res.json({ message: 'User updated successfully' });
     } catch (error) {
         if (connection) await connection.rollback().catch(() => { });
@@ -229,6 +239,9 @@ const deleteUser = async (req, res) => {
         await connection.execute('DELETE FROM users WHERE uuid = ?::uuid', [id]);
 
         await connection.commit();
+
+        logActivity(req.user?.id, 'USER_DELETED', `Deleted user account ${id}`, { targetUserId: id }, req.ip);
+
         res.json({ message: 'User deleted successfully' });
     } catch (error) {
         if (connection) await connection.rollback().catch(() => { });
@@ -253,6 +266,9 @@ const toggleUserStatus = async (req, res) => {
             'UPDATE users SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE uuid = ?::uuid',
             [isActive, id]
         );
+
+        const actionType = isActive ? 'USER_ACTIVATED' : 'USER_SUSPENDED';
+        logActivity(req.user?.id, actionType, `${isActive ? 'Activated' : 'Suspended'} user account ${id.slice(0, 8)}`, { targetUserId: id, isActive }, req.ip);
 
         res.json({
             message: `User account ${isActive ? 'activated' : 'suspended'} successfully`,
@@ -383,6 +399,8 @@ const updateTransactionStatus = async (req, res) => {
             });
         }
 
+        logActivity(req.user?.id, 'ORDER_STATUS_CHANGED', `Updated order ${id.slice(0, 8)} status to ${status}`, { transactionId: id, status, amount: transaction.amount_ghc }, req.ip);
+
         res.json({ message: `Transaction status updated to ${status}` });
 
     } catch (error) {
@@ -391,7 +409,6 @@ const updateTransactionStatus = async (req, res) => {
     }
 };
 
-// CRUD for bundles
 // CRUD for bundles
 const getAllBundles = async (req, res) => {
     try {
@@ -432,6 +449,8 @@ const createBundle = async (req, res) => {
             'INSERT INTO data_bundles (id, network, data_amount, price_ghc, agent_price_ghc, is_active, provider_slug) VALUES (?::uuid, ?, ?, ?, ?, ?, ?)',
             [id, network.toUpperCase(), dataAmount, priceGhc, finalAgentPrice, true, providerSlug || null]
         );
+
+        logActivity(req.user?.id, 'DATA_PLAN_CREATED', `Created ${dataAmount} ${network.toUpperCase()} data plan at GHS ${priceGhc}`, { bundleId: id, network: network.toUpperCase(), dataAmount, priceGhc, agentPriceGhc: finalAgentPrice }, req.ip);
 
         res.status(201).json({
             message: 'Bundle created',
@@ -494,6 +513,13 @@ const updateBundle = async (req, res) => {
 
         await pool.execute(query, params);
 
+        let actionType = 'DATA_PLAN_UPDATED';
+        if (isActive !== undefined) {
+            actionType = isActive ? 'DATA_PLAN_ENABLED' : 'DATA_PLAN_DISABLED';
+        }
+
+        logActivity(req.user?.id, actionType, `${actionType === 'DATA_PLAN_ENABLED' ? 'Enabled' : (actionType === 'DATA_PLAN_DISABLED' ? 'Disabled' : 'Updated')} data plan ${id.slice(0, 8)}`, { bundleId: id, network, dataAmount, priceGhc, isActive }, req.ip);
+
         res.json({ message: 'Bundle updated' });
 
     } catch (error) {
@@ -511,6 +537,8 @@ const deleteBundle = async (req, res) => {
             'DELETE FROM data_bundles WHERE id = ?::uuid',
             [id]
         );
+
+        logActivity(req.user?.id, 'DATA_PLAN_DELETED', `Permanently deleted data plan ${id.slice(0, 8)}`, { bundleId: id }, req.ip);
 
         res.json({ message: 'Bundle deleted permanently' });
 
@@ -627,6 +655,8 @@ const sendNotification = async (req, res) => {
         } else {
             io.emit('newNotification', notificationData);
         }
+
+        logActivity(req.user?.id, 'NOTIFICATION_SENT', `Sent system notification: "${title}"`, { notificationId: id, targetUserId: userId || 'broadcast', title, type }, req.ip);
 
         res.status(201).json({ message: 'Notification sent successfully', id });
     } catch (error) {
@@ -778,6 +808,8 @@ const sendEmail = async (req, res) => {
             }
         }
 
+        logActivity(req.user?.id, 'EMAIL_SENT', `Sent administrative message to ${sentCount} user(s): "${subject}"`, { targetGroup: to, recipientCount: sentCount, subject }, req.ip);
+
         res.json({
             message: `Messages sent successfully to ${sentCount} user(s)`,
             sentCount
@@ -853,6 +885,8 @@ const sendMessage = async (req, res) => {
             isRead: false,
             createdAt: new Date()
         });
+
+        logActivity(req.user?.id, 'MESSAGE_SENT', `Sent direct message to user ${recipientId.slice(0, 8)}: "${subject || 'No Subject'}"`, { messageId: id, recipientId, subject }, req.ip);
 
         res.status(201).json({ message: 'Message sent successfully', id });
     } catch (error) {
@@ -1119,6 +1153,9 @@ const updateAgentApplication = async (req, res) => {
             }
 
             await connection.commit();
+
+            logActivity(req.user?.id, status === 'approved' ? 'AGENT_APPLICATION_APPROVED' : 'AGENT_APPLICATION_REJECTED', `${status === 'approved' ? 'Approved' : 'Rejected'} agent application for user ${application?.user_id?.slice(0, 8) || id.slice(0, 8)}`, { applicationId: id, userId: application?.user_id, status, adminNotes }, req.ip);
+
             res.json({ message: `Application ${status} successfully` });
         } catch (error) {
             await connection.rollback();
@@ -1134,12 +1171,17 @@ const updateAgentApplication = async (req, res) => {
 // Get all activity logs for admin
 const getActivityLogs = async (req, res) => {
     try {
-        const { userId, action, startDate, endDate, limit = 100, offset = 0 } = req.query;
+        const { userId, action, search, startDate, endDate, limit = 100, offset = 0 } = req.query;
 
         let query = `
-            SELECT al.*, p.full_name, p.email
+            SELECT al.*, 
+                   COALESCE(p.full_name, u.name, 'Admin/User') as full_name, 
+                   COALESCE(p.email, u.email, '') as email,
+                   COALESCE(ur.role::text, u.role::text, 'customer') as role
             FROM activity_logs al
-            LEFT JOIN profiles p ON al.user_id = p.id
+            LEFT JOIN users u ON al.user_id::text = u.uuid::text
+            LEFT JOIN profiles p ON al.user_id::text = p.id::text
+            LEFT JOIN user_roles ur ON al.user_id::text = ur.user_id::text
             WHERE 1=1
         `;
         const params = [];
@@ -1149,19 +1191,25 @@ const getActivityLogs = async (req, res) => {
             params.push(userId);
         }
 
-        if (action) {
+        if (action && action !== 'all') {
             query += ' AND al.action = ?';
             params.push(action);
         }
 
+        if (search) {
+            query += ' AND (p.full_name ILIKE ? OR u.name ILIKE ? OR p.email ILIKE ? OR u.email ILIKE ? OR al.description ILIKE ? OR al.action ILIKE ?)';
+            const searchPattern = `%${search}%`;
+            params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+        }
+
         // Date filtering for per-day tracking
         if (startDate) {
-            query += ' AND al.created_at::date >= ?';
+            query += ' AND al.created_at::date >= ?::date';
             params.push(startDate);
         }
 
         if (endDate) {
-            query += ' AND al.created_at::date <= ?';
+            query += ' AND al.created_at::date <= ?::date';
             params.push(endDate);
         }
 
@@ -1170,17 +1218,24 @@ const getActivityLogs = async (req, res) => {
 
         const [logs] = await pool.execute(query, params);
 
-        const formatted = logs.map(log => ({
-            id: log.id,
-            userId: log.user_id,
-            userName: log.full_name || 'Unknown User',
-            userEmail: log.email || '',
-            action: log.action,
-            description: log.description,
-            metadata: log.metadata, // Postgres driver already parses JSONB
-            ipAddress: log.ip_address,
-            createdAt: log.created_at
-        }));
+        const formatted = logs.map(log => {
+            let parsedMetadata = log.metadata;
+            if (typeof log.metadata === 'string') {
+                try { parsedMetadata = JSON.parse(log.metadata); } catch (e) { parsedMetadata = null; }
+            }
+            return {
+                id: log.id,
+                userId: log.user_id,
+                userName: log.full_name || 'Unknown User',
+                userEmail: log.email || '',
+                userRole: log.role || 'customer',
+                action: log.action,
+                description: log.description,
+                metadata: parsedMetadata,
+                ipAddress: log.ip_address,
+                createdAt: log.created_at
+            };
+        });
 
         res.json(formatted);
     } catch (error) {
@@ -2361,6 +2416,9 @@ const updateAgentStoreReviewStatus = async (req, res) => {
             ]
         );
 
+        const storeAction = review_status === 'APPROVED' ? 'AGENT_STORE_APPROVED' : (review_status === 'REJECTED' ? 'AGENT_STORE_REJECTED' : 'AGENT_STORE_STATUS_UPDATED');
+        logActivity(req.user?.id, storeAction, `Updated Agent Store "${store.store_name}" review status to ${review_status}`, { storeId: id, storeName: store.store_name, review_status, admin_notes }, req.ip);
+
         res.json({ message: `Store status updated to ${review_status}` });
     } catch (error) {
         console.error('Error updating store review status:', error);
@@ -2372,7 +2430,7 @@ const manualActivateAgentStore = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const [stores] = await pool.execute('SELECT user_id FROM agent_stores WHERE id = ?::uuid', [id]);
+        const [stores] = await pool.execute('SELECT user_id, store_name FROM agent_stores WHERE id = ?::uuid', [id]);
         if (stores.length > 0) {
             const userId = stores[0].user_id;
             await pool.execute(`UPDATE users SET role = 'superagent'::user_role WHERE uuid = ?::uuid`, [userId]).catch(() => {});
@@ -2383,6 +2441,8 @@ const manualActivateAgentStore = async (req, res) => {
             `UPDATE agent_stores SET activation_status = 'PAID', updated_at = NOW() WHERE id = ?::uuid`,
             [id]
         );
+
+        logActivity(req.user?.id, 'AGENT_STORE_ACTIVATED', `Manually activated Agent Store ${id.slice(0, 8)}`, { storeId: id }, req.ip);
 
         res.json({ message: 'Store activation status manually marked as PAID' });
     } catch (error) {
@@ -2402,6 +2462,8 @@ const deleteAgentStore = async (req, res) => {
         const store = stores[0];
 
         await pool.execute('DELETE FROM agent_stores WHERE id = ?::uuid', [id]);
+
+        logActivity(req.user?.id, 'AGENT_STORE_DELETED', `Deleted Agent Store "${store.store_name}"`, { storeId: id, storeName: store.store_name }, req.ip);
 
         res.json({ message: `Agent Store "${store.store_name}" deleted successfully` });
     } catch (error) {
@@ -2477,6 +2539,8 @@ const updateAgentWithdrawalStatus = async (req, res) => {
         }
 
         await connection.commit();
+
+        logActivity(req.user?.id, 'WITHDRAWAL_STATUS_CHANGED', `Updated agent withdrawal request ${id.slice(0, 8)} status to ${status}`, { withdrawalId: id, status, amount: withdrawal.amount_ghc, admin_notes }, req.ip);
 
         res.json({ message: `Withdrawal status updated to ${status}` });
     } catch (error) {

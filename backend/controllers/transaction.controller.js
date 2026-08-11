@@ -83,6 +83,7 @@ const purchaseBundle = async (req, res) => {
             const transactionId = uuidv4();
             const sourcingConfig = await getSourcingConfig();
             const activeProviderSlug = sourcingConfig.active_sourcing_api || 'datahouse';
+            const assignedProvider = bundle.provider_slug || activeProviderSlug;
 
             // Create transaction record with tracking columns
             const initialStatus = 'processing';
@@ -99,7 +100,7 @@ const purchaseBundle = async (req, res) => {
                     initialStatus, 
                     walletBalance, 
                     walletBalance - finalPrice, 
-                    activeProviderSlug
+                    assignedProvider
                 ]
             );
 

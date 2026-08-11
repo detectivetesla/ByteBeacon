@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { agentStoreService, AgentOrder } from '@/services/agentStore.service';
-import { ShoppingBag, Search, Filter, RefreshCw } from 'lucide-react';
+import { ShoppingBag, Search, Filter, RefreshCw, ShieldCheck, X, CheckCircle2, Clock } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 export const AgentOrdersPage: React.FC = () => {
@@ -10,6 +10,9 @@ export const AgentOrdersPage: React.FC = () => {
     const [statusFilter, setStatusFilter] = useState<string>('ALL');
     const [networkFilter, setNetworkFilter] = useState<string>('ALL');
     const [searchQuery, setSearchQuery] = useState<string>('');
+
+    // Modal state for tracking specific order
+    const [selectedTrackOrder, setSelectedTrackOrder] = useState<AgentOrder | null>(null);
 
     const fetchOrders = async () => {
         setLoading(true);
@@ -40,23 +43,24 @@ export const AgentOrdersPage: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6 bg-[#141518] text-white p-6 rounded-3xl font-sans">
+        <div className="space-y-4 sm:space-y-6 bg-[#141518] text-white p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl font-sans w-full min-w-0">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[#202227] p-6 rounded-2xl border border-white/5">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 bg-[#202227] p-4 sm:p-6 rounded-2xl border border-white/5">
                 <div>
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
                         <ShoppingBag className="w-5 h-5 text-[#a3e635]" />
                         Store Sales & Customer Orders
                     </h2>
                     <p className="text-xs text-slate-400 mt-1">
-                        Track orders placed through your public agent storefront.
+                        Track orders placed through your public agent storefront and trace fulfillment status.
                     </p>
                 </div>
                 <button
                     onClick={fetchOrders}
-                    className="p-2.5 bg-[#18191c] hover:bg-white/5 text-slate-300 rounded-xl border border-white/10 transition-all text-xs flex items-center gap-2"
+                    disabled={loading}
+                    className="p-2.5 bg-[#18191c] hover:bg-white/5 text-slate-300 rounded-xl border border-white/10 transition-all text-xs flex items-center gap-2 font-semibold disabled:opacity-50"
                 >
-                    <RefreshCw className="w-4 h-4 text-[#a3e635]" />
+                    <RefreshCw className={`w-4 h-4 text-[#a3e635] ${loading ? 'animate-spin' : ''}`} />
                     Refresh
                 </button>
             </div>
@@ -98,7 +102,7 @@ export const AgentOrdersPage: React.FC = () => {
                 {loading ? (
                     <div className="space-y-0">
                         <div className="bg-[#18191c] p-4 flex gap-6">
-                            {Array.from({ length: 6 }).map((_, i) => (
+                            {Array.from({ length: 7 }).map((_, i) => (
                                 <div key={i} className="h-3 w-20 bg-[#2a2b30] rounded animate-pulse" />
                             ))}
                         </div>
@@ -107,6 +111,7 @@ export const AgentOrdersPage: React.FC = () => {
                                 <div className="h-3 w-24 bg-[#2a2b30] rounded animate-pulse" />
                                 <div className="h-3 w-14 bg-[#2a2b30] rounded animate-pulse" />
                                 <div className="h-3 w-28 bg-[#2a2b30] rounded animate-pulse" />
+                                <div className="h-3 w-16 bg-[#2a2b30] rounded animate-pulse" />
                                 <div className="h-3 w-16 bg-[#2a2b30] rounded animate-pulse" />
                                 <div className="h-3 w-16 bg-[#2a2b30] rounded animate-pulse" />
                                 <div className="h-3 w-16 bg-[#2a2b30] rounded animate-pulse" />
@@ -130,6 +135,7 @@ export const AgentOrdersPage: React.FC = () => {
                                     <th className="p-4">Your Profit</th>
                                     <th className="p-4">Fulfillment Status</th>
                                     <th className="p-4">Date</th>
+                                    <th className="p-4 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
@@ -153,6 +159,16 @@ export const AgentOrdersPage: React.FC = () => {
                                             </span>
                                         </td>
                                         <td className="p-4 text-slate-500">{new Date(o.created_at).toLocaleString()}</td>
+                                        <td className="p-4 text-right">
+                                            <button
+                                                onClick={() => setSelectedTrackOrder(o)}
+                                                className="px-2.5 py-1 rounded-lg bg-[#18191c] text-slate-300 hover:text-[#a3e635] border border-white/10 text-[11px] font-bold inline-flex items-center gap-1 transition-all"
+                                                title="View Fulfillment Trace"
+                                            >
+                                                <ShieldCheck className="w-3.5 h-3.5 text-[#a3e635]" />
+                                                Trace
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -160,6 +176,74 @@ export const AgentOrdersPage: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* Order Fulfillment Tracking Modal */}
+            {selectedTrackOrder && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-[#202227] border border-white/10 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl text-white">
+                        <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                            <h3 className="font-bold text-base flex items-center gap-2">
+                                <ShieldCheck className="w-4 h-4 text-[#a3e635]" />
+                                Order Fulfillment Trace
+                            </h3>
+                            <button onClick={() => setSelectedTrackOrder(null)} className="text-slate-400 hover:text-white">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="bg-[#18191c] p-3.5 rounded-xl border border-white/5 space-y-2 text-xs">
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">Recipient Phone:</span>
+                                <span className="font-bold text-white">{selectedTrackOrder.customer_phone}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">Data Bundle:</span>
+                                <span className="font-bold text-[#a3e635] uppercase">{selectedTrackOrder.network} {selectedTrackOrder.data_amount}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">Amount Paid:</span>
+                                <span className="font-bold text-white">GHS {parseFloat(selectedTrackOrder.selling_price_ghc as any).toFixed(2)}</span>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 pt-1">
+                            <div className="flex items-center gap-3">
+                                <div className="w-7 h-7 rounded-full bg-[#a3e635]/20 text-[#a3e635] flex items-center justify-center font-bold text-xs">✓</div>
+                                <div>
+                                    <h4 className="text-xs font-bold text-white">1. Payment Verified</h4>
+                                    <p className="text-[11px] text-slate-400">Customer payment authenticated via Paystack</p>
+                                </div>
+                            </div>
+                            <div className="w-0.5 h-5 bg-[#a3e635] ml-3.5" />
+
+                            <div className="flex items-center gap-3">
+                                <div className="w-7 h-7 rounded-full bg-[#a3e635]/20 text-[#a3e635] flex items-center justify-center font-bold text-xs">✓</div>
+                                <div>
+                                    <h4 className="text-xs font-bold text-white">2. ByteBeacon Server Signature</h4>
+                                    <p className="text-[11px] text-slate-400">Transaction validated & logged to reseller ledger</p>
+                                </div>
+                            </div>
+                            <div className="w-0.5 h-5 bg-[#a3e635] ml-3.5" />
+
+                            <div className="flex items-center gap-3">
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${
+                                    selectedTrackOrder.fulfillment_status === 'completed' ? 'bg-[#a3e635]/20 text-[#a3e635]' : 'bg-amber-400/20 text-amber-400'
+                                }`}>
+                                    {selectedTrackOrder.fulfillment_status === 'completed' ? '✓' : '⏳'}
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-bold text-white">3. Telecom Provider Delivery</h4>
+                                    <p className="text-[11px] text-slate-400">
+                                        Status: <span className="uppercase font-bold text-[#a3e635]">{selectedTrackOrder.fulfillment_status}</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
+
+export default AgentOrdersPage;

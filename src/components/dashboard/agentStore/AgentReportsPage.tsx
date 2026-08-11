@@ -75,9 +75,9 @@ export const AgentReportsPage: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6 bg-[#141518] text-white p-6 rounded-3xl font-sans">
+        <div className="space-y-4 sm:space-y-6 bg-[#141518] text-white p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl font-sans w-full min-w-0">
             {/* Header */}
-            <div className="bg-[#202227] p-6 rounded-2xl border border-white/5">
+            <div className="bg-[#202227] p-4 sm:p-6 rounded-2xl border border-white/5">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                     <FileSpreadsheet className="w-5 h-5 text-[#a3e635]" />
                     Exportable Financial & Sales Reports

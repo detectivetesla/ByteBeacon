@@ -119,7 +119,7 @@ export const AgentWalletPage: React.FC<AgentWalletPageProps> = ({
     };
 
     return (
-        <div className="space-y-6 bg-[#141518] text-white p-6 rounded-3xl font-sans">
+        <div className="space-y-4 sm:space-y-6 bg-[#141518] text-white p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl font-sans w-full min-w-0">
             {/* Header / Financial Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <div className="bg-[#202227] p-6 rounded-2xl border border-[#a3e635]/20 shadow-xl space-y-2 relative overflow-hidden">

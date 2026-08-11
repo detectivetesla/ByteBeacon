@@ -1,6 +1,6 @@
 const pool = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
-const { placeDataOrder } = require('../utils/portal02');
+const { placeDataOrder, getSourcingConfig } = require('../utils/sourcing');
 
 // Paystack API base URL
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
@@ -16,9 +16,9 @@ exports.processPayment = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Missing required fields' });
         }
 
-        // Validate bundle existence and active state
+        // Validate bundle existence, active state, and assigned provider
         const [bundles] = await connection.execute(
-            'SELECT id, is_active FROM data_bundles WHERE id = ?::uuid',
+            'SELECT id, is_active, provider_slug FROM data_bundles WHERE id = ?::uuid',
             [bundleId]
         );
         if (bundles.length === 0) {
@@ -69,12 +69,17 @@ exports.processPayment = async (req, res) => {
             });
         }
 
+        // Get active sourcing provider fallback
+        const sourcingConfig = await getSourcingConfig();
+        const activeProviderSlug = sourcingConfig.active_sourcing_api || 'datahouse';
+        const assignedProvider = bundles[0].provider_slug || activeProviderSlug;
+
         // Create processing transaction in database
         const transactionId = uuidv4();
         await connection.execute(
-            `INSERT INTO transactions (id, user_id, bundle_id, recipient_phone, amount_ghc, paystack_reference, status, created_at)
-             VALUES (?::uuid, ?::uuid, ?::uuid, ?, ?, ?, 'pending_payment', NOW())`,
-            [transactionId, userId, bundleId, recipientPhone, amount, paystackData.data.reference]
+            `INSERT INTO transactions (id, user_id, bundle_id, recipient_phone, amount_ghc, paystack_reference, status, source_provider, created_at)
+             VALUES (?::uuid, ?::uuid, ?::uuid, ?, ?, ?, 'pending_payment', ?, NOW())`,
+            [transactionId, userId, bundleId, recipientPhone, amount, paystackData.data.reference, assignedProvider]
         );
 
         res.json({
@@ -137,7 +142,7 @@ exports.verifyPayment = async (req, res) => {
 
         // Get transaction and bundle details
         const [transactions] = await connection.execute(
-            `SELECT t.*, b.network, b.data_amount 
+            `SELECT t.*, b.network, b.data_amount, b.provider_slug 
              FROM transactions t 
              LEFT JOIN data_bundles b ON t.bundle_id = b.id::uuid 
              WHERE t.paystack_reference = ?`,
@@ -186,13 +191,13 @@ exports.verifyPayment = async (req, res) => {
             [transaction.id]
         );
 
-        // Call Portal-02 API to place data bundle order
-        // Pass transactionId so Portal-02 can send webhook callbacks
+        // Call Sourcing API router to place data bundle order using bundle provider or fallback
         const fulfillment = await placeDataOrder({
             network: transaction.network,
             dataAmount: transaction.data_amount,
             recipientPhone: transaction.recipient_phone,
-            transactionId: transaction.id // Enable webhook callback
+            transactionId: transaction.id,
+            providerSlug: transaction.provider_slug || transaction.source_provider
         });
 
         const finalStatus = fulfillment.status;
@@ -305,7 +310,13 @@ exports.paystackWebhook = async (req, res) => {
             } else if (reference.startsWith('AG-ORD-')) {
                 // Agent Store Customer Purchase
                 console.log(`🛒 Webhook: Processing Agent Customer Purchase for reference ${reference}`);
-                const [orders] = await connection.execute('SELECT * FROM agent_orders WHERE paystack_reference = ?', [reference]);
+                const [orders] = await connection.execute(
+                    `SELECT o.*, b.provider_slug 
+                     FROM agent_orders o
+                     LEFT JOIN data_bundles b ON o.bundle_id = b.id::uuid
+                     WHERE o.paystack_reference = ?`,
+                    [reference]
+                );
 
                 if (orders.length > 0) {
                     const order = orders[0];
@@ -319,7 +330,8 @@ exports.paystackWebhook = async (req, res) => {
                             network: order.network,
                             dataAmount: order.data_amount,
                             recipientPhone: order.customer_phone,
-                            transactionId: order.id
+                            transactionId: order.id,
+                            providerSlug: order.provider_slug
                         });
 
                         if (fulfillment.status === 'completed') {
@@ -425,7 +437,7 @@ exports.paystackWebhook = async (req, res) => {
                 // This is a data bundle purchase
                 // Get transaction details first
                 const [transactions] = await connection.execute(
-                    `SELECT t.*, b.network, b.data_amount 
+                    `SELECT t.*, b.network, b.data_amount, b.provider_slug 
                      FROM transactions t 
                      LEFT JOIN data_bundles b ON t.bundle_id = b.id::uuid 
                      WHERE t.paystack_reference = ?`,
@@ -445,12 +457,13 @@ exports.paystackWebhook = async (req, res) => {
 
                         console.log(`🚀 [Webhook] Placing order inline for transaction ${transaction.id} via webhook...`);
 
-                        // Call Portal-02 API to place data bundle order
+                        // Call Sourcing API router to place data bundle order
                         const fulfillment = await placeDataOrder({
                             network: transaction.network,
                             dataAmount: transaction.data_amount,
                             recipientPhone: transaction.recipient_phone,
-                            transactionId: transaction.id
+                            transactionId: transaction.id,
+                            providerSlug: transaction.provider_slug || transaction.source_provider
                         });
 
                         const finalStatus = fulfillment.status;
