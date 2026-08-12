@@ -473,7 +473,35 @@ echo "Response: " . $response . "\\n";
                                         </div>
                                     </div>
 
-                                    {/* 3. Wallet */}
+                                    {/* 3. Check Transaction Status */}
+                                    <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/30 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <span className="bg-blue-500/10 text-blue-400 border border-blue-500/30 text-xs font-bold px-2 py-0.5 rounded-md">GET</span>
+                                                <span className="font-mono text-sm text-white">/api/v1/transactions/:id</span>
+                                            </div>
+                                            <span className="text-xs text-slate-500">Read-Only</span>
+                                        </div>
+                                        <p className="text-xs text-slate-400">Query real-time status of a transaction by reference code or transaction UUID.</p>
+                                        <pre className="p-3 rounded-lg bg-slate-950 border border-slate-800/80 font-mono text-[11px] text-emerald-400 overflow-x-auto">
+{`{
+  "success": true,
+  "transaction": {
+    "id": "7f9c8d6e-5b4a-3f2e-1d0c-9b8a7f6e5d4c",
+    "reference": "your_unique_txn_ref_1029",
+    "status": "completed", // "processing" | "completed" | "pending_mtn_approval" | "failed" | "refunded"
+    "network": "MTN",
+    "recipient_phone": "233551234567",
+    "data_amount": "1.5GB",
+    "paid_amount": 5.00,
+    "provider_reference": "DH-992014",
+    "created_at": "2026-08-12T04:00:00Z"
+  }
+}`}
+                                        </pre>
+                                    </div>
+
+                                    {/* 4. Wallet */}
                                     <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/30 space-y-3">
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-3">
@@ -490,7 +518,7 @@ echo "Response: " . $response . "\\n";
                                         </pre>
                                     </div>
 
-                                    {/* 4. Credit */}
+                                    {/* 5. Credit */}
                                     <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/30 space-y-3">
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-3">

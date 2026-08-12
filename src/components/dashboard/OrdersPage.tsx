@@ -161,6 +161,9 @@ export default function OrdersPage() {
 
     const getStatusIcon = (status: string) => {
         switch (status) {
+            case 'pending_mtn_approval':
+            case 'awaiting_mtn_approval':
+                return <Clock className="w-4 h-4 text-amber-400 animate-pulse" />;
             case 'completed':
                 return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
             case 'processing':
@@ -178,6 +181,9 @@ export default function OrdersPage() {
 
     const getStatusBadge = (status: string) => {
         switch (status) {
+            case 'pending_mtn_approval':
+            case 'awaiting_mtn_approval':
+                return 'bg-amber-500/15 text-amber-300 border border-amber-500/30';
             case 'completed':
                 return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
             case 'processing':
@@ -542,7 +548,13 @@ export default function OrdersPage() {
                                                             getStatusBadge(order.status)
                                                         )}>
                                                             {getStatusIcon(order.status)}
-                                                            {order.status === 'pending' ? 'processing' : order.status === 'pending_payment' ? 'pending payment' : order.status}
+                                                            {order.status === 'pending_mtn_approval' || order.status === 'awaiting_mtn_approval'
+                                                                ? 'Awaiting MTN Approval'
+                                                                : order.status === 'pending'
+                                                                ? 'processing'
+                                                                : order.status === 'pending_payment'
+                                                                ? 'pending payment'
+                                                                : order.status}
                                                         </span>
                                                     </td>
                                                 )}

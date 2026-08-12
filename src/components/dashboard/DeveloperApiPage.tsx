@@ -67,75 +67,82 @@ export default function DeveloperApiPage() {
     };
 
     const codeExamples = {
-        curl: `# Get available data bundles
-curl -X GET https://api.bytebeacon.com/api/bundles \\
-  -H "Authorization: Bearer ${showApiKey ? apiKey : 'YOUR_API_KEY'}" \\
+        curl: `# Get available data bundle plans
+curl -X GET https://www.bytebeacon.online/api/v1/plans \\
+  -H "X-API-Key: ${showApiKey ? apiKey : 'YOUR_API_KEY'}" \\
   -H "Content-Type: application/json"
 
 # Purchase data bundle
-curl -X POST https://api.bytebeacon.com/api/transactions \\
-  -H "Authorization: Bearer ${showApiKey ? apiKey : 'YOUR_API_KEY'}" \\
+curl -X POST https://www.bytebeacon.online/api/v1/data/purchase \\
+  -H "X-API-Key: ${showApiKey ? apiKey : 'YOUR_API_KEY'}" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "phone": "0241234567",
-    "bundleId": "bundle_uuid_here",
+    "reference": "tx_unique_ref_1009",
+    "phone": "0551234567",
+    "plan_id": "bundle_uuid_here",
     "network": "MTN"
   }'
 
-# Check wallet balance
-curl -X GET https://api.bytebeacon.com/api/wallet/balance \\
-  -H "Authorization: Bearer ${showApiKey ? apiKey : 'YOUR_API_KEY'}"`,
-        javascript: `// Get available data bundles
-const bundlesRes = await fetch('https://api.bytebeacon.com/api/bundles', {
+# Check transaction status
+curl -X GET https://www.bytebeacon.online/api/v1/transactions/tx_unique_ref_1009 \\
+  -H "X-API-Key: ${showApiKey ? apiKey : 'YOUR_API_KEY'}"
+
+# Check prepaid wallet balance
+curl -X GET https://www.bytebeacon.online/api/v1/wallet \\
+  -H "X-API-Key: ${showApiKey ? apiKey : 'YOUR_API_KEY'}"`,
+        javascript: `// Get available data bundle plans
+const plansRes = await fetch('https://www.bytebeacon.online/api/v1/plans', {
   headers: {
-    'Authorization': 'Bearer ${showApiKey ? apiKey : 'YOUR_API_KEY'}',
+    'X-API-Key': '${showApiKey ? apiKey : 'YOUR_API_KEY'}',
     'Content-Type': 'application/json',
   },
 });
-const { bundles } = await bundlesRes.json();
+const { plans } = await plansRes.json();
 
 // Purchase data bundle
-const purchaseRes = await fetch('https://api.bytebeacon.com/api/transactions', {
+const purchaseRes = await fetch('https://www.bytebeacon.online/api/v1/data/purchase', {
   method: 'POST',
   headers: {
-    'Authorization': 'Bearer ${showApiKey ? apiKey : 'YOUR_API_KEY'}',
+    'X-API-Key': '${showApiKey ? apiKey : 'YOUR_API_KEY'}',
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
-    phone: '0241234567',
-    bundleId: 'bundle_uuid_here',
+    reference: 'tx_unique_ref_1009',
+    phone: '0551234567',
+    plan_id: 'bundle_uuid_here',
     network: 'MTN',
   }),
 });
 const result = await purchaseRes.json();
-console.log('Transaction ID:', result.transactionId);
+console.log('Status:', result.status, 'Transaction ID:', result.transaction_id);
 
-// Check wallet balance
-const balanceRes = await fetch('https://api.bytebeacon.com/api/wallet/balance', {
-  headers: { 'Authorization': 'Bearer ${showApiKey ? apiKey : 'YOUR_API_KEY'}' },
+// Check prepaid wallet balance
+const balanceRes = await fetch('https://www.bytebeacon.online/api/v1/wallet', {
+  headers: { 'X-API-Key': '${showApiKey ? apiKey : 'YOUR_API_KEY'}' },
 });
 const { balance } = await balanceRes.json();
 console.log('Balance: GHS', balance);`,
         python: `import requests
 
-API_KEY = '${showApiKey ? apiKey : 'YOUR_API_KEY'}'
-BASE_URL = 'https://api.bytebeacon.com/api'
+base_url = "https://www.bytebeacon.online/api/v1"
 headers = {
-    'Authorization': f'Bearer {API_KEY}',
-    'Content-Type': 'application/json',
+    "X-API-Key": "${showApiKey ? apiKey : 'YOUR_API_KEY'}",
+    "Content-Type": "application/json"
 }
 
-# Purchase data bundle
-purchase_res = requests.post(
-    f'{BASE_URL}/transactions',
-    headers=headers,
-    json={
-        'phone': '0241234567',
-        'bundleId': 'bundle_uuid_here',
-        'network': 'MTN',
-    }
-)
-print(purchase_res.json())`,
+# Get available plans
+plans = requests.get(f"{base_url}/plans", headers=headers).json()
+
+# Place purchase order
+payload = {
+    "reference": "tx_unique_ref_1009",
+    "phone": "0551234567",
+    "plan_id": "bundle_uuid_here",
+    "network": "MTN"
+}
+response = requests.post(f"{base_url}/data/purchase", json=payload, headers=headers)
+print("Purchase Result:", response.json())`
+
         java: `import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -143,16 +150,16 @@ import java.net.http.HttpResponse;
 
 public class ByteBeaconApi {
     private static final String API_KEY = "${showApiKey ? apiKey : 'YOUR_API_KEY'}";
-    private static final String BASE_URL = "https://api.bytebeacon.com/api";
+    private static final String BASE_URL = "https://www.bytebeacon.online/api/v1";
 
     public static void main(String[] args) throws Exception {
         HttpClient client = HttpClient.newHttpClient();
         
-        String jsonPayload = "{\\"phone\\":\\"0241234567\\",\\"bundleId\\":\\"uuid\\",\\"network\\":\\"MTN\\"}";
+        String jsonPayload = "{\\"reference\\":\\"tx_ref_1009\\",\\"phone\\":\\"0551234567\\",\\"plan_id\\":\\"uuid\\",\\"network\\":\\"MTN\\"}";
         
         HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(BASE_URL + "/transactions"))
-            .header("Authorization", "Bearer " + API_KEY)
+            .uri(URI.create(BASE_URL + "/data/purchase"))
+            .header("X-API-Key", API_KEY)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
             .build();

@@ -580,6 +580,45 @@ const initializeTables = async () => {
                 )
             `).catch(err => console.log('Info: agent_pricing_rules check:', err.message));
 
+            // Create mtn_beneficiary_approvals table
+            await pool.execute(`
+                CREATE TABLE IF NOT EXISTS mtn_beneficiary_approvals (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    msisdn VARCHAR(20) UNIQUE NOT NULL,
+                    display_phone VARCHAR(20) NOT NULL,
+                    network VARCHAR(20) DEFAULT 'MTN',
+                    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                    occurrences INT NOT NULL DEFAULT 1,
+                    bundle_sizes JSONB DEFAULT '[]'::jsonb,
+                    sources JSONB DEFAULT '[]'::jsonb,
+                    first_detected_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                    last_detected_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                    submitted_at TIMESTAMPTZ,
+                    approved_at TIMESTAMPTZ,
+                    rejected_at TIMESTAMPTZ,
+                    resolved_at TIMESTAMPTZ
+                )
+            `).catch(err => console.log('Info: mtn_beneficiary_approvals check:', err.message));
+
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approvals_msisdn ON mtn_beneficiary_approvals(msisdn)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approvals_status ON mtn_beneficiary_approvals(status)`).catch(() => {});
+
+            // Create mtn_beneficiary_approval_orders junction table
+            await pool.execute(`
+                CREATE TABLE IF NOT EXISTS mtn_beneficiary_approval_orders (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    approval_id UUID NOT NULL REFERENCES mtn_beneficiary_approvals(id) ON DELETE CASCADE,
+                    order_id UUID,
+                    order_reference VARCHAR(100) NOT NULL,
+                    bundle_size VARCHAR(20) NOT NULL,
+                    source VARCHAR(50) NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                )
+            `).catch(err => console.log('Info: mtn_beneficiary_approval_orders check:', err.message));
+
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approval_orders_approval ON mtn_beneficiary_approval_orders(approval_id)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approval_orders_ref ON mtn_beneficiary_approval_orders(order_reference)`).catch(() => {});
+
             // Seed default pricing rules if table empty
             const [rules] = await pool.execute('SELECT COUNT(*)::integer as count FROM agent_pricing_rules');
             if (rules[0]?.count === 0) {

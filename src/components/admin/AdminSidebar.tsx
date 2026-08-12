@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -19,9 +19,11 @@ import {
     ChevronLeft,
     X,
     Activity,
-    Store
+    Store,
+    ShieldAlert
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { api } from '@/services';
 import { PremiumIcon, PremiumIconVariant } from '../ui/PremiumIcon';
 
 interface AdminSidebarProps {
@@ -42,6 +44,7 @@ interface NavItem {
     href: string;
     variant: PremiumIconVariant;
     subItems?: NavSubItem[];
+    showBadge?: boolean;
 }
 
 interface NavSection {
@@ -73,7 +76,7 @@ const navSections: NavSection[] = [
                     { label: 'Telecel Orders', href: '/admin/orders/telecel' }
                 ]
             },
-
+            { icon: ShieldAlert, label: 'Pending MTN Approval', href: '/admin/mtn-approvals', variant: 'amber', showBadge: true },
             { icon: Database, label: 'Data Plans', href: '/admin/data-plans', variant: 'blue' },
             { icon: UserCog, label: 'Resellers/Agents', href: '/admin/agents', variant: 'indigo' },
             { icon: Store, label: 'Agent Stores', href: '/admin/agent-stores', variant: 'emerald' },
@@ -111,6 +114,23 @@ export default function AdminSidebar({ isCollapsed, adminName, onClose, isMobile
     const [expanded, setExpanded] = useState<Record<string, boolean>>({
         'Orders': true
     });
+    const [pendingMtnCount, setPendingMtnCount] = useState<number>(0);
+
+    useEffect(() => {
+        const fetchPendingCount = async () => {
+            try {
+                const res = await api.get<{ success: boolean; count: number }>('/admin/mtn-approvals/count');
+                if (res.success) {
+                    setPendingMtnCount(res.count || 0);
+                }
+            } catch (err) {
+                // Ignore silent fetch errors
+            }
+        };
+        fetchPendingCount();
+        const interval = setInterval(fetchPendingCount, 30000); // 30s polling
+        return () => clearInterval(interval);
+    }, []);
 
     const handleSignOut = async () => {
         await signOut();
@@ -262,14 +282,19 @@ export default function AdminSidebar({ isCollapsed, adminName, onClose, isMobile
                                                         !isItemActive && "group-hover:translate-x-1"
                                                     )}
                                                 />
-                                                {!isCollapsed && (
-                                                    <span className="relative flex-1">
-                                                        {item.label}
-                                                        {isItemActive && (
-                                                            <div className="absolute -left-12 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-primary rounded-full" />
-                                                        )}
-                                                    </span>
-                                                )}
+                                                 {!isCollapsed && (
+                                                     <span className="relative flex-1 flex items-center justify-between">
+                                                         <span>{item.label}</span>
+                                                         {item.showBadge && pendingMtnCount > 0 && (
+                                                             <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-black shadow-sm">
+                                                                 {pendingMtnCount}
+                                                             </span>
+                                                         )}
+                                                         {isItemActive && (
+                                                             <div className="absolute -left-12 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-primary rounded-full" />
+                                                         )}
+                                                     </span>
+                                                 )}
                                             </Link>
                                         )}
                                     </div>

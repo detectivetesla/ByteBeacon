@@ -221,6 +221,17 @@ const syncPendingTransactions = async (io) => {
             console.error('❌ [SYNC JOB] Webhook queue processing error:', webhookErr.message);
         }
 
+        // --- PASS 4: Sync Pending MTN Beneficiary Approvals ---
+        try {
+            const { syncBeneficiaryApprovals } = require('../services/mtnApproval.service');
+            const syncResult = await syncBeneficiaryApprovals();
+            if (syncResult && (syncResult.syncedCount > 0 || syncResult.approvedCount > 0)) {
+                console.log(`📱 [SYNC JOB] MTN Beneficiary sync: checked ${syncResult.syncedCount || 0}, approved & updated ${syncResult.approvedCount || 0}`);
+            }
+        } catch (mtnSyncErr) {
+            console.error('❌ [SYNC JOB] MTN Beneficiary sync error:', mtnSyncErr.message);
+        }
+
     } catch (error) {
         console.error('❌ Status sync job error:', error);
     } finally {

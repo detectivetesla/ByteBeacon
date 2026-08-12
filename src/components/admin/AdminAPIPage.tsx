@@ -97,67 +97,55 @@ export default function AdminAPIPage() {
     };
 
     const codeExamples = {
-        curl: `# Get all users
-curl -X GET https://api.bytebeacon.com/api/admin/users \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+        curl: `# Get pending MTN beneficiary approvals
+curl -X GET https://www.bytebeacon.online/api/admin/mtn-approvals?status=pending \\
+  -H "Authorization: Bearer YOUR_ADMIN_JWT_TOKEN" \\
   -H "Content-Type: application/json"
 
-# Create a new user
-curl -X POST https://api.bytebeacon.com/api/admin/users \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "fullName": "John Doe",
-    "email": "john@example.com",
-    "phone": "0241234567",
-    "password": "securePassword123",
-    "role": "customer"
-  }'
+# Trigger MTN Beneficiary status sync
+curl -X POST https://www.bytebeacon.online/api/admin/mtn-approvals/sync \\
+  -H "Authorization: Bearer YOUR_ADMIN_JWT_TOKEN" \\
+  -H "Content-Type: application/json"
 
-# Approve agent application
-curl -X PUT https://api.bytebeacon.com/api/admin/agent-applications/APP_ID \\
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+# Get all users
+curl -X GET https://www.bytebeacon.online/api/admin/users \\
+  -H "Authorization: Bearer YOUR_ADMIN_JWT_TOKEN" \\
+  -H "Content-Type: application/json"
+
+# Approve agent store application
+curl -X PUT https://www.bytebeacon.online/api/admin/agent-stores/STORE_ID/review \\
+  -H "Authorization: Bearer YOUR_ADMIN_JWT_TOKEN" \\
   -H "Content-Type: application/json" \\
-  -d '{"status": "approved"}'`,
-        javascript: `// Get all users
-const response = await fetch('https://api.bytebeacon.com/api/admin/users', {
+  -d '{"review_status": "approved"}'`,
+        javascript: `// Fetch pending MTN approval list
+const mtnApprovalsRes = await fetch('https://www.bytebeacon.online/api/admin/mtn-approvals?status=pending', {
   method: 'GET',
   headers: {
-    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Authorization': 'Bearer YOUR_ADMIN_JWT_TOKEN',
     'Content-Type': 'application/json',
   },
 });
-const users = await response.json();
+const mtnData = await mtnApprovalsRes.json();
 
-// Create a new bundle
-const bundleResponse = await fetch('https://api.bytebeacon.com/api/admin/bundles', {
+// Trigger MTN approval sync with provider
+const syncRes = await fetch('https://www.bytebeacon.online/api/admin/mtn-approvals/sync', {
   method: 'POST',
   headers: {
-    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Authorization': 'Bearer YOUR_ADMIN_JWT_TOKEN',
     'Content-Type': 'application/json',
   },
-  body: JSON.stringify({
-    network: 'MTN',
-    name: '5GB Weekly',
-    data_amount: '5GB',
-    price_ghc: 25.00,
-    validity: '7 days',
-    is_active: true,
-  }),
 });
+const syncResult = await syncRes.json();
 
-// Approve agent application
-const approveResponse = await fetch(
-  'https://api.bytebeacon.com/api/admin/agent-applications/APP_ID',
-  {
-    method: 'PUT',
-    headers: {
-      'Authorization': 'Bearer YOUR_JWT_TOKEN',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ status: 'approved' }),
-  }
-);`,
+// Get all users
+const usersRes = await fetch('https://www.bytebeacon.online/api/admin/users', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_ADMIN_JWT_TOKEN',
+    'Content-Type': 'application/json',
+  },
+});
+const users = await usersRes.json();`,
         python: `import requests
 
 # Get all users

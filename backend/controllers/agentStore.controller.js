@@ -1404,6 +1404,17 @@ exports.verifyCustomerPurchase = async (req, res) => {
                  WHERE id = ?::uuid`,
                 [JSON.stringify(fulfillmentApiResponse), order.id]
             );
+
+            // Record in mtn_beneficiary_approvals database system
+            const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
+            await recordPendingBeneficiary({
+                phone: order.customer_phone,
+                network: order.network,
+                bundleSize: order.data_amount,
+                source: 'Agent Storefront',
+                orderId: order.id,
+                orderReference: order.paystack_reference || order.id
+            }).catch(err => console.warn('⚠️ Record pending beneficiary warning:', err.message));
         } else if (finalFulfillmentStatus === 'rejected') {
             // Rejection rule: If number is rejected by DataHouse, PURGE/DELETE the order from agent_orders completely
             console.log(`🚫 Order ${order.id} rejected by provider. Deleting order record from database so it does not reflect in system.`);

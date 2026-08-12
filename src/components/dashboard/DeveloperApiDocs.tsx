@@ -28,15 +28,17 @@ export default function DeveloperApiDocs() {
         {
             method: 'GET',
             path: '/api/v1/plans',
-            description: 'Fetch all available active mobile data bundles and prices.',
+            description: 'Fetch all available active mobile data bundles, networks, data volumes, and prices.',
             response: `{
   "success": true,
   "plans": [
     {
       "id": "e5c3b9d2-7a1b-4c3e-8f9d-0e1a2b3c4d5e",
       "network": "MTN",
-      "name": "MTN 1GB (GHS 5.00)",
-      "price": 5.00
+      "name": "MTN 1GB Data Bundle",
+      "data_amount": "1GB",
+      "price": 5.00,
+      "validity": "Non-expiry"
     }
   ]
 }`
@@ -44,17 +46,36 @@ export default function DeveloperApiDocs() {
         {
             method: 'POST',
             path: '/api/v1/data/purchase',
-            description: 'Place a data bundle purchase order for a phone number.',
+            description: 'Place a data bundle purchase order for a recipient phone number.',
             requestBody: `{
   "reference": "your_unique_txn_ref_99812",
   "network": "MTN",
-  "phone": "0241234567",
+  "phone": "0551234567",
   "plan_id": "e5c3b9d2-7a1b-4c3e-8f9d-0e1a2b3c4d5e"
 }`,
             response: `{
   "success": true,
   "transaction_id": "7f9c8d6e-5b4a-3f2e-1d0c-9b8a7f6e5d4c",
-  "status": "processing"
+  "status": "processing" // "processing" | "completed" | "pending_mtn_approval" | "failed"
+}`
+        },
+        {
+            method: 'GET',
+            path: '/api/v1/transactions/:id',
+            description: 'Fetch real-time transaction status by reference code or transaction UUID.',
+            response: `{
+  "success": true,
+  "transaction": {
+    "id": "7f9c8d6e-5b4a-3f2e-1d0c-9b8a7f6e5d4c",
+    "reference": "your_unique_txn_ref_99812",
+    "status": "completed",
+    "network": "MTN",
+    "recipient_phone": "233551234567",
+    "data_amount": "1GB",
+    "paid_amount": 5.00,
+    "provider_reference": "DH-992014",
+    "created_at": "2026-08-12T04:00:00Z"
+  }
 }`
         },
         {
@@ -63,19 +84,32 @@ export default function DeveloperApiDocs() {
             description: 'Fetch your prepaid API/reseller wallet balance.',
             response: `{
   "success": true,
-  "balance": 450.75
+  "balance": 450.75,
+  "currency": "GHS"
+}`
+        },
+        {
+            method: 'GET',
+            path: '/api/v1/credit',
+            description: 'Fetch credit overdraft limits and available credit.',
+            response: `{
+  "success": true,
+  "credit_limit": 1000.00,
+  "outstanding_balance": 250.00,
+  "available_credit": 750.00,
+  "billing_mode": "credit"
 }`
         }
     ];
 
     const codeSnippets = {
-        curl: `curl -X POST https://api.bytebeacon.com/api/v1/data/purchase \\
+        curl: `curl -X POST https://www.bytebeacon.online/api/v1/data/purchase \\
   -H "x-api-key: dk_your_api_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{
     "reference": "your_unique_txn_ref_99812",
     "network": "MTN",
-    "phone": "0241234567",
+    "phone": "0551234567",
     "plan_id": "e5c3b9d2-7a1b-4c3e-8f9d-0e1a2b3c4d5e"
   }'`,
         javascript: `const axios = require('axios');
@@ -83,11 +117,11 @@ export default function DeveloperApiDocs() {
 const payload = {
   reference: "your_unique_txn_ref_99812",
   network: "MTN",
-  phone: "0241234567",
+  phone: "0551234567",
   plan_id: "e5c3b9d2-7a1b-4c3e-8f9d-0e1a2b3c4d5e"
 };
 
-axios.post('https://api.bytebeacon.com/api/v1/data/purchase', payload, {
+axios.post('https://www.bytebeacon.online/api/v1/data/purchase', payload, {
   headers: {
     'x-api-key': 'dk_your_api_key_here',
     'Content-Type': 'application/json'
@@ -97,7 +131,7 @@ axios.post('https://api.bytebeacon.com/api/v1/data/purchase', payload, {
 .catch(err => console.error(err.response?.data || err.message));`,
         python: `import requests
 
-url = "https://api.bytebeacon.com/api/v1/data/purchase"
+url = "https://www.bytebeacon.online/api/v1/data/purchase"
 headers = {
     "x-api-key": "dk_your_api_key_here",
     "Content-Type": "application/json"
@@ -105,20 +139,21 @@ headers = {
 payload = {
     "reference": "your_unique_txn_ref_99812",
     "network": "MTN",
-    "phone": "0241234567",
+    "phone": "0551234567",
     "plan_id": "e5c3b9d2-7a1b-4c3e-8f9d-0e1a2b3c4d5e"
 }
 
 response = requests.post(url, json=payload, headers=headers)
 print(response.json())`,
         php: `<?php
-$ch = curl_init('https://api.bytebeacon.com/api/v1/data/purchase');
+$ch = curl_init('https://www.bytebeacon.online/api/v1/data/purchase');
 $payload = json_encode([
     "reference" => "your_unique_txn_ref_99812",
     "network" => "MTN",
-    "phone" => "0241234567",
+    "phone" => "0551234567",
     "plan_id" => "e5c3b9d2-7a1b-4c3e-8f9d-0e1a2b3c4d5e"
-]);
+]);`
+
 
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_POST, true);

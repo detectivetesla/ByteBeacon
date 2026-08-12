@@ -156,4 +156,19 @@ router.put('/agent-stores/withdrawals/:id', updateAgentWithdrawalStatus);
 router.get('/agent-stores/pricing-rules', getAgentPricingRules);
 router.put('/agent-stores/pricing-rules', updateAgentPricingRules);
 
+// Pending MTN Beneficiary Approval Workflow Management
+const {
+    getMtnApprovals,
+    getPendingCount,
+    getMtnApprovalOrders,
+    syncMtnApprovals,
+    exportMtnApprovals
+} = require('../controllers/adminMtnApproval.controller');
+
+router.get('/mtn-approvals', getMtnApprovals);
+router.get('/mtn-approvals/count', getPendingCount);
+router.get('/mtn-approvals/export', exportMtnApprovals);
+router.get('/mtn-approvals/:id/orders', getMtnApprovalOrders);
+router.post('/mtn-approvals/sync', syncMtnApprovals);
+
 module.exports = router;

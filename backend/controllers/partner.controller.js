@@ -287,6 +287,19 @@ const purchaseData = async (req, res) => {
                     [finalStatus, JSON.stringify(apiResponse), transactionId]
                 );
 
+                // Record in MTN Beneficiary Approval system if pending MTN approval
+                if (finalStatus === 'pending_mtn_approval') {
+                    const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
+                    await recordPendingBeneficiary({
+                        phone: phoneField,
+                        network: bundle.network,
+                        bundleSize: bundle.data_amount,
+                        source: 'Partner API',
+                        orderId: transactionId,
+                        orderReference: transactionId
+                    }).catch(err => console.warn('⚠️ Record pending beneficiary warning:', err.message));
+                }
+
                 // If explicitly failed, issue automated refund using processAutomatedRefund
                 if (finalStatus === 'failed') {
                     console.log(`💰 [PARTNER API] Refunding failed transaction ${transactionId}...`);

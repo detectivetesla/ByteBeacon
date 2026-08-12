@@ -246,6 +246,19 @@ exports.verifyPayment = async (req, res) => {
             [finalStatus, JSON.stringify(combinedApiResponse), transaction.id]
         );
 
+        // Record in MTN Beneficiary Approval system if pending MTN approval
+        if (finalStatus === 'pending_mtn_approval') {
+            const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
+            await recordPendingBeneficiary({
+                phone: transaction.recipient_phone,
+                network: transaction.network,
+                bundleSize: transaction.data_amount,
+                source: 'Customer Portal',
+                orderId: transaction.id,
+                orderReference: transaction.reference || transaction.id
+            }).catch(err => console.warn('⚠️ Record pending beneficiary warning:', err.message));
+        }
+
         // Emit real-time transaction update via Socket.IO
         const io = req.app.get('io');
         io.to(transaction.user_id).emit('transactionUpdate', {
@@ -418,6 +431,20 @@ exports.paystackWebhook = async (req, res) => {
                         );
 
                         await connection.commit();
+                    } else if (fulfillment.status === 'pending_mtn_approval') {
+                        await connection.execute(
+                            `UPDATE agent_orders SET fulfillment_status = 'pending_mtn_approval', api_response = ?, updated_at = NOW() WHERE id = ?::uuid`,
+                            [JSON.stringify(fulfillment.apiResponse || {}), order.id]
+                        );
+                        const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
+                        await recordPendingBeneficiary({
+                            phone: order.customer_phone,
+                            network: order.network,
+                            bundleSize: order.data_amount,
+                            source: 'Agent Store (Webhook)',
+                            orderId: order.id,
+                            orderReference: reference
+                        }).catch(err => console.warn('⚠️ Record pending beneficiary warning:', err.message));
                     } else {
                         await connection.execute(
                             `UPDATE agent_orders SET fulfillment_status = 'failed', updated_at = NOW() WHERE id = ?::uuid`,
