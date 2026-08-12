@@ -35,7 +35,8 @@ exports.processPayment = async (req, res) => {
             network: network || 'MTN',
             recipientPhone: recipientPhone,
             bundleSize: dataAmount || 'Unknown',
-            source: 'STOREFRONT'
+            source: 'CUSTOMER',
+            userId: req.user?.id || null
         });
 
         if (!validation.allowed) {

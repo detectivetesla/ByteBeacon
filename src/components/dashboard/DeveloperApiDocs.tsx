@@ -37,8 +37,7 @@ export default function DeveloperApiDocs() {
       "network": "MTN",
       "name": "MTN 1GB Data Bundle",
       "data_amount": "1GB",
-      "price": 5.00,
-      "validity": "Non-expiry"
+      "price": 4.50
     }
   ]
 }`
@@ -46,34 +45,94 @@ export default function DeveloperApiDocs() {
         {
             method: 'POST',
             path: '/api/v1/data/purchase',
-            description: 'Place a data bundle purchase order for a recipient phone number.',
+            description: 'Place a single data bundle purchase order. Returns 422 if MTN beneficiary is unverified.',
             requestBody: `{
-  "reference": "your_unique_txn_ref_99812",
+  "reference": "tx_unique_ref_99812",
   "network": "MTN",
-  "phone": "0551234567",
+  "phone": "0241234567",
   "plan_id": "e5c3b9d2-7a1b-4c3e-8f9d-0e1a2b3c4d5e"
 }`,
             response: `{
   "success": true,
   "transaction_id": "7f9c8d6e-5b4a-3f2e-1d0c-9b8a7f6e5d4c",
-  "status": "processing" // "processing" | "completed" | "pending_mtn_approval" | "failed"
+  "status": "processing" // "processing" | "completed" | "failed"
+}`
+        },
+        {
+            method: 'POST',
+            path: '/api/system/beneficiary-precheck',
+            description: 'Precheck MTN phone numbers before placing orders. Identifies whether recipient requires MTN approval.',
+            requestBody: `{
+  "network": "MTN",
+  "phoneNumbers": ["0594506310", "0241234567"],
+  "record": true
+}`,
+            response: `{
+  "success": true,
+  "results": [
+    {
+      "phone": "0594506310",
+      "valid": true,
+      "known": false,
+      "enforced": true,
+      "reason": "Number is valid format but requires MTN beneficiary approval."
+    }
+  ]
+}`
+        },
+        {
+            method: 'POST',
+            path: '/api/bulk-orders',
+            description: 'Ingest high-capacity bulk data order batches (up to 10,000 recipients per request). Returns HTTP 202 instantly.',
+            requestBody: `{
+  "network": "MTN",
+  "dataAmount": "1GB",
+  "bundleId": "e5c3b9d2-7a1b-4c3e-8f9d-0e1a2b3c4d5e",
+  "recipients": ["0241234567", "0551234567", "0594506310"],
+  "onUnvalidated": "set_aside"
+}`,
+            response: `{
+  "success": true,
+  "statusCode": 202,
+  "data": {
+    "submissionId": "8a7f6e5d-4c3b-2a1f-0e9d-8c7b6a5f4e3d",
+    "referenceCode": "BLK-1786543097132-5762",
+    "status": "queued",
+    "totalRecipients": 3
+  }
+}`
+        },
+        {
+            method: 'GET',
+            path: '/api/bulk-orders/:id',
+            description: 'Fetch real-time bulk batch processing status, completion count, and breakdown.',
+            response: `{
+  "success": true,
+  "data": {
+    "id": "8a7f6e5d-4c3b-2a1f-0e9d-8c7b6a5f4e3d",
+    "referenceCode": "BLK-1786543097132-5762",
+    "status": "processing",
+    "totalRecipients": 2000,
+    "completed": 1350,
+    "pendingMtn": 20,
+    "failed": 20,
+    "progressPercent": 70
+  }
 }`
         },
         {
             method: 'GET',
             path: '/api/v1/transactions/:id',
-            description: 'Fetch real-time transaction status by reference code or transaction UUID.',
+            description: 'Fetch real-time single transaction status by reference code or transaction UUID.',
             response: `{
   "success": true,
   "transaction": {
     "id": "7f9c8d6e-5b4a-3f2e-1d0c-9b8a7f6e5d4c",
-    "reference": "your_unique_txn_ref_99812",
+    "reference": "tx_unique_ref_99812",
     "status": "completed",
     "network": "MTN",
-    "recipient_phone": "233551234567",
-    "data_amount": "1GB",
-    "paid_amount": 5.00,
-    "provider_reference": "DH-992014",
+    "recipient_phone": "0241234567",
+    "amount": 4.50,
     "created_at": "2026-08-12T04:00:00Z"
   }
 }`
@@ -81,23 +140,11 @@ export default function DeveloperApiDocs() {
         {
             method: 'GET',
             path: '/api/v1/wallet',
-            description: 'Fetch your prepaid API/reseller wallet balance.',
+            description: 'Fetch your prepaid reseller wallet balance.',
             response: `{
   "success": true,
-  "balance": 450.75,
+  "balance": 1450.50,
   "currency": "GHS"
-}`
-        },
-        {
-            method: 'GET',
-            path: '/api/v1/credit',
-            description: 'Fetch credit overdraft limits and available credit.',
-            response: `{
-  "success": true,
-  "credit_limit": 1000.00,
-  "outstanding_balance": 250.00,
-  "available_credit": 750.00,
-  "billing_mode": "credit"
 }`
         }
     ];

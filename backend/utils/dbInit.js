@@ -625,6 +625,18 @@ const initializeTables = async () => {
                         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mtn_beneficiary_approvals' AND column_name = 'datahouse_sync_error') THEN
                             ALTER TABLE mtn_beneficiary_approvals ADD COLUMN datahouse_sync_error TEXT;
                         END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mtn_beneficiary_approvals' AND column_name = 'user_id') THEN
+                            ALTER TABLE mtn_beneficiary_approvals ADD COLUMN user_id UUID;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mtn_beneficiary_approvals' AND column_name = 'agent_id') THEN
+                            ALTER TABLE mtn_beneficiary_approvals ADD COLUMN agent_id UUID;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mtn_beneficiary_approvals' AND column_name = 'agent_store_id') THEN
+                            ALTER TABLE mtn_beneficiary_approvals ADD COLUMN agent_store_id UUID;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mtn_beneficiary_approvals' AND column_name = 'primary_source') THEN
+                            ALTER TABLE mtn_beneficiary_approvals ADD COLUMN primary_source VARCHAR(50) DEFAULT 'DASHBOARD';
+                        END IF;
                     END $$;
                 `);
             } catch (mErr) {
@@ -634,6 +646,9 @@ const initializeTables = async () => {
             await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approvals_msisdn ON mtn_beneficiary_approvals(msisdn)`).catch(() => {});
             await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approvals_status ON mtn_beneficiary_approvals(status)`).catch(() => {});
             await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approvals_dh_sync ON mtn_beneficiary_approvals(datahouse_sync_status)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approvals_user ON mtn_beneficiary_approvals(user_id)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approvals_agent ON mtn_beneficiary_approvals(agent_id)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approvals_store ON mtn_beneficiary_approvals(agent_store_id)`).catch(() => {});
 
             // Create mtn_beneficiary_approval_orders junction table
             await pool.execute(`
@@ -644,12 +659,38 @@ const initializeTables = async () => {
                     order_reference VARCHAR(100) NOT NULL,
                     bundle_size VARCHAR(20) NOT NULL,
                     source VARCHAR(50) NOT NULL,
+                    user_id UUID,
+                    agent_id UUID,
+                    agent_store_id UUID,
                     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
                 )
             `).catch(err => console.log('Info: mtn_beneficiary_approval_orders check:', err.message));
 
+            // Junction migration: Ensure ownership columns exist on junction table
+            try {
+                await pool.execute(`
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mtn_beneficiary_approval_orders' AND column_name = 'user_id') THEN
+                            ALTER TABLE mtn_beneficiary_approval_orders ADD COLUMN user_id UUID;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mtn_beneficiary_approval_orders' AND column_name = 'agent_id') THEN
+                            ALTER TABLE mtn_beneficiary_approval_orders ADD COLUMN agent_id UUID;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mtn_beneficiary_approval_orders' AND column_name = 'agent_store_id') THEN
+                            ALTER TABLE mtn_beneficiary_approval_orders ADD COLUMN agent_store_id UUID;
+                        END IF;
+                    END $$;
+                `);
+            } catch (jErr) {
+                console.log('Info: mtn_beneficiary_approval_orders migration check:', jErr.message);
+            }
+
             await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approval_orders_approval ON mtn_beneficiary_approval_orders(approval_id)`).catch(() => {});
             await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approval_orders_ref ON mtn_beneficiary_approval_orders(order_reference)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approval_orders_user ON mtn_beneficiary_approval_orders(user_id)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approval_orders_agent ON mtn_beneficiary_approval_orders(agent_id)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approval_orders_store ON mtn_beneficiary_approval_orders(agent_store_id)`).catch(() => {});
 
             // Seed default pricing rules if table empty
             const [rules] = await pool.execute('SELECT COUNT(*)::integer as count FROM agent_pricing_rules');

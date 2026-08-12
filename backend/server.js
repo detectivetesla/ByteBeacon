@@ -152,6 +152,7 @@ const { getUnreadNotificationsCount } = require('./controllers/user.controller')
 app.get('/api/notifications/unread-count', auth, getUnreadNotificationsCount);
 
 const agentStoreRoutes = require('./routes/agentStore.routes');
+const bulkOrderRoutes = require('./routes/bulkOrder.routes');
 
 app.use('/api/users', userRoutes);
 app.use('/api/bundles', bundleRoutes);
@@ -159,6 +160,8 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/agent-store', agentStoreRoutes);
+app.use('/api/bulk-orders', bulkOrderRoutes);
+app.use('/api/v1/orders/bulk', bulkOrderRoutes);
 app.use('/api/payment', paymentLimiter, paymentRoutes);
 app.use('/api/v1', partnerRoutes);
 
@@ -181,25 +184,21 @@ app.use((req, res) => {
 // Handle unhandled rejections
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    // In production, you might want to exit
 });
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error);
-    // In production, you might want to exit
 });
 
 // Database initialization
 const { initializeTables } = require('./utils/dbInit');
+const { initBulkTables } = require('./utils/bulkMigrations');
 
 // Background jobs
 const { startStatusSyncJob } = require('./jobs/statusSync');
+const { runBulkWatchdog, processNextBulkChunk } = require('./services/bulkOrder.service');
 
-// Start server
-// Start server optimization for Serverless/Vercel
-// Start server optimization for Serverless/Vercel
-// Only disable background jobs if explicitly on Vercel or in a serverless environment
 const isServerless = process.env.VERCEL || process.env.NOW_REGION || (process.env.NODE_ENV === 'production' && !process.env.BACKEND_URL);
 
 if (isServerless) {
@@ -210,8 +209,9 @@ if (isServerless) {
 
 const startServer = async () => {
     try {
-        // Initialize database tables (non-blocking in serverless if possible)
+        // Initialize database tables
         initializeTables().catch(err => console.error('Database Init Error:', err.message));
+        initBulkTables().catch(err => console.error('Bulk DB Init Error:', err.message));
 
         if (!isServerless) {
             server.listen(PORT, '0.0.0.0', () => {
@@ -221,6 +221,12 @@ const startServer = async () => {
 
                 // Start background status sync job only in persistent environments
                 startStatusSyncJob(io);
+
+                // Start periodic bulk watchdog & queue runner
+                setInterval(() => {
+                    runBulkWatchdog().catch(() => {});
+                    processNextBulkChunk().catch(() => {});
+                }, 60 * 1000);
             });
         }
     } catch (err) {

@@ -1129,7 +1129,9 @@ exports.initializeCustomerPurchase = async (req, res) => {
             network: prod.network,
             recipientPhone: customerPhone,
             bundleSize: prod.data_amount,
-            source: 'STOREFRONT'
+            source: 'AGENT_STORE',
+            agentId: store.user_id || null,
+            agentStoreId: store.id || null
         });
 
         if (!validation.allowed) {
@@ -1267,7 +1269,9 @@ exports.verifyCustomerPurchase = async (req, res) => {
                     network: meta.network,
                     recipientPhone: meta.customer_phone,
                     bundleSize: meta.data_amount || 'Unknown',
-                    source: 'Agent Storefront (Verify Safety Gate)'
+                    source: 'AGENT_STORE',
+                    agentId: meta.agent_id || null,
+                    agentStoreId: meta.store_id || null
                 });
                 if (!verifyValidation.allowed) {
                     console.log(`🛡️ [VERIFY SAFETY GATE] MTN number ${meta.customer_phone} is unverified at verify time. Blocking order creation.`);

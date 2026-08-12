@@ -25,7 +25,10 @@ const validateBeneficiaryBeforeOrder = async ({
     network,
     recipientPhone,
     bundleSize = 'Unknown',
-    source = 'Web App',
+    source = 'DASHBOARD',
+    userId = null,
+    agentId = null,
+    agentStoreId = null,
     orderReference = null
 }) => {
     if (!network || !recipientPhone) {
@@ -68,6 +71,9 @@ const validateBeneficiaryBeforeOrder = async ({
                 network: 'MTN',
                 bundleSize,
                 source,
+                userId,
+                agentId,
+                agentStoreId,
                 orderReference,
                 datahouseSyncStatus: 'pending',
                 datahouseSyncError: precheckRes.error || 'Precheck API call failed'
@@ -122,11 +128,14 @@ const validateBeneficiaryBeforeOrder = async ({
                 network: 'MTN',
                 bundleSize,
                 source,
+                userId,
+                agentId,
+                agentStoreId,
                 orderReference,
                 datahouseReference: precheckRes.datahouseReference || null,
                 datahouseStatus: 'pending',
-                datahouseSyncStatus: dhRecorded ? 'synced' : 'pending',
-                datahouseSyncError: precheckRes.error || null
+                datahouseSyncStatus: precheckRes.success ? 'synced' : 'pending',
+                datahouseSyncError: precheckRes.success ? null : (precheckRes.error || null)
             }).catch(recordErr => console.warn('⚠️ Record pending beneficiary warning:', recordErr.message));
 
             return {

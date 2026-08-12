@@ -80,7 +80,8 @@ const purchaseBundle = async (req, res) => {
             network: bundle.network,
             recipientPhone: recipientPhone,
             bundleSize: bundle.data_amount,
-            source: 'STOREFRONT'
+            source: 'CUSTOMER',
+            userId: req.user.id
         });
 
         if (!validation.allowed) {

@@ -16,6 +16,7 @@ import PartnerConsole from '@/components/dashboard/PartnerConsole';
 import DeveloperApiDocs from '@/components/dashboard/DeveloperApiDocs';
 import DeveloperApiKeyManagement from '@/components/dashboard/DeveloperApiKeyManagement';
 import AgentStoreUserContainer from '@/components/dashboard/agentStore/AgentStoreUserContainer';
+import PendingMtnApprovalsPage from '@/components/dashboard/PendingMtnApprovalsPage';
 
 // Route guard: only superagent and admin can access developer features
 function SuperAgentGuard({ children }: { children: React.ReactNode }) {
@@ -38,6 +39,7 @@ export default function Dashboard() {
         <Route path="/orders/:status" element={<OrdersPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/deposits" element={<DepositsPage />} />
+        <Route path="/pending-mtn" element={<PendingMtnApprovalsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/messages" element={<MessagesPage />} />

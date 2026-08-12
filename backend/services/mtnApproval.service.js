@@ -11,7 +11,10 @@ const recordPendingBeneficiary = async ({
     phone,
     network = 'MTN',
     bundleSize = 'Unknown',
-    source = 'Order',
+    source = 'DASHBOARD',
+    userId = null,
+    agentId = null,
+    agentStoreId = null,
     orderId = null,
     orderReference = null,
     datahouseReference = null,
@@ -30,7 +33,7 @@ const recordPendingBeneficiary = async ({
 
         // 1. Check if beneficiary already exists in mtn_beneficiary_approvals
         const [existing] = await connection.execute(
-            `SELECT id, occurrences, bundle_sizes, sources, datahouse_reference, datahouse_sync_status 
+            `SELECT id, occurrences, bundle_sizes, sources, datahouse_reference, datahouse_sync_status, user_id, agent_id, agent_store_id 
              FROM mtn_beneficiary_approvals WHERE msisdn = ?`,
             [normalizedPhone]
         );
@@ -64,11 +67,18 @@ const recordPendingBeneficiary = async ({
             const updatedDhRef = datahouseReference || existing[0].datahouse_reference || null;
             const updatedDhSyncStatus = datahouseReference ? 'synced' : (datahouseSyncStatus || existing[0].datahouse_sync_status || 'pending');
 
+            const updatedUserId = userId || existing[0].user_id || null;
+            const updatedAgentId = agentId || existing[0].agent_id || null;
+            const updatedStoreId = agentStoreId || existing[0].agent_store_id || null;
+
             await connection.execute(
                 `UPDATE mtn_beneficiary_approvals
                  SET occurrences = ?,
                      bundle_sizes = ?::jsonb,
                      sources = ?::jsonb,
+                     user_id = COALESCE(?, user_id),
+                     agent_id = COALESCE(?, agent_id),
+                     agent_store_id = COALESCE(?, agent_store_id),
                      datahouse_reference = COALESCE(?, datahouse_reference),
                      datahouse_status = COALESCE(?, datahouse_status),
                      datahouse_sync_status = ?,
@@ -80,6 +90,9 @@ const recordPendingBeneficiary = async ({
                     currentOccurrences,
                     JSON.stringify(currentBundleSizes),
                     JSON.stringify(currentSources),
+                    updatedUserId,
+                    updatedAgentId,
+                    updatedStoreId,
                     updatedDhRef,
                     datahouseStatus,
                     updatedDhSyncStatus,
@@ -91,10 +104,11 @@ const recordPendingBeneficiary = async ({
             approvalId = uuidv4();
             await connection.execute(
                 `INSERT INTO mtn_beneficiary_approvals
-                 (id, msisdn, display_phone, network, status, occurrences, bundle_sizes, sources, 
+                 (id, msisdn, display_phone, network, status, occurrences, bundle_sizes, sources, primary_source,
+                  user_id, agent_id, agent_store_id,
                   datahouse_reference, datahouse_status, datahouse_sync_status, datahouse_sync_error, datahouse_last_sync_at,
                   first_detected_at, last_detected_at)
-                 VALUES (?::uuid, ?, ?, ?, 'pending', 1, ?::jsonb, ?::jsonb, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+                 VALUES (?::uuid, ?, ?, ?, 'pending', 1, ?::jsonb, ?::jsonb, ?, ?::uuid, ?::uuid, ?::uuid, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
                 [
                     approvalId,
                     normalizedPhone,
@@ -102,6 +116,10 @@ const recordPendingBeneficiary = async ({
                     network.toUpperCase(),
                     JSON.stringify([bundleSize]),
                     JSON.stringify([source]),
+                    source,
+                    userId || null,
+                    agentId || null,
+                    agentStoreId || null,
                     datahouseReference || null,
                     datahouseStatus || 'pending',
                     calculatedSyncStatus,
@@ -113,20 +131,23 @@ const recordPendingBeneficiary = async ({
         // 2. Link this specific order instance in mtn_beneficiary_approval_orders
         await connection.execute(
             `INSERT INTO mtn_beneficiary_approval_orders
-             (id, approval_id, order_id, order_reference, bundle_size, source, created_at)
-             VALUES (?::uuid, ?::uuid, ?::uuid, ?, ?, ?, CURRENT_TIMESTAMP)`,
+             (id, approval_id, order_id, order_reference, bundle_size, source, user_id, agent_id, agent_store_id, created_at)
+             VALUES (?::uuid, ?::uuid, ?::uuid, ?, ?, ?, ?::uuid, ?::uuid, ?::uuid, CURRENT_TIMESTAMP)`,
             [
                 uuidv4(),
                 approvalId,
                 orderId || null,
                 orderReference || `REF-${Date.now()}`,
                 bundleSize,
-                source
+                source,
+                userId || null,
+                agentId || null,
+                agentStoreId || null
             ]
         );
 
         await connection.commit();
-        console.log(`📱 Recorded pending MTN approval for ${displayPhone} (${source}, ${bundleSize}) [DH Ref: ${datahouseReference || 'Pending Sync'}]`);
+        console.log(`📱 Recorded pending MTN approval for ${displayPhone} (Source: ${source}, Bundle: ${bundleSize}, User: ${userId || 'N/A'}, Agent: ${agentId || 'N/A'}, Store: ${agentStoreId || 'N/A'})`);
         return approvalId;
     } catch (error) {
         await connection.rollback().catch(() => {});
@@ -161,7 +182,7 @@ const syncBeneficiaryApprovals = async () => {
             for (const rec of unsyncedRecords) {
                 try {
                     const regRes = await precheckBeneficiary('MTN', [rec.display_phone], true);
-                    if (regRes.success && regRes.recorded) {
+                    if (regRes.success) {
                         await pool.execute(
                             `UPDATE mtn_beneficiary_approvals
                              SET datahouse_sync_status = 'synced',
@@ -174,7 +195,7 @@ const syncBeneficiaryApprovals = async () => {
                         );
                         totalRetried++;
                         console.log(`✅ [MTN Sync] Successfully registered ${rec.display_phone} on DataHouse during retry job.`);
-                    } else if (regRes.error) {
+                    } else {
                         await pool.execute(
                             `UPDATE mtn_beneficiary_approvals
                              SET datahouse_sync_status = 'failed',

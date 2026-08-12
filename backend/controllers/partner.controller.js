@@ -126,7 +126,9 @@ const purchaseData = async (req, res) => {
             network: bundle.network,
             recipientPhone: phoneField,
             bundleSize: bundle.data_amount,
-            source: 'API'
+            source: 'API',
+            userId: activePartner.user_id || null,
+            agentId: activePartner.is_agent ? activePartner.id : null
         });
 
         if (!validation.allowed) {

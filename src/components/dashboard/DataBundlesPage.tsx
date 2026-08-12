@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { bundleService, walletService, transactionService, paymentService } from '@/services';
@@ -32,6 +32,9 @@ import {
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { parseDataAmount, cn } from '@/lib/utils';
+import { submitBulkOrderApi } from '@/services/bulk.service';
+import { BatchProgressModal } from '@/components/dashboard/BatchProgressModal';
+import * as XLSX from 'xlsx';
 
 type Network = 'MTN' | 'TELECEL';
 
@@ -148,10 +151,209 @@ export default function DataBundlesPage() {
     const [singleForm, setSingleForm] = useState({ phone: '', bundleId: '', isRecurring: false });
     const [bulkRecipients, setBulkRecipients] = useState([{ id: '1', phone: '', bundleId: '' }]);
     const [excelFile, setExcelFile] = useState<File | null>(null);
+    const [batchSubmissionId, setBatchSubmissionId] = useState<string | null>(null);
+    const [showBatchProgress, setShowBatchProgress] = useState(false);
+    const [submittingBulk, setSubmittingBulk] = useState(false);
+    const [excelParsedData, setExcelParsedData] = useState<{ phone: string; dataAmount: string }[]>([]);
+    const [excelParseError, setExcelParseError] = useState<string | null>(null);
+    const [submittingExcel, setSubmittingExcel] = useState(false);
 
     const networkKey = networkParam?.toLowerCase() || 'mtn';
     const config = networkConfig[networkKey] || networkConfig.mtn;
     const networkName = config.name;
+
+    // ── Excel helpers ──
+
+    /** Generate and download an .xlsx template file */
+    const downloadTemplate = (type: 'simple' | 'full') => {
+        const wb = XLSX.utils.book_new();
+        if (type === 'simple') {
+            const ws = XLSX.utils.aoa_to_sheet([
+                ['Recipient', 'Volume'],
+                ['0241234567', '1GB'],
+                ['0551234567', '2GB'],
+            ]);
+            XLSX.utils.book_append_sheet(wb, ws, 'Recipients');
+        } else {
+            const ws = XLSX.utils.aoa_to_sheet([
+                ['Beneficiary Msisdn', 'Data (MB)'],
+                ['0241234567', '1000'],
+                ['0551234567', '2000'],
+            ]);
+            XLSX.utils.book_append_sheet(wb, ws, 'Recipients');
+        }
+        XLSX.writeFile(wb, `${networkName}_bulk_template_${type}.xlsx`);
+    };
+
+    /** Normalize a data amount string like "1GB", "1000", "1000MB" → "1GB" */
+    const normalizeDataAmount = (raw: string): string => {
+        const s = raw.trim().toUpperCase();
+        // Already in xGB format
+        if (/^\d+(\.\d+)?\s*GB$/i.test(s)) return s.replace(/\s+/g, '');
+        // MB format — convert to GB
+        const mbMatch = s.match(/^(\d+(\.\d+)?)\s*(MB)?$/i);
+        if (mbMatch) {
+            const mb = parseFloat(mbMatch[1]);
+            if (mb >= 1000) return `${(mb / 1000).toFixed(mb % 1000 === 0 ? 0 : 1)}GB`;
+            return `${mb}MB`;
+        }
+        return s; // return as-is, matching will be attempted later
+    };
+
+    /** Parse uploaded Excel/CSV file and extract phone + dataAmount rows */
+    const parseExcelFile = async (file: File) => {
+        setExcelParseError(null);
+        setExcelParsedData([]);
+
+        try {
+            const data = await file.arrayBuffer();
+            const wb = XLSX.read(data, { type: 'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+            if (rows.length < 2) {
+                setExcelParseError('File is empty or has no data rows (only a header).');
+                return;
+            }
+
+            // Detect header format
+            const header = (rows[0] || []).map((h: any) => String(h).trim().toLowerCase());
+            let phoneCol = -1;
+            let dataCol = -1;
+
+            // Try to find phone column
+            for (let i = 0; i < header.length; i++) {
+                if (['recipient', 'phone', 'msisdn', 'beneficiary msisdn', 'beneficiary', 'number', 'phone number'].includes(header[i])) {
+                    phoneCol = i;
+                    break;
+                }
+            }
+            // Try to find data column
+            for (let i = 0; i < header.length; i++) {
+                if (['volume', 'data', 'data (mb)', 'data_amount', 'bundle', 'size', 'data amount', 'dataamount'].includes(header[i])) {
+                    dataCol = i;
+                    break;
+                }
+            }
+
+            // Fallback: assume col 0 = phone, col 1 = data
+            if (phoneCol === -1) phoneCol = 0;
+            if (dataCol === -1 && rows[0].length > 1) dataCol = 1;
+
+            const parsed: { phone: string; dataAmount: string }[] = [];
+            const errors: string[] = [];
+
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                if (!row || row.length === 0) continue;
+
+                const rawPhone = String(row[phoneCol] || '').trim();
+                if (!rawPhone || rawPhone.length < 9) {
+                    if (rawPhone) errors.push(`Row ${i + 1}: Invalid phone "${rawPhone}"`);
+                    continue;
+                }
+
+                let dataAmount = '';
+                if (dataCol >= 0 && row[dataCol] != null) {
+                    dataAmount = normalizeDataAmount(String(row[dataCol]));
+                }
+
+                parsed.push({ phone: rawPhone, dataAmount });
+            }
+
+            if (parsed.length === 0) {
+                setExcelParseError(`No valid rows found. ${errors.length > 0 ? errors.slice(0, 3).join('; ') : 'Check your file format.'}`);
+                return;
+            }
+
+            setExcelParsedData(parsed);
+            if (errors.length > 0) {
+                toast({
+                    title: `⚠️ ${errors.length} rows skipped`,
+                    description: errors.slice(0, 2).join('; ') + (errors.length > 2 ? ` and ${errors.length - 2} more...` : ''),
+                });
+            }
+            toast({
+                title: '✅ File Parsed',
+                description: `${parsed.length} valid recipients found in ${file.name}`,
+            });
+        } catch (err: any) {
+            console.error('Excel parse error:', err);
+            setExcelParseError(err.message || 'Failed to parse file.');
+        }
+    };
+
+    /** Submit parsed Excel data via bulk API */
+    const submitExcelOrder = async () => {
+        if (excelParsedData.length === 0 || submittingExcel) return;
+        setSubmittingExcel(true);
+
+        try {
+            // Group by dataAmount
+            const groups: Record<string, string[]> = {};
+            let defaultDataAmount = '';
+
+            for (const row of excelParsedData) {
+                // If row has a data amount, use it. Otherwise use the first bundle's data_amount as default.
+                const da = row.dataAmount || defaultDataAmount || bundles[0]?.data_amount || '1GB';
+                if (!defaultDataAmount && !row.dataAmount && bundles.length > 0) {
+                    defaultDataAmount = bundles[0].data_amount;
+                }
+                if (!groups[da]) groups[da] = [];
+                groups[da].push(row.phone);
+            }
+
+            let totalQueued = 0;
+            let lastSubId = '';
+            const groupEntries = Object.entries(groups);
+
+            for (const [dataAmount, phones] of groupEntries) {
+                // Find matching bundle
+                const matchedBundle = bundles.find(b =>
+                    b.data_amount.toUpperCase() === dataAmount.toUpperCase()
+                );
+
+                const result = await submitBulkOrderApi({
+                    network: networkName,
+                    dataAmount: matchedBundle?.data_amount || dataAmount,
+                    bundleId: matchedBundle?.id,
+                    recipients: phones,
+                    source: 'Dashboard (Excel Upload)',
+                });
+
+                if (result.success) {
+                    totalQueued += result.data.totalRecipients;
+                    lastSubId = result.data.submissionId;
+                }
+            }
+
+            if (totalQueued > 0) {
+                toast({
+                    title: '✅ Excel Order Submitted',
+                    description: `${totalQueued} recipients queued across ${groupEntries.length} bundle group(s).`,
+                });
+                setBatchSubmissionId(lastSubId);
+                setShowBatchProgress(true);
+                setExcelFile(null);
+                setExcelParsedData([]);
+            } else {
+                toast({
+                    title: 'Submission Failed',
+                    description: 'Could not submit any orders from the Excel data.',
+                    variant: 'destructive',
+                });
+            }
+        } catch (err: any) {
+            console.error('Excel submission error:', err);
+            toast({
+                title: 'Error',
+                description: err.message || 'An unexpected error occurred.',
+                variant: 'destructive',
+            });
+        } finally {
+            setSubmittingExcel(false);
+        }
+    };
 
     const fetchBundles = useCallback(async () => {
         console.log('Fetching bundles for network:', networkName, 'networkKey:', networkKey);
@@ -788,21 +990,106 @@ export default function DataBundlesPage() {
                                                     "w-full h-14 text-lg font-bold text-white shadow-lg transition-all duration-300",
                                                     `gradient-${networkKey} hover:brightness-110 shadow-${networkKey}/20`
                                                 )}
-                                                disabled={bulkRecipients.some(r => !r.phone || !r.bundleId) || purchasing}
-                                                onClick={() => {
-                                                    const total = bulkRecipients.reduce((acc, r) => {
-                                                        const bundle = bundles.find(b => b.id === r.bundleId);
-                                                        return acc + (bundle ? getPrice(bundle) : 0);
-                                                    }, 0);
+                                                disabled={bulkRecipients.some(r => !r.phone || !r.bundleId) || submittingBulk}
+                                                onClick={async () => {
+                                                    if (submittingBulk) return;
+                                                    setSubmittingBulk(true);
 
-                                                    toast({
-                                                        title: 'Bulk Order Ready',
-                                                        description: `Total price for ${bulkRecipients.length} recipients: GH₵${total.toFixed(2)}. Processing...`,
-                                                    });
-                                                    // Real bulk logic will go here
+                                                    try {
+                                                        // Group recipients by their selected bundle
+                                                        const groupedByBundle: Record<string, { bundle: Bundle; phones: string[] }> = {};
+                                                        for (const r of bulkRecipients) {
+                                                            const bundle = bundles.find(b => b.id === r.bundleId);
+                                                            if (!bundle) continue;
+                                                            if (!groupedByBundle[r.bundleId]) {
+                                                                groupedByBundle[r.bundleId] = { bundle, phones: [] };
+                                                            }
+                                                            groupedByBundle[r.bundleId].phones.push(r.phone.trim());
+                                                        }
+
+                                                        const groups = Object.values(groupedByBundle);
+
+                                                        // If all recipients share the same bundle, submit as one batch
+                                                        if (groups.length === 1) {
+                                                            const { bundle, phones } = groups[0];
+                                                            const result = await submitBulkOrderApi({
+                                                                network: networkName,
+                                                                dataAmount: bundle.data_amount,
+                                                                bundleId: bundle.id,
+                                                                recipients: phones,
+                                                                source: 'Dashboard (Bulk)',
+                                                            });
+
+                                                            if (result.success) {
+                                                                toast({
+                                                                    title: '✅ Bulk Order Submitted',
+                                                                    description: `${result.data.totalRecipients} recipients queued. Reference: ${result.data.referenceCode}`,
+                                                                });
+                                                                setBatchSubmissionId(result.data.submissionId);
+                                                                setShowBatchProgress(true);
+                                                                setBulkRecipients([{ id: '1', phone: '', bundleId: '' }]);
+                                                            } else {
+                                                                toast({
+                                                                    title: 'Submission Failed',
+                                                                    description: result.message || 'Could not submit bulk order.',
+                                                                    variant: 'destructive',
+                                                                });
+                                                            }
+                                                        } else {
+                                                            // Multiple bundles selected — submit one batch per bundle group
+                                                            let totalQueued = 0;
+                                                            let lastRef = '';
+                                                            let lastSubId = '';
+                                                            for (const { bundle, phones } of groups) {
+                                                                const result = await submitBulkOrderApi({
+                                                                    network: networkName,
+                                                                    dataAmount: bundle.data_amount,
+                                                                    bundleId: bundle.id,
+                                                                    recipients: phones,
+                                                                    source: 'Dashboard (Bulk)',
+                                                                });
+                                                                if (result.success) {
+                                                                    totalQueued += result.data.totalRecipients;
+                                                                    lastRef = result.data.referenceCode;
+                                                                    lastSubId = result.data.submissionId;
+                                                                }
+                                                            }
+                                                            if (totalQueued > 0) {
+                                                                toast({
+                                                                    title: '✅ Bulk Orders Submitted',
+                                                                    description: `${totalQueued} recipients queued across ${groups.length} bundle groups.`,
+                                                                });
+                                                                setBatchSubmissionId(lastSubId);
+                                                                setShowBatchProgress(true);
+                                                                setBulkRecipients([{ id: '1', phone: '', bundleId: '' }]);
+                                                            } else {
+                                                                toast({
+                                                                    title: 'Submission Failed',
+                                                                    description: 'Could not submit any bulk orders.',
+                                                                    variant: 'destructive',
+                                                                });
+                                                            }
+                                                        }
+                                                    } catch (err: any) {
+                                                        console.error('Bulk order submission error:', err);
+                                                        toast({
+                                                            title: 'Error',
+                                                            description: err.message || 'An unexpected error occurred.',
+                                                            variant: 'destructive',
+                                                        });
+                                                    } finally {
+                                                        setSubmittingBulk(false);
+                                                    }
                                                 }}
                                             >
-                                                Place Bulk Order ({bulkRecipients.length} recipients)
+                                                {submittingBulk ? (
+                                                    <>
+                                                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                                        Submitting...
+                                                    </>
+                                                ) : (
+                                                    `Place Bulk Order (${bulkRecipients.length} recipients)`
+                                                )}
                                             </Button>
                                         </div>
                                     </CardContent>
@@ -821,11 +1108,11 @@ export default function DataBundlesPage() {
                                                 Excel Upload Order
                                             </CardTitle>
                                             <div className="flex gap-2">
-                                                <Button variant="outline" size="sm" className="gap-2 text-xs">
+                                                <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={() => downloadTemplate('simple')}>
                                                     <Download className="w-3.5 h-3.5" />
                                                     Simple Template
                                                 </Button>
-                                                <Button variant="outline" size="sm" className="gap-2 text-xs">
+                                                <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={() => downloadTemplate('full')}>
                                                     <Download className="w-3.5 h-3.5" />
                                                     Full Template
                                                 </Button>
@@ -842,7 +1129,10 @@ export default function DataBundlesPage() {
                                             onDrop={(e) => {
                                                 e.preventDefault();
                                                 const file = e.dataTransfer.files[0];
-                                                if (file) setExcelFile(file);
+                                                if (file) {
+                                                    setExcelFile(file);
+                                                    parseExcelFile(file);
+                                                }
                                             }}
                                             onClick={() => document.getElementById('excel-upload')?.click()}
                                         >
@@ -853,7 +1143,10 @@ export default function DataBundlesPage() {
                                                 accept=".xlsx,.xls,.csv"
                                                 onChange={(e) => {
                                                     const file = e.target.files?.[0];
-                                                    if (file) setExcelFile(file);
+                                                    if (file) {
+                                                        setExcelFile(file);
+                                                        parseExcelFile(file);
+                                                    }
                                                 }}
                                             />
                                             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4 text-primary">
@@ -863,11 +1156,15 @@ export default function DataBundlesPage() {
                                                 {excelFile ? excelFile.name : 'Upload Excel or CSV File'}
                                             </h3>
                                             <p className="text-muted-foreground mb-6">
-                                                Drag and drop your file here, or click to browse
+                                                {excelFile
+                                                    ? `${excelParsedData.length} valid recipients parsed`
+                                                    : 'Drag and drop your file here, or click to browse'}
                                             </p>
-                                            <Button className="font-semibold px-8" disabled={!excelFile}>
-                                                Choose File
-                                            </Button>
+                                            {!excelFile && (
+                                                <Button className="font-semibold px-8">
+                                                    Choose File
+                                                </Button>
+                                            )}
 
                                             <div className="mt-8 flex flex-wrap justify-center gap-4 text-xs">
                                                 <span className="text-muted-foreground uppercase tracking-wider font-bold">Supported formats:</span>
@@ -882,21 +1179,83 @@ export default function DataBundlesPage() {
                                             </div>
                                         </div>
 
-                                        {excelFile && (
-                                            <div className="mt-6">
+                                        {/* Parse Error */}
+                                        {excelParseError && (
+                                            <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm">
+                                                <strong>Parse Error:</strong> {excelParseError}
+                                            </div>
+                                        )}
+
+                                        {/* Parsed Data Preview */}
+                                        {excelParsedData.length > 0 && (
+                                            <div className="mt-6 space-y-4">
+                                                <div className="flex items-center justify-between">
+                                                    <h4 className="font-semibold text-sm">Preview ({excelParsedData.length} recipients)</h4>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="text-xs text-muted-foreground hover:text-destructive"
+                                                        onClick={() => {
+                                                            setExcelFile(null);
+                                                            setExcelParsedData([]);
+                                                            setExcelParseError(null);
+                                                        }}
+                                                    >
+                                                        <XCircle className="w-3.5 h-3.5 mr-1" /> Clear
+                                                    </Button>
+                                                </div>
+                                                <div className="max-h-60 overflow-y-auto rounded-xl border border-border/50">
+                                                    <table className="w-full text-sm">
+                                                        <thead className="bg-muted/50 sticky top-0">
+                                                            <tr>
+                                                                <th className="text-left px-4 py-2 font-semibold text-muted-foreground">#</th>
+                                                                <th className="text-left px-4 py-2 font-semibold text-muted-foreground">Phone</th>
+                                                                <th className="text-left px-4 py-2 font-semibold text-muted-foreground">Data Amount</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {excelParsedData.slice(0, 50).map((row, idx) => (
+                                                                <tr key={idx} className="border-t border-border/30">
+                                                                    <td className="px-4 py-2 text-muted-foreground font-mono text-xs">{idx + 1}</td>
+                                                                    <td className="px-4 py-2 font-medium">{row.phone}</td>
+                                                                    <td className="px-4 py-2">
+                                                                        {row.dataAmount ? (
+                                                                            <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-semibold">
+                                                                                {row.dataAmount}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-muted-foreground text-xs">Default ({bundles[0]?.data_amount || 'N/A'})</span>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                            {excelParsedData.length > 50 && (
+                                                                <tr className="border-t border-border/30">
+                                                                    <td colSpan={3} className="px-4 py-3 text-center text-muted-foreground text-sm">
+                                                                        ...and {excelParsedData.length - 50} more recipients
+                                                                    </td>
+                                                                </tr>
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+
                                                 <Button
                                                     className={cn(
                                                         "w-full h-14 text-lg font-bold text-white shadow-lg transition-all duration-300",
                                                         `gradient-${networkKey} hover:brightness-110 shadow-${networkKey}/20`
                                                     )}
-                                                    onClick={() => {
-                                                        toast({
-                                                            title: 'File Uploaded',
-                                                            description: `Processing data from ${excelFile.name}...`,
-                                                        });
-                                                    }}
+                                                    disabled={submittingExcel}
+                                                    onClick={submitExcelOrder}
                                                 >
-                                                    Process Excel Order
+                                                    {submittingExcel ? (
+                                                        <>
+                                                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                                            Submitting {excelParsedData.length} recipients...
+                                                        </>
+                                                    ) : (
+                                                        `Process Excel Order (${excelParsedData.length} recipients)`
+                                                    )}
                                                 </Button>
                                             </div>
                                         )}
@@ -1030,6 +1389,13 @@ export default function DataBundlesPage() {
                     )}
                 </DialogContent>
             </Dialog>
+
+            {/* Batch Progress Modal */}
+            <BatchProgressModal
+                submissionId={batchSubmissionId}
+                open={showBatchProgress}
+                onClose={() => setShowBatchProgress(false)}
+            />
         </div>
     );
 }

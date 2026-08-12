@@ -592,7 +592,7 @@ const precheckBeneficiary = async (network, phoneNumbers, record = false, apiKey
             datahouseReference: datahouseRef,
             data: dataPayload,
             raw: res.data || null,
-            error: res.data?.error?.message || res.data?.message || null
+            error: (res.ok && res.data?.success) ? null : (res.data?.error?.message || (res.data?.success === false ? res.data?.message : null) || null)
         };
     } catch (err) {
         console.error('❌ Datahouse precheckBeneficiary error:', err.message);

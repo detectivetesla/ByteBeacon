@@ -72,6 +72,7 @@ const getNavItems = (userRole: string | null | undefined, hasActiveStore?: boole
         },
         { icon: Receipt, label: 'Transactions', href: '/dashboard/transactions', variant: 'blue' },
         { icon: CreditCard, label: 'Deposits', href: '/dashboard/deposits', variant: 'indigo' },
+        { icon: Clock, label: 'Pending MTN', href: '/dashboard/pending-mtn', variant: 'amber' },
     ];
 
     // Add role-specific items: Developer features (API Docs & API Keys) are strictly for SuperAgent & Admin

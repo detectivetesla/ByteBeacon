@@ -27,6 +27,11 @@ const {
     updatePartnerSettings,
     getPartnerLogs
 } = require('../controllers/user.controller');
+const {
+    getMyMtnApprovals,
+    getMyPendingCount,
+    getMyApprovalOrders
+} = require('../controllers/userMtnApproval.controller');
 
 // All routes require authentication
 router.get('/profile', auth, getProfile);
@@ -63,5 +68,10 @@ router.delete('/notifications', auth, clearAllNotifications);
 router.get('/partner-profile', auth, getPartnerProfile);
 router.put('/partner-profile', auth, updatePartnerSettings);
 router.get('/partner-logs', auth, getPartnerLogs);
+
+// Pending MTN Approvals (role-based, all authenticated users)
+router.get('/mtn-approvals', auth, getMyMtnApprovals);
+router.get('/mtn-approvals/count', auth, getMyPendingCount);
+router.get('/mtn-approvals/:id/orders', auth, getMyApprovalOrders);
 
 module.exports = router;
