@@ -268,29 +268,30 @@ const { v4: uuidv4, validate: uuidValidate } = require('uuid');
         console.log('📥 Datahouse /agent/orders response status:', orderRes.status);
         console.log('📥 Datahouse order response:', JSON.stringify(orderRes.data, null, 2));
 
-        // 7. Determine final status
+        // 7. Determine final status using statusMapper
+        const { mapProviderStatusToInternal, INTERNAL_STATUS } = require('./statusMapper');
         const orderData = orderRes.data?.data;
-        const success = orderRes.data?.success || false;
-        
-        let finalStatus = 'processing';
-        if (!success) {
-            finalStatus = 'failed';
-        } else {
-            const portalStatus = String(orderData?.status ?? '').toLowerCase();
-            if (['completed', 'success', 'delivered', 'fulfilled', 'resolved', 'delivered_callback'].includes(portalStatus)) {
-                finalStatus = 'completed';
-            } else if (['failed', 'error', 'cancelled', 'rejected', 'failed_callback', 'refunded', 'could_not_deliver'].includes(portalStatus)) {
-                finalStatus = 'failed';
-            } else {
-                finalStatus = 'processing'; // received, processing
-            }
-        }
+        const errCode = orderRes.data?.error?.code || orderRes.data?.code || null;
+        const errMsg = orderRes.data?.error?.message || orderRes.data?.message || null;
+        const portalStatus = String(orderData?.status ?? '').toLowerCase();
+
+        const finalStatus = mapProviderStatusToInternal({
+            providerStatus: portalStatus,
+            statusCode: orderRes.status,
+            errorCode: errCode,
+            errorMessage: errMsg,
+            data: orderRes.data
+        });
+
+        const isSuccessState = finalStatus === INTERNAL_STATUS.COMPLETED || 
+                              finalStatus === INTERNAL_STATUS.PROCESSING || 
+                              finalStatus === INTERNAL_STATUS.PENDING_MTN_APPROVAL;
 
         const providerPublicId = orderData?.publicId || orderData?.id || null;
         const providerReferenceCode = orderData?.referenceCode || null;
 
         return {
-            success: success,
+            success: isSuccessState,
             status: finalStatus,
             apiResponse: orderRes.data,
             orderId: providerPublicId || transactionId,
@@ -300,10 +301,11 @@ const { v4: uuidv4, validate: uuidValidate } = require('uuid');
             orderReference: providerReferenceCode,
             volume,
             orderNetwork: datahouseNetwork,
-            message: orderRes.data?.message || (orderRes.data?.error?.message) || (
-                finalStatus === 'completed' ? 'Order successful' :
-                    finalStatus === 'processing' ? 'Order placed, awaiting delivery' :
-                        'Order failed'
+            message: errMsg || (
+                finalStatus === INTERNAL_STATUS.COMPLETED ? 'Order successful' :
+                finalStatus === INTERNAL_STATUS.PENDING_MTN_APPROVAL ? 'Awaiting MTN Approval — Number queued for validation.' :
+                finalStatus === INTERNAL_STATUS.PROCESSING ? 'Order placed and queued for processing.' :
+                'Order failed'
             )
         };
 

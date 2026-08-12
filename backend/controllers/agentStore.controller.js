@@ -1284,16 +1284,47 @@ exports.verifyCustomerPurchase = async (req, res) => {
             [order.id]
         );
 
-        // Place Data Bundle order with Provider via Sourcing router
-        const fulfillment = await placeDataOrder({
-            network: order.network,
-            dataAmount: order.data_amount,
-            recipientPhone: order.customer_phone,
-            transactionId: order.id,
-            providerSlug: order.provider_slug
-        });
+        // MTN Pre-check: Check if MTN recipient number is already validated before attempting data order
+        let isMtnUnverified = false;
+        if ((order.network || '').toUpperCase() === 'MTN') {
+            try {
+                const { precheckBeneficiary } = require('../utils/datahouse');
+                const precheckRes = await precheckBeneficiary('MTN', [order.customer_phone], true);
+                if (precheckRes.success && precheckRes.data && Array.isArray(precheckRes.data)) {
+                    const match = precheckRes.data.find(b => b.phoneNumber === order.customer_phone || b.phone === order.customer_phone);
+                    if (match && match.known === false) {
+                        isMtnUnverified = true;
+                    }
+                }
+            } catch (precheckErr) {
+                console.warn('⚠️ MTN Precheck soft error:', precheckErr.message);
+            }
+        }
 
-        const finalFulfillmentStatus = fulfillment.status;
+        let fulfillment = null;
+        let finalFulfillmentStatus = 'processing';
+
+        if (isMtnUnverified) {
+            console.log(`📱 MTN recipient ${order.customer_phone} requires MTN approval. Order ${order.id} set to pending_mtn_approval.`);
+            finalFulfillmentStatus = 'pending_mtn_approval';
+            fulfillment = {
+                status: 'pending_mtn_approval',
+                providerPublicId: null,
+                providerReferenceCode: null,
+                orderId: order.id,
+                apiResponse: { message: 'Awaiting MTN Approval — Number recorded for validation.' }
+            };
+        } else {
+            // Place Data Bundle order with Provider via Sourcing router
+            fulfillment = await placeDataOrder({
+                network: order.network,
+                dataAmount: order.data_amount,
+                recipientPhone: order.customer_phone,
+                transactionId: order.id,
+                providerSlug: order.provider_slug
+            });
+            finalFulfillmentStatus = fulfillment.status;
+        }
         const fulfillmentApiResponse = {
             paystack: verifyData,
             provider_fulfillment: fulfillment.apiResponse,
@@ -1338,11 +1369,29 @@ exports.verifyCustomerPurchase = async (req, res) => {
             );
 
             await connection.commit();
+        } else if (finalFulfillmentStatus === 'processing' || finalFulfillmentStatus === 'received') {
+            // Update order status as processing (preserve provider reference)
+            await connection.execute(
+                `UPDATE agent_orders 
+                 SET fulfillment_status = 'processing', api_response = ?, updated_at = NOW() 
+                 WHERE id = ?::uuid`,
+                [JSON.stringify(fulfillmentApiResponse), order.id]
+            );
+        } else if (finalFulfillmentStatus === 'pending_mtn_approval') {
+            // Update order status as pending MTN approval
+            await connection.execute(
+                `UPDATE agent_orders 
+                 SET fulfillment_status = 'pending_mtn_approval', api_response = ?, updated_at = NOW() 
+                 WHERE id = ?::uuid`,
+                [JSON.stringify(fulfillmentApiResponse), order.id]
+            );
         } else {
             // Update order status as failed
             await connection.execute(
-                `UPDATE agent_orders SET fulfillment_status = 'failed', updated_at = NOW() WHERE id = ?::uuid`,
-                [order.id]
+                `UPDATE agent_orders 
+                 SET fulfillment_status = 'failed', api_response = ?, updated_at = NOW() 
+                 WHERE id = ?::uuid`,
+                [JSON.stringify(fulfillmentApiResponse), order.id]
             );
         }
 
@@ -1351,7 +1400,11 @@ exports.verifyCustomerPurchase = async (req, res) => {
             status: finalFulfillmentStatus,
             message: finalFulfillmentStatus === 'completed'
                 ? `Data bundle delivered: ${order.network} ${order.data_amount} to ${order.customer_phone}`
-                : 'Data purchase processing or failed. Check status.',
+                : finalFulfillmentStatus === 'pending_mtn_approval'
+                ? `Awaiting MTN Approval — This recipient's MTN number requires approval before data can be delivered.`
+                : finalFulfillmentStatus === 'processing'
+                ? `Order placed and queued for delivery with provider.`
+                : 'Data purchase failed. Please check order details.',
             order_id: order.id
         });
     } catch (error) {

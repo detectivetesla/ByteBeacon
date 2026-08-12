@@ -105,8 +105,28 @@ const getDeliveryDuration = (created_at?: string, status?: string) => {
 const LiveTrackerLifecycle = ({ status, isDark }: { status: string; isDark: boolean }) => {
     const s = (status || '').toLowerCase();
     const isCompleted = s === 'completed' || s === 'delivered';
-    const isFailed = s === 'failed';
+    const isMtnPending = s === 'pending_mtn_approval' || s === 'awaiting_mtn_approval';
+    const isFailed = s === 'failed' || s === 'rejected';
     const isRefunded = s === 'refunded';
+
+    if (isMtnPending) {
+        return (
+            <div className="space-y-3 text-xs py-1">
+                <div className="flex items-center gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-emerald-500 text-black flex items-center justify-center text-[10px] font-black shrink-0">✓</span>
+                    <span className="font-semibold text-emerald-500">Order Recorded</span>
+                </div>
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1 text-amber-400">
+                    <p className="font-bold flex items-center gap-1.5 text-xs">
+                        ⚠️ Awaiting MTN Approval
+                    </p>
+                    <p className="text-[11px] leading-relaxed text-amber-300/90">
+                        This recipient's MTN number requires one-time approval from MTN before data can be delivered. No data order has failed — fulfillment will process automatically once approved.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-2.5 text-xs py-1">
