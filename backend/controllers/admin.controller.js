@@ -15,8 +15,8 @@ const createUser = async (req, res) => {
             return res.status(400).json({ error: 'All fields are required' });
         }
 
-        if (!['customer', 'agent', 'admin'].includes(role)) {
-            return res.status(400).json({ error: 'Invalid role' });
+        if (!['customer', 'agent', 'superagent', 'admin'].includes(role)) {
+            return res.status(400).json({ error: 'Invalid role. Must be one of: customer, agent, superagent, admin' });
         }
 
         // Check if email already exists
@@ -169,8 +169,8 @@ const changeUserRole = async (req, res) => {
         const { id } = req.params;
         const { role } = req.body;
 
-        if (!['customer', 'agent', 'admin'].includes(role)) {
-            return res.status(400).json({ error: 'Invalid role' });
+        if (!['customer', 'agent', 'superagent', 'admin'].includes(role)) {
+            return res.status(400).json({ error: 'Invalid role. Must be one of: customer, agent, superagent, admin' });
         }
 
         const [userRows] = await pool.execute('SELECT email, role FROM users WHERE uuid = ?::uuid', [id]);

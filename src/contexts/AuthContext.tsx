@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { authService, getToken, type User } from '@/services';
 
-type AppRole = 'admin' | 'customer' | 'agent';
+type AppRole = 'admin' | 'customer' | 'agent' | 'superagent';
 
 interface AuthContextType {
   user: User | null;
