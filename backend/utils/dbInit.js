@@ -13,13 +13,6 @@ const initializeTables = async () => {
         try {
             await pool.execute("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'superagent'");
             console.log("✅ Checked/Altered user_role type to include 'superagent'");
-            
-            // Automatically migrate any agent role users or agent store owners to superagent
-            await pool.execute("UPDATE users SET role = 'superagent'::user_role WHERE role = 'agent'::user_role").catch(() => {});
-            await pool.execute("UPDATE user_roles SET role = 'superagent'::user_role WHERE role = 'agent'::user_role").catch(() => {});
-            await pool.execute("UPDATE users SET role = 'superagent'::user_role WHERE uuid IN (SELECT user_id FROM agent_stores)").catch(() => {});
-            await pool.execute("UPDATE user_roles SET role = 'superagent'::user_role WHERE user_id IN (SELECT user_id FROM agent_stores)").catch(() => {});
-            console.log("✅ Migrated agents & store owners to 'superagent' role");
         } catch (e) {
             // Ignore if type doesn't exist or already has value
         }

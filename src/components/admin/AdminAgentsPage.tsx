@@ -31,7 +31,9 @@ import {
     Download,
     FileSpreadsheet,
     FileText,
-    FileCode
+    FileCode,
+    Code,
+    Store
 } from 'lucide-react';
 import { exportAgents } from '@/lib/export';
 import {
@@ -63,6 +65,21 @@ interface Agent {
     total_orders?: number;
     total_revenue?: number;
     wallet_balance?: number;
+    store?: {
+        id: string;
+        name: string;
+        slug: string;
+        activationStatus: string;
+        reviewStatus: string;
+        isVisible: boolean;
+    } | null;
+    apiAccess?: {
+        hasKey: boolean;
+        maskedKey: string | null;
+        isActive: boolean;
+        lastUsed: string | null;
+        createdAt: string | null;
+    } | null;
 }
 
 export default function AdminAgentsPage() {
@@ -224,6 +241,8 @@ export default function AdminAgentsPage() {
                 total_orders: 0,
                 total_revenue: 0,
                 wallet_balance: u.walletBalance || 0,
+                store: u.store || null,
+                apiAccess: u.apiAccess || null
             }));
 
             setAgents(allAgents);
@@ -706,6 +725,49 @@ export default function AdminAgentsPage() {
                                         <Phone className="w-4 h-4" />
                                         <span>{agent.phone}</span>
                                     </div>
+
+                                    {/* Tier Specific Metadata Box */}
+                                    {agent.role === 'superagent' && (
+                                        <div className="mt-3 p-2.5 bg-emerald-950/30 border border-emerald-500/20 rounded-xl space-y-1 text-xs">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-bold text-emerald-400 flex items-center gap-1">
+                                                    <Code className="w-3.5 h-3.5" /> Developer API Reseller
+                                                </span>
+                                                <span className={cn(
+                                                    "px-1.5 py-0.5 text-[10px] font-bold rounded-full",
+                                                    agent.apiAccess?.isActive ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-700 text-slate-400"
+                                                )}>
+                                                    {agent.apiAccess?.isActive ? "🟢 API Enabled" : "⚪ No Active Key"}
+                                                </span>
+                                            </div>
+                                            <p className="text-slate-300 font-mono text-[11px] truncate">
+                                                Key: {agent.apiAccess?.maskedKey || "No key generated"}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {agent.role === 'agent' && (
+                                        <div className="mt-3 p-2.5 bg-blue-950/30 border border-blue-500/20 rounded-xl space-y-1 text-xs">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-bold text-blue-400 flex items-center gap-1">
+                                                    <Store className="w-3.5 h-3.5" /> Storefront Reseller
+                                                </span>
+                                                <span className={cn(
+                                                    "px-1.5 py-0.5 text-[10px] font-bold rounded-full",
+                                                    agent.store?.reviewStatus === 'APPROVED' ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"
+                                                )}>
+                                                    {agent.store?.reviewStatus === 'APPROVED' ? "🟢 Store Active" : agent.store ? "🟡 Pending Review" : "⚪ No Store"}
+                                                </span>
+                                            </div>
+                                            {agent.store ? (
+                                                <p className="text-slate-300 text-[11px] truncate">
+                                                    Store: <span className="font-semibold text-white">{agent.store.name}</span> (/store/{agent.store.slug})
+                                                </p>
+                                            ) : (
+                                                <p className="text-slate-400 text-[11px]">No storefront created</p>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-slate-700">

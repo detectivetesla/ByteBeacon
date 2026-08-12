@@ -88,28 +88,30 @@ const getAllUsers = async (req, res) => {
 
         let query = `
             SELECT p.id, p.full_name, p.email, p.phone, p.wallet_balance, p.created_at,
-                   COALESCE(ur.role, 'customer') as role
+                   COALESCE(ur.role, 'customer') as role,
+                   s.id as store_id, s.store_name, s.slug as store_slug, s.activation_status as store_activation_status, s.review_status as store_review_status, s.is_visible as store_is_visible,
+                   k.id as api_key_id, k.api_key as raw_api_key, k.is_active as api_key_active, k.last_used as api_key_last_used, k.created_at as api_key_created_at
             FROM profiles p
             LEFT JOIN user_roles ur ON p.id = ur.user_id::uuid
+            LEFT JOIN agent_stores s ON p.id = s.user_id::uuid
+            LEFT JOIN user_api_keys k ON p.id = k.user_id::uuid AND k.is_active = TRUE
             WHERE 1=1
         `;
         const params = [];
 
         if (role && role !== 'all') {
             if (role === 'customer') {
-                // Customers are those without a role entry or explicitly have 'customer' role
                 query += " AND (ur.role IS NULL OR ur.role = 'customer')";
             } else {
-                // For agent and admin, look for explicit role
                 query += ' AND ur.role = ?';
                 params.push(role);
             }
         }
 
         if (search) {
-            query += ' AND (p.full_name LIKE ? OR p.email LIKE ? OR p.phone LIKE ?)';
+            query += ' AND (p.full_name LIKE ? OR p.email LIKE ? OR p.phone LIKE ? OR s.store_name LIKE ?)';
             const searchTerm = `%${search}%`;
-            params.push(searchTerm, searchTerm, searchTerm);
+            params.push(searchTerm, searchTerm, searchTerm, searchTerm);
         }
 
         query += ' ORDER BY p.created_at DESC LIMIT ? OFFSET ?';
@@ -117,16 +119,41 @@ const getAllUsers = async (req, res) => {
 
         const [users] = await pool.execute(query, params);
 
-        const formatted = users.map(u => ({
-            id: u.id,
-            fullName: u.full_name,
-            email: u.email,
-            phone: u.phone,
-            walletBalance: parseFloat(u.wallet_balance) || 0,
-            role: u.role,
-            isActive: u.is_active === undefined ? true : Boolean(u.is_active),
-            createdAt: u.created_at
-        }));
+        const formatted = users.map(u => {
+            let maskedKey = null;
+            if (u.raw_api_key) {
+                const keyStr = String(u.raw_api_key);
+                const prefix = keyStr.slice(0, 7);
+                const suffix = keyStr.slice(-4);
+                maskedKey = `${prefix}************${suffix}`;
+            }
+
+            return {
+                id: u.id,
+                fullName: u.full_name,
+                email: u.email,
+                phone: u.phone,
+                walletBalance: parseFloat(u.wallet_balance) || 0,
+                role: u.role,
+                isActive: u.is_active === undefined ? true : Boolean(u.is_active),
+                createdAt: u.created_at,
+                store: u.store_id ? {
+                    id: u.store_id,
+                    name: u.store_name,
+                    slug: u.store_slug,
+                    activationStatus: u.store_activation_status,
+                    reviewStatus: u.store_review_status,
+                    isVisible: u.store_is_visible
+                } : null,
+                apiAccess: u.api_key_id ? {
+                    hasKey: true,
+                    maskedKey,
+                    isActive: Boolean(u.api_key_active),
+                    lastUsed: u.api_key_last_used,
+                    createdAt: u.api_key_created_at
+                } : null
+            };
+        });
 
         res.json(formatted);
 
@@ -2614,8 +2641,8 @@ const manualActivateAgentStore = async (req, res) => {
         const [stores] = await pool.execute('SELECT user_id, store_name FROM agent_stores WHERE id = ?::uuid', [id]);
         if (stores.length > 0) {
             const userId = stores[0].user_id;
-            await pool.execute(`UPDATE users SET role = 'superagent'::user_role WHERE uuid = ?::uuid`, [userId]).catch(() => {});
-            await pool.execute(`UPDATE user_roles SET role = 'superagent'::user_role WHERE user_id = ?::uuid`, [userId]).catch(() => {});
+            await pool.execute(`UPDATE users SET role = 'agent'::user_role WHERE uuid = ?::uuid`, [userId]).catch(() => {});
+            await pool.execute(`UPDATE user_roles SET role = 'agent'::user_role WHERE user_id = ?::uuid`, [userId]).catch(() => {});
 
             // Send notification
             await pool.execute(
