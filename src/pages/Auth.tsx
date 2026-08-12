@@ -117,6 +117,17 @@ export default function Auth() {
 
     if (isAgentFlow) {
       // AGENT STORE AUTHENTICATION ENTRY POINT
+      // Gate: Only agent, superagent, or admin roles may enter the Agent Store Portal
+      if (role !== 'agent' && role !== 'superagent' && role !== 'admin') {
+        toast({
+          title: 'Agent Access Denied',
+          description: 'Your account is not an approved Agent or SuperAgent. Apply for agency first, then wait for admin approval.',
+          variant: 'destructive',
+        });
+        navigate('/dashboard');
+        return;
+      }
+
       try {
         const storeRes = await agentStoreService.getMyStore();
         if (storeRes.success && storeRes.hasStore && storeRes.store) {
