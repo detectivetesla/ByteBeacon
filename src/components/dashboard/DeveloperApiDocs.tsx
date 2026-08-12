@@ -152,8 +152,7 @@ $payload = json_encode([
     "network" => "MTN",
     "phone" => "0551234567",
     "plan_id" => "e5c3b9d2-7a1b-4c3e-8f9d-0e1a2b3c4d5e"
-]);`
-
+]);
 
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_POST, true);
