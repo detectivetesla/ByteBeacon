@@ -1146,6 +1146,11 @@ exports.initializeCustomerPurchase = async (req, res) => {
         const storefrontBase = (process.env.STOREFRONT_URL || 'https://apisolutions.store').replace(/\/$/, '');
         const resolvedCallback = callbackUrl || `${storefrontBase}/store/${slug}?reference=${reference}`;
 
+        const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY;
+        if (!paystackSecretKey) {
+            return res.status(500).json({ success: false, error: 'Payment service secret key not configured' });
+        }
+
         // Initialize Paystack payment
         const paystackResponse = await fetch(`${PAYSTACK_BASE_URL}/transaction/initialize`, {
             method: 'POST',
@@ -1190,7 +1195,7 @@ exports.initializeCustomerPurchase = async (req, res) => {
         });
     } catch (error) {
         console.error('Error initializing customer purchase:', error);
-        res.status(500).json({ success: false, error: 'Customer purchase initialization failed' });
+        res.status(500).json({ success: false, error: error.message || 'Customer purchase initialization failed' });
     } finally {
         if (connection) connection.release();
     }
