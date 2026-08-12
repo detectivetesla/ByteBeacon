@@ -1129,7 +1129,7 @@ exports.initializeCustomerPurchase = async (req, res) => {
             network: prod.network,
             recipientPhone: customerPhone,
             bundleSize: prod.data_amount,
-            source: 'Agent Storefront'
+            source: 'STOREFRONT'
         });
 
         if (!validation.allowed) {
@@ -1137,13 +1137,17 @@ exports.initializeCustomerPurchase = async (req, res) => {
             if (validation.status === 'pending_mtn_approval') {
                 return res.status(422).json({
                     success: false,
+                    error: {
+                        code: 'BENEFICIARY_NOT_VALIDATED',
+                        message: 'This MTN number has not yet been approved by MTN. It has been submitted for MTN approval. You will be able to place the order once the number is approved.'
+                    },
                     code: 'BENEFICIARY_NOT_VALIDATED',
                     status: 'pending_mtn_approval',
-                    message: validation.message || 'This MTN number has not yet been approved for data delivery.',
+                    message: 'This MTN number has not yet been approved by MTN. It has been submitted for MTN approval. You will be able to place the order once the number is approved.',
                     data: {
                         phoneNumber: customerPhone,
                         network: prod.network,
-                        status: 'pending_approval',
+                        status: 'pending',
                         pendingApproval: true
                     }
                 });

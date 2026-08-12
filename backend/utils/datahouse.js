@@ -557,41 +557,41 @@ const extractProviderId = (apiResponse, fallbackId, targetPhone) => {
  * Precheck beneficiary numbers against MTN validation list
  * Endpoint: POST /agent/beneficiaries/precheck
  */
-const precheckBeneficiary = async (network, phoneNumbers, record = false, apiKey = null, baseUrl = null, source = null, bundleSize = null) => {
+const precheckBeneficiary = async (network, phoneNumbers, record = false, apiKey = null, baseUrl = null) => {
     const datahouseApiKey = await resolveDatahouseApiKey(apiKey);
     if (!datahouseApiKey) {
         return { success: false, error: 'DATAHOUSE_API_KEY not configured' };
     }
 
     try {
+        // DataHouse API schema strictly allows ONLY network, phoneNumbers, and record
         const payload = {
             network: network.toUpperCase(),
             phoneNumbers: Array.isArray(phoneNumbers) ? phoneNumbers : [phoneNumbers],
             record: Boolean(record)
         };
 
-        if (source) {
-            payload.source = source;
-            payload.channel = source;
-        }
-        if (bundleSize) {
-            payload.bundleSize = bundleSize;
-            payload.bundle_size = bundleSize;
-        }
-
         const res = await makeDatahouseRequest('POST', '/agent/beneficiaries/precheck', datahouseApiKey, payload, baseUrl);
         const dataPayload = res.data?.data || null;
         const results = dataPayload?.results || (Array.isArray(dataPayload) ? dataPayload : []);
+        const recorded = Boolean(dataPayload?.recorded ?? res.data?.recorded);
+
+        console.log(`📋 [Datahouse Precheck] Endpoint: /agent/beneficiaries/precheck | Status: ${res.status} | Recorded: ${recorded}`);
+
+        // Extract any reference or correlation identifier returned by Datahouse
+        const datahouseRef = dataPayload?.id || dataPayload?.reference || res.data?.meta?.correlationId || null;
 
         return {
             success: Boolean(res.ok && res.data?.success),
             results: results,
+            recorded: recorded,
+            datahouseReference: datahouseRef,
             data: dataPayload,
             raw: res.data || null,
             error: res.data?.error?.message || res.data?.message || null
         };
     } catch (err) {
-        console.error('❌ Datahouse precheckBeneficiary error:', err);
+        console.error('❌ Datahouse precheckBeneficiary error:', err.message);
         return { success: false, error: err.message, results: [] };
     }
 };

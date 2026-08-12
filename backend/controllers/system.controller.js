@@ -652,9 +652,10 @@ const beneficiaryPrecheck = async (req, res) => {
         const phonesArr = Array.isArray(phoneNumbers) ? phoneNumbers : [phoneNumbers];
         const netUpper = network.toUpperCase().trim();
         
+        const precheckRecord = Boolean(record);
         let result;
-        if (netUpper === 'MTN' || record) {
-            result = await precheckBeneficiary(network, phonesArr, true, null, null, source, bundleSize);
+        if (netUpper === 'MTN') {
+            result = await precheckBeneficiary(network, phonesArr, precheckRecord);
         } else {
             result = await precheckPublicBeneficiary(network, phonesArr);
         }
@@ -663,8 +664,8 @@ const beneficiaryPrecheck = async (req, res) => {
             return res.status(400).json({ success: false, error: result.error || 'Beneficiary precheck failed' });
         }
 
-        // If network is MTN, record any unverified numbers into ByteBeacon Pending MTN Approvals as well
-        if (netUpper === 'MTN') {
+        // If network is MTN and record=true, record any unverified numbers into ByteBeacon Pending MTN Approvals
+        if (netUpper === 'MTN' && precheckRecord) {
             const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
             const results = result.results || [];
             for (const item of results) {
@@ -674,7 +675,11 @@ const beneficiaryPrecheck = async (req, res) => {
                         phone,
                         network: 'MTN',
                         bundleSize,
-                        source
+                        source: source || 'Precheck',
+                        datahouseReference: result.datahouseReference || null,
+                        datahouseStatus: 'pending',
+                        datahouseSyncStatus: result.recorded ? 'synced' : 'pending',
+                        datahouseSyncError: result.error || null
                     }).catch(err => console.warn('⚠️ Precheck recordPendingBeneficiary warning:', err.message));
                 }
             }

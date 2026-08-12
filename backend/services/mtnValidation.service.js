@@ -56,11 +56,23 @@ const validateBeneficiaryBeforeOrder = async ({
     // 3. Perform DataHouse precheck with opt-in record=true
     try {
         console.log(`🔍 [MTN PRECHECK GATE] Checking MTN recipient ${recipientPhone} (normalized: ${normalizedPhone}) for ${source}...`);
-        const precheckRes = await precheckBeneficiary('MTN', [recipientPhone], true, null, null, source, bundleSize);
+        const precheckRes = await precheckBeneficiary('MTN', [recipientPhone], true);
 
         // Fail-closed if API response is not successful
         if (!precheckRes.success) {
             console.warn(`⚠️ [MTN PRECHECK GATE] DataHouse API check failed for ${recipientPhone}: ${precheckRes.error}. FAILING CLOSED.`);
+            
+            // Still attempt to save pending locally with sync_status = 'pending' so background sync can retry
+            await recordPendingBeneficiary({
+                phone: recipientPhone,
+                network: 'MTN',
+                bundleSize,
+                source,
+                orderReference,
+                datahouseSyncStatus: 'pending',
+                datahouseSyncError: precheckRes.error || 'Precheck API call failed'
+            }).catch(() => {});
+
             return {
                 allowed: false,
                 status: 'precheck_unavailable',
@@ -103,13 +115,18 @@ const validateBeneficiaryBeforeOrder = async ({
         if (match.known === false) {
             console.log(`📱 [MTN PRECHECK GATE] Recipient ${recipientPhone} is UNVERIFIED (known: false). Blocking normal order flow & recording in Pending MTN Approvals.`);
 
-            // Record / Update in mtn_beneficiary_approvals with deduplication
+            // Record / Update in mtn_beneficiary_approvals with deduplication and DataHouse sync status
+            const dhRecorded = Boolean(precheckRes.recorded);
             await recordPendingBeneficiary({
                 phone: recipientPhone,
                 network: 'MTN',
                 bundleSize,
                 source,
-                orderReference
+                orderReference,
+                datahouseReference: precheckRes.datahouseReference || null,
+                datahouseStatus: 'pending',
+                datahouseSyncStatus: dhRecorded ? 'synced' : 'pending',
+                datahouseSyncError: precheckRes.error || null
             }).catch(recordErr => console.warn('⚠️ Record pending beneficiary warning:', recordErr.message));
 
             return {

@@ -136,12 +136,16 @@ const purchaseData = async (req, res) => {
             if (validation.status === 'pending_mtn_approval') {
                 return res.status(422).json({
                     success: false,
+                    error: {
+                        code: 'BENEFICIARY_NOT_VALIDATED',
+                        message: 'This MTN number has not yet been approved by MTN. It has been submitted for MTN approval. You will be able to place the order once the number is approved.'
+                    },
                     code: 'BENEFICIARY_NOT_VALIDATED',
-                    message: 'This MTN number has not yet been approved for data delivery.',
+                    message: 'This MTN number has not yet been approved by MTN. It has been submitted for MTN approval. You will be able to place the order once the number is approved.',
                     data: {
                         phoneNumber: phoneField,
                         network: bundle.network,
-                        status: 'pending_approval',
+                        status: 'pending',
                         pendingApproval: true
                     }
                 });

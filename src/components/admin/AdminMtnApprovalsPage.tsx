@@ -18,6 +18,11 @@ interface MtnApproval {
     occurrences: number;
     bundleSizes: string[];
     sources: string[];
+    datahouseReference?: string | null;
+    datahouseStatus?: string;
+    datahouseSyncStatus?: 'synced' | 'pending' | 'failed' | 'syncing';
+    datahouseLastSyncAt?: string | null;
+    datahouseSyncError?: string | null;
     firstDetectedAt: string;
     lastDetectedAt: string;
     submittedAt?: string;
@@ -324,6 +329,8 @@ export const AdminMtnApprovalsPage: React.FC = () => {
                                         <th className="p-4">Bundle Size</th>
                                         <th className="p-4">Source(s)</th>
                                         <th className="p-4 text-center">Occurrences</th>
+                                        <th className="p-4">DataHouse Ref</th>
+                                        <th className="p-4">DH Sync</th>
                                         <th className="p-4">First Detected</th>
                                         <th className="p-4">Last Detected</th>
                                         <th className="p-4">Status</th>
@@ -353,6 +360,22 @@ export const AdminMtnApprovalsPage: React.FC = () => {
                                                 </div>
                                             </td>
                                             <td className="p-4 text-center font-bold text-amber-400">{b.occurrences}</td>
+                                            <td className="p-4 font-mono text-[11px] text-muted-foreground">
+                                                {b.datahouseReference ? (
+                                                    <span className="text-emerald-400 font-medium">{b.datahouseReference}</span>
+                                                ) : (
+                                                    <span className="text-muted-foreground/60">—</span>
+                                                )}
+                                            </td>
+                                            <td className="p-4">
+                                                {b.datahouseSyncStatus === 'synced' ? (
+                                                    <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-semibold text-[10px] border border-emerald-500/20">Synced</span>
+                                                ) : b.datahouseSyncStatus === 'failed' ? (
+                                                    <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 font-semibold text-[10px] border border-rose-500/20" title={b.datahouseSyncError || ''}>Failed</span>
+                                                ) : (
+                                                    <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-semibold text-[10px] border border-amber-500/20">Pending</span>
+                                                )}
+                                            </td>
                                             <td className="p-4 text-muted-foreground">{formatDate(b.firstDetectedAt)}</td>
                                             <td className="p-4 text-muted-foreground">{formatDate(b.lastDetectedAt)}</td>
                                             <td className="p-4">{getStatusBadge(b.status)}</td>

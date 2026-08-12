@@ -591,6 +591,11 @@ const initializeTables = async () => {
                     occurrences INT NOT NULL DEFAULT 1,
                     bundle_sizes JSONB DEFAULT '[]'::jsonb,
                     sources JSONB DEFAULT '[]'::jsonb,
+                    datahouse_reference VARCHAR(255),
+                    datahouse_status VARCHAR(50),
+                    datahouse_sync_status VARCHAR(20) DEFAULT 'pending',
+                    datahouse_last_sync_at TIMESTAMPTZ,
+                    datahouse_sync_error TEXT,
                     first_detected_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                     last_detected_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                     submitted_at TIMESTAMPTZ,
@@ -600,8 +605,35 @@ const initializeTables = async () => {
                 )
             `).catch(err => console.log('Info: mtn_beneficiary_approvals check:', err.message));
 
+            // Migration: Ensure Datahouse sync tracking columns exist
+            try {
+                await pool.execute(`
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mtn_beneficiary_approvals' AND column_name = 'datahouse_reference') THEN
+                            ALTER TABLE mtn_beneficiary_approvals ADD COLUMN datahouse_reference VARCHAR(255);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mtn_beneficiary_approvals' AND column_name = 'datahouse_status') THEN
+                            ALTER TABLE mtn_beneficiary_approvals ADD COLUMN datahouse_status VARCHAR(50);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mtn_beneficiary_approvals' AND column_name = 'datahouse_sync_status') THEN
+                            ALTER TABLE mtn_beneficiary_approvals ADD COLUMN datahouse_sync_status VARCHAR(20) DEFAULT 'pending';
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mtn_beneficiary_approvals' AND column_name = 'datahouse_last_sync_at') THEN
+                            ALTER TABLE mtn_beneficiary_approvals ADD COLUMN datahouse_last_sync_at TIMESTAMPTZ;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mtn_beneficiary_approvals' AND column_name = 'datahouse_sync_error') THEN
+                            ALTER TABLE mtn_beneficiary_approvals ADD COLUMN datahouse_sync_error TEXT;
+                        END IF;
+                    END $$;
+                `);
+            } catch (mErr) {
+                console.log('Info: mtn_beneficiary_approvals migration check:', mErr.message);
+            }
+
             await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approvals_msisdn ON mtn_beneficiary_approvals(msisdn)`).catch(() => {});
             await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approvals_status ON mtn_beneficiary_approvals(status)`).catch(() => {});
+            await pool.execute(`CREATE INDEX IF NOT EXISTS idx_mtn_approvals_dh_sync ON mtn_beneficiary_approvals(datahouse_sync_status)`).catch(() => {});
 
             // Create mtn_beneficiary_approval_orders junction table
             await pool.execute(`

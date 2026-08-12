@@ -11,6 +11,7 @@ exports.getMtnApprovals = async (req, res) => {
 
         let query = `
             SELECT id, msisdn, display_phone, network, status, occurrences, bundle_sizes, sources,
+                   datahouse_reference, datahouse_status, datahouse_sync_status, datahouse_last_sync_at, datahouse_sync_error,
                    first_detected_at, last_detected_at, submitted_at, approved_at, rejected_at, resolved_at
             FROM mtn_beneficiary_approvals
             WHERE 1=1
@@ -45,9 +46,9 @@ exports.getMtnApprovals = async (req, res) => {
         // Search Filter (Number or normalized MSISDN)
         if (search && search.trim() !== '') {
             const normSearch = normalizeGhanaPhone(search.trim());
-            query += ' AND (msisdn LIKE ? OR display_phone LIKE ? OR msisdn LIKE ?)';
+            query += ' AND (msisdn LIKE ? OR display_phone LIKE ? OR msisdn LIKE ? OR datahouse_reference LIKE ?)';
             const term = `%${search.trim()}%`;
-            params.push(term, term, `%${normSearch}%`);
+            params.push(term, term, `%${normSearch}%`, term);
         }
 
         query += ' ORDER BY last_detected_at DESC LIMIT ? OFFSET ?';
@@ -72,6 +73,11 @@ exports.getMtnApprovals = async (req, res) => {
                 occurrences: r.occurrences,
                 bundleSizes,
                 sources,
+                datahouseReference: r.datahouse_reference || null,
+                datahouseStatus: r.datahouse_status || r.status || 'pending',
+                datahouseSyncStatus: r.datahouse_sync_status || (r.datahouse_reference ? 'synced' : 'pending'),
+                datahouseLastSyncAt: r.datahouse_last_sync_at || null,
+                datahouseSyncError: r.datahouse_sync_error || null,
                 firstDetectedAt: r.first_detected_at,
                 lastDetectedAt: r.last_detected_at,
                 submittedAt: r.submitted_at,
@@ -135,8 +141,9 @@ exports.syncMtnApprovals = async (req, res) => {
         const result = await syncBeneficiaryApprovals();
         res.json({
             success: true,
-            message: `Sync completed. ${result.updated} beneficiary records updated.`,
-            updated: result.updated
+            message: `Sync completed. ${result.updated || 0} updated, ${result.retried || 0} re-registered.`,
+            updated: result.updated || 0,
+            retried: result.retried || 0
         });
     } catch (error) {
         console.error('Error syncing MTN approvals:', error);
@@ -152,7 +159,7 @@ exports.exportMtnApprovals = async (req, res) => {
         const { status = 'pending', timeframe = 'all', search = '' } = req.query;
 
         let query = `
-            SELECT display_phone, msisdn, bundle_sizes, sources, occurrences, status, first_detected_at, last_detected_at
+            SELECT display_phone, msisdn, bundle_sizes, sources, occurrences, status, datahouse_reference, datahouse_sync_status, datahouse_last_sync_at, datahouse_sync_error, first_detected_at, last_detected_at
             FROM mtn_beneficiary_approvals
             WHERE 1=1
         `;
@@ -181,9 +188,9 @@ exports.exportMtnApprovals = async (req, res) => {
 
         if (search && search.trim() !== '') {
             const normSearch = normalizeGhanaPhone(search.trim());
-            query += ' AND (msisdn LIKE ? OR display_phone LIKE ? OR msisdn LIKE ?)';
+            query += ' AND (msisdn LIKE ? OR display_phone LIKE ? OR msisdn LIKE ? OR datahouse_reference LIKE ?)';
             const term = `%${search.trim()}%`;
-            params.push(term, term, `%${normSearch}%`);
+            params.push(term, term, `%${normSearch}%`, term);
         }
 
         query += ' ORDER BY last_detected_at DESC';
@@ -191,7 +198,7 @@ exports.exportMtnApprovals = async (req, res) => {
         const [rows] = await pool.execute(query, params);
 
         // Generate CSV content
-        let csv = 'Phone Number,MSISDN,Bundle Sizes,Sources,Occurrences,Status,First Detected,Last Detected\n';
+        let csv = 'Phone Number,MSISDN,Bundle Sizes,Sources,Occurrences,Status,DataHouse Ref,DH Sync Status,Last Sync,Sync Error,First Detected,Last Detected\n';
         rows.forEach(r => {
             let bSizes = '';
             try { bSizes = (typeof r.bundle_sizes === 'string' ? JSON.parse(r.bundle_sizes) : r.bundle_sizes).join('; '); } catch (e) {}
@@ -199,7 +206,7 @@ exports.exportMtnApprovals = async (req, res) => {
             let src = '';
             try { src = (typeof r.sources === 'string' ? JSON.parse(r.sources) : r.sources).join('; '); } catch (e) {}
 
-            csv += `"${r.display_phone}","${r.msisdn}","${bSizes}","${src}",${r.occurrences},"${r.status}","${r.first_detected_at}","${r.last_detected_at}"\n`;
+            csv += `"${r.display_phone}","${r.msisdn}","${bSizes}","${src}",${r.occurrences},"${r.status}","${r.datahouse_reference || ''}","${r.datahouse_sync_status || ''}","${r.datahouse_last_sync_at || ''}","${r.datahouse_sync_error || ''}","${r.first_detected_at}","${r.last_detected_at}"\n`;
         });
 
         res.setHeader('Content-Type', 'text/csv');
