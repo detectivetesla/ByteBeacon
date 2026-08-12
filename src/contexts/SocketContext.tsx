@@ -1,3 +1,6 @@
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { useAuth } from './AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { io as socketIO, Socket } from 'socket.io-client';
 
 export interface SocketInterface {
