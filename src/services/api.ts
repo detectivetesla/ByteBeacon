@@ -21,7 +21,7 @@ const removeToken = (): void => {
 };
 
 // Base fetch wrapper with auth
-const apiFetch = async <T>(
+export const apiFetch = async <T>(
     endpoint: string,
     options: RequestInit = {}
 ): Promise<T> => {

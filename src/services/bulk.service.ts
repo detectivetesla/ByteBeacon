@@ -1,4 +1,4 @@
-import { apiFetch } from './api';
+import { api } from './api';
 
 export interface BulkSubmissionResponse {
     success: boolean;
@@ -78,18 +78,14 @@ export async function submitBulkOrderApi(payload: {
     idempotencyKey?: string;
     source?: string;
 }): Promise<BulkSubmissionResponse> {
-    return apiFetch('/api/bulk-orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
+    return api.post<BulkSubmissionResponse>('/bulk-orders', payload);
 }
 
 /**
  * Get bulk submission status and progress
  */
 export async function getBulkSubmissionStatusApi(submissionId: string): Promise<{ success: boolean; data: BulkSubmissionStatus }> {
-    return apiFetch(`/api/bulk-orders/${submissionId}`);
+    return api.get<{ success: boolean; data: BulkSubmissionStatus }>(`/bulk-orders/${submissionId}`);
 }
 
 /**
@@ -108,14 +104,12 @@ export async function getBulkSubmissionItemsApi(
         status,
         search
     }).toString();
-    return apiFetch(`/api/bulk-orders/${submissionId}/items?${query}`);
+    return api.get<BulkItemsResponse>(`/bulk-orders/${submissionId}/items?${query}`);
 }
 
 /**
  * Retry failed items in a bulk batch
  */
 export async function retryBulkSubmissionApi(submissionId: string): Promise<{ success: boolean; message: string; requeuedCount: number }> {
-    return apiFetch(`/api/bulk-orders/${submissionId}/retry`, {
-        method: 'POST'
-    });
+    return api.post<{ success: boolean; message: string; requeuedCount: number }>(`/bulk-orders/${submissionId}/retry`);
 }
