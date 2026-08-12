@@ -115,6 +115,7 @@ const validateBeneficiaryBeforeOrder = async ({
             return {
                 allowed: false,
                 status: 'pending_mtn_approval',
+                code: 'BENEFICIARY_PENDING_MTN_APPROVAL',
                 message: `⚠️ MTN Number Pending Approval\n\nThe recipient number ${recipientPhone} has not yet been approved by MTN for data delivery through our network.\n\nYour order has NOT been placed and you have NOT been charged.\n\nThe number has been automatically submitted for MTN approval. You do not need to do anything else. Once approved, you can return and place the order normally.`,
                 phone: recipientPhone
             };

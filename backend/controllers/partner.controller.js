@@ -134,14 +134,15 @@ const purchaseData = async (req, res) => {
             connection.release();
 
             if (validation.status === 'pending_mtn_approval') {
-                return res.status(200).json({
+                return res.status(422).json({
                     success: false,
-                    code: 'BENEFICIARY_NOT_VALIDATED',
+                    code: 'BENEFICIARY_PENDING_MTN_APPROVAL',
                     message: 'This MTN number has not yet been approved for data delivery.',
                     data: {
                         phoneNumber: phoneField,
                         network: bundle.network,
-                        status: 'pending_approval'
+                        status: 'pending_approval',
+                        pendingApproval: true
                     }
                 });
             }

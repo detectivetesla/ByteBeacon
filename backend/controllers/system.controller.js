@@ -643,16 +643,17 @@ const testSourcingProvider = async (req, res) => {
 
 const beneficiaryPrecheck = async (req, res) => {
     try {
-        const { network, phoneNumbers, record } = req.body;
+        const { network, phoneNumbers, record = true, bundleSize = 'Unknown', source = 'Precheck' } = req.body;
         if (!network || !phoneNumbers) {
             return res.status(400).json({ success: false, error: 'Network and phoneNumbers are required' });
         }
 
-        const { precheckPublicBeneficiary, precheckBeneficiary } = require('../utils/datahouse');
+        const { precheckBeneficiary, precheckPublicBeneficiary } = require('../utils/datahouse');
         const phonesArr = Array.isArray(phoneNumbers) ? phoneNumbers : [phoneNumbers];
+        const netUpper = network.toUpperCase().trim();
         
         let result;
-        if (record) {
+        if (netUpper === 'MTN' || record) {
             result = await precheckBeneficiary(network, phonesArr, true);
         } else {
             result = await precheckPublicBeneficiary(network, phonesArr);
@@ -660,6 +661,23 @@ const beneficiaryPrecheck = async (req, res) => {
 
         if (!result.success) {
             return res.status(400).json({ success: false, error: result.error || 'Beneficiary precheck failed' });
+        }
+
+        // If network is MTN, record any unverified numbers into ByteBeacon Pending MTN Approvals as well
+        if (netUpper === 'MTN') {
+            const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
+            const results = result.results || [];
+            for (const item of results) {
+                if (item.valid !== false && item.known === false) {
+                    const phone = item.phone || item.normalized || item.phoneNumber || phonesArr[0];
+                    await recordPendingBeneficiary({
+                        phone,
+                        network: 'MTN',
+                        bundleSize,
+                        source
+                    }).catch(err => console.warn('⚠️ Precheck recordPendingBeneficiary warning:', err.message));
+                }
+            }
         }
 
         res.json({

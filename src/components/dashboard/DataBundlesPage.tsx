@@ -270,8 +270,18 @@ export default function DataBundlesPage() {
 
                 setShowModal(false);
             } catch (error: unknown) {
-                const err = error as Error;
+                const err = error as any;
                 console.error('Purchase error:', err);
+                if (err?.code === 'BENEFICIARY_PENDING_MTN_APPROVAL' || err?.data?.code === 'BENEFICIARY_PENDING_MTN_APPROVAL') {
+                    toast({
+                        title: '⚠️ MTN Number Pending Approval',
+                        description: err?.data?.message || err.message || 'This recipient\'s MTN number has not been verified. Your order was NOT placed and you were NOT charged.',
+                        variant: 'destructive',
+                        duration: 8000,
+                    });
+                    setShowModal(false);
+                    return;
+                }
                 toast({
                     title: 'Purchase failed',
                     description: err.message || 'An error occurred. Please try again.',
@@ -309,8 +319,18 @@ export default function DataBundlesPage() {
                     throw new Error('Failed to start Paystack checkout process.');
                 }
             } catch (error: unknown) {
-                const err = error as Error;
+                const err = error as any;
                 console.error('Paystack purchase process error:', err);
+                if (err?.code === 'BENEFICIARY_PENDING_MTN_APPROVAL' || err?.data?.code === 'BENEFICIARY_PENDING_MTN_APPROVAL') {
+                    toast({
+                        title: '⚠️ MTN Number Pending Approval',
+                        description: err?.data?.message || err.message || 'This recipient\'s MTN number has not been verified. Your order was NOT placed and you were NOT charged.',
+                        variant: 'destructive',
+                        duration: 8000,
+                    });
+                    setShowModal(false);
+                    return;
+                }
                 toast({
                     title: 'Checkout Failed',
                     description: err.message || 'Could not start payment checkout. Please try again.',

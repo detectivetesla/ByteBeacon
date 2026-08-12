@@ -1,6 +1,6 @@
 const pool = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
-const { normalizeGhanaPhone, getBeneficiaryApprovalStatus, placeDataOrder } = require('../utils/datahouse');
+const { normalizeGhanaPhone, getBeneficiaryApprovalStatus } = require('../utils/datahouse');
 
 /**
  * Record a beneficiary phone number in the Pending MTN Approval workflow.
@@ -139,7 +139,7 @@ const syncBeneficiaryApprovals = async () => {
             const remoteStatus = (match.status || (match.approved ? 'approved' : (match.rejected ? 'rejected' : 'pending'))).toLowerCase().trim();
 
             if (remoteStatus === 'approved' && localRec.status !== 'approved') {
-                console.log(`🎉 [MTN Sync] Beneficiary ${localRec.display_phone} APPROVED by MTN! Auto-unblocking...`);
+                console.log(`🎉 [MTN Sync] Beneficiary ${localRec.display_phone} APPROVED by MTN! Updating status to approved...`);
                 
                 await pool.execute(
                     `UPDATE mtn_beneficiary_approvals
@@ -147,77 +147,6 @@ const syncBeneficiaryApprovals = async () => {
                      WHERE id = ?::uuid`,
                     [localRec.id]
                 );
-
-                // Fetch linked orders for auto-unblocking
-                const [linkedOrders] = await pool.execute(
-                    `SELECT order_id, order_reference, bundle_size, source FROM mtn_beneficiary_approval_orders WHERE approval_id = ?::uuid`,
-                    [localRec.id]
-                );
-
-                for (const ord of linkedOrders) {
-                    // Check agent_orders table
-                    const [agentOrderRows] = await pool.execute(
-                        `SELECT id, store_id, agent_id, customer_phone, network, data_amount, paystack_reference, fulfillment_status
-                         FROM agent_orders WHERE paystack_reference = ? OR id = ?::uuid`,
-                        [ord.order_reference, ord.order_id || '00000000-0000-0000-0000-000000000000']
-                    );
-
-                    if (agentOrderRows.length > 0 && agentOrderRows[0].fulfillment_status === 'pending_mtn_approval') {
-                        const targetOrd = agentOrderRows[0];
-                        console.log(`🚀 [MTN Auto-Unblock] Resubmitting Agent Store order ${targetOrd.id}...`);
-
-                        try {
-                            const placeRes = await placeDataOrder({
-                                network: targetOrd.network,
-                                dataAmount: targetOrd.data_amount,
-                                recipientPhone: targetOrd.customer_phone,
-                                transactionId: targetOrd.paystack_reference
-                            });
-
-                            const newFulfillment = placeRes.status || 'processing';
-                            await pool.execute(
-                                `UPDATE agent_orders
-                                 SET fulfillment_status = ?, provider_reference = ?, updated_at = CURRENT_TIMESTAMP
-                                 WHERE id = ?::uuid`,
-                                [newFulfillment, placeRes.providerPublicId || placeRes.providerReferenceCode || null, targetOrd.id]
-                            );
-                        } catch (resubErr) {
-                            console.error(`❌ Error resubmitting agent order ${targetOrd.id}:`, resubErr.message);
-                        }
-                    }
-
-                    // Check transactions table (direct customer purchases)
-                    const [txRows] = await pool.execute(
-                        `SELECT id, reference, phone, network, data_amount, status
-                         FROM transactions WHERE reference = ? OR id = ?::uuid`,
-                        [ord.order_reference, ord.order_id || '00000000-0000-0000-0000-000000000000']
-                    );
-
-                    if (txRows.length > 0 && txRows[0].status === 'pending_mtn_approval') {
-                        const targetTx = txRows[0];
-                        console.log(`🚀 [MTN Auto-Unblock] Resubmitting Direct customer order ${targetTx.id}...`);
-
-                        try {
-                            const placeRes = await placeDataOrder({
-                                network: targetTx.network,
-                                dataAmount: targetTx.data_amount,
-                                recipientPhone: targetTx.phone,
-                                transactionId: targetTx.reference
-                            });
-
-                            const newStatus = placeRes.status || 'processing';
-                            await pool.execute(
-                                `UPDATE transactions
-                                 SET status = ?, provider_reference = ?, updated_at = CURRENT_TIMESTAMP
-                                 WHERE id = ?::uuid`,
-                                [newStatus, placeRes.providerPublicId || placeRes.providerReferenceCode || null, targetTx.id]
-                            );
-                        } catch (resubErr) {
-                            console.error(`❌ Error resubmitting direct order ${targetTx.id}:`, resubErr.message);
-                        }
-                    }
-                }
-
                 updatedCount++;
 
             } else if (remoteStatus === 'rejected' && localRec.status !== 'rejected') {
@@ -229,25 +158,8 @@ const syncBeneficiaryApprovals = async () => {
                      WHERE id = ?::uuid`,
                     [localRec.id]
                 );
-
-                // Update linked orders to rejected
-                const [linkedOrders] = await pool.execute(
-                    `SELECT order_id, order_reference FROM mtn_beneficiary_approval_orders WHERE approval_id = ?::uuid`,
-                    [localRec.id]
-                );
-
-                for (const ord of linkedOrders) {
-                    await pool.execute(
-                        `UPDATE agent_orders SET fulfillment_status = 'rejected', updated_at = CURRENT_TIMESTAMP WHERE paystack_reference = ? OR id = ?::uuid`,
-                        [ord.order_reference, ord.order_id || '00000000-0000-0000-0000-000000000000']
-                    );
-                    await pool.execute(
-                        `UPDATE transactions SET status = 'rejected', updated_at = CURRENT_TIMESTAMP WHERE reference = ? OR id = ?::uuid`,
-                        [ord.order_reference, ord.order_id || '00000000-0000-0000-0000-000000000000']
-                    );
-                }
-
                 updatedCount++;
+
             } else if (remoteStatus === 'submitted' && localRec.status === 'pending') {
                 await pool.execute(
                     `UPDATE mtn_beneficiary_approvals SET status = 'submitted', submitted_at = CURRENT_TIMESTAMP WHERE id = ?::uuid`,

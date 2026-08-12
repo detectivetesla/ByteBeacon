@@ -1135,11 +1135,17 @@ exports.initializeCustomerPurchase = async (req, res) => {
         if (!validation.allowed) {
             connection.release();
             if (validation.status === 'pending_mtn_approval') {
-                return res.status(200).json({
+                return res.status(422).json({
                     success: false,
+                    code: 'BENEFICIARY_PENDING_MTN_APPROVAL',
                     status: 'pending_mtn_approval',
-                    message: validation.message,
-                    phone: customerPhone
+                    message: validation.message || 'This MTN number has not yet been approved for data delivery.',
+                    data: {
+                        phoneNumber: customerPhone,
+                        network: prod.network,
+                        status: 'pending_approval',
+                        pendingApproval: true
+                    }
                 });
             }
             return res.status(400).json({
@@ -1248,6 +1254,33 @@ exports.verifyCustomerPurchase = async (req, res) => {
             const meta = verifyData.data.metadata || {};
             if (!meta.store_id || !meta.agent_id || !meta.bundle_id || !meta.customer_phone) {
                 return res.status(400).json({ success: false, error: 'Invalid order metadata in payment verification' });
+            }
+
+            // SAFETY GATE: Re-verify MTN beneficiary before creating order from Paystack verify callback
+            if ((meta.network || '').toUpperCase() === 'MTN') {
+                const { validateBeneficiaryBeforeOrder } = require('../services/mtnValidation.service');
+                const verifyValidation = await validateBeneficiaryBeforeOrder({
+                    network: meta.network,
+                    recipientPhone: meta.customer_phone,
+                    bundleSize: meta.data_amount || 'Unknown',
+                    source: 'Agent Storefront (Verify Safety Gate)'
+                });
+                if (!verifyValidation.allowed) {
+                    console.log(`🛡️ [VERIFY SAFETY GATE] MTN number ${meta.customer_phone} is unverified at verify time. Blocking order creation.`);
+                    connection.release();
+                    return res.status(422).json({
+                        success: false,
+                        code: 'BENEFICIARY_PENDING_MTN_APPROVAL',
+                        status: 'pending_mtn_approval',
+                        message: verifyValidation.message || 'This MTN number has not yet been approved for data delivery.',
+                        data: {
+                            phoneNumber: meta.customer_phone,
+                            network: 'MTN',
+                            status: 'pending_approval',
+                            pendingApproval: true
+                        }
+                    });
+                }
             }
 
             const orderId = uuidv4();

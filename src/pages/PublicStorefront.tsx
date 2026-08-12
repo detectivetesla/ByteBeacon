@@ -513,6 +513,15 @@ export default function PublicStorefront() {
                 window.location.href = res.authorization_url;
             }
         } catch (err: any) {
+            if (err?.code === 'BENEFICIARY_PENDING_MTN_APPROVAL' || err?.data?.code === 'BENEFICIARY_PENDING_MTN_APPROVAL') {
+                toast({
+                    title: '⚠️ MTN Number Pending Approval',
+                    description: err?.data?.message || err.message || 'This recipient number is not currently verified for MTN data delivery. Your order has NOT been placed and you have NOT been charged.',
+                    variant: 'destructive',
+                    duration: 9000
+                });
+                return;
+            }
             toast({ title: 'Checkout Error', description: err.message || 'Failed to initialize payment', variant: 'destructive' });
         } finally {
             setIsInitializing(false);

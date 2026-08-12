@@ -41,7 +41,11 @@ const apiFetch = async <T>(
     const data = await response.json();
 
     if (!response.ok) {
-        throw new Error(data.error || 'API request failed');
+        const err: any = new Error(data.error || data.message || 'API request failed');
+        err.data = data;
+        err.status = response.status;
+        err.code = data.code || null;
+        throw err;
     }
 
     return data as T;
