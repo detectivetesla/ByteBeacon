@@ -185,8 +185,8 @@ const AddBundleModal: React.FC<AddBundleModalProps> = ({ open, onClose, availabl
                                     <div className="flex-1 relative">
                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-semibold">GHS</span>
                                         <input
-                                            type="number"
-                                            step="0.50"
+                                            type="text"
+                                            inputMode="decimal"
                                             value={sellingPrice}
                                             onChange={(e) => setSellingPrice(e.target.value)}
                                             className={`w-full pl-12 pr-4 py-2.5 bg-[#18191c] border rounded-lg text-white font-bold text-sm focus:outline-none transition-colors ${
@@ -249,6 +249,7 @@ const AddBundleModal: React.FC<AddBundleModalProps> = ({ open, onClose, availabl
 export const AgentPricesPage: React.FC = () => {
     const { toast } = useToast();
     const [products, setProducts] = useState<AgentProduct[]>([]);
+    const [priceInputs, setPriceInputs] = useState<Record<string, string>>({});
     const [pricingRules, setPricingRules] = useState<{ min_markup_ghc: number; max_markup_ghc: number }>({ min_markup_ghc: 0.50, max_markup_ghc: 50.00 });
     const [selectedNetwork, setSelectedNetwork] = useState<string>('ALL');
     const [searchQuery, setSearchQuery] = useState<string>('');
@@ -263,6 +264,14 @@ export const AgentPricesPage: React.FC = () => {
             if (res.success) {
                 setProducts(res.products);
                 if (res.pricingRules) setPricingRules(res.pricingRules);
+
+                const initialInputs: Record<string, string> = {};
+                res.products.forEach(p => {
+                    initialInputs[p.bundle_id] = (p.agent_price_ghc !== undefined && p.agent_price_ghc !== null)
+                        ? p.agent_price_ghc.toString()
+                        : '';
+                });
+                setPriceInputs(initialInputs);
             }
         } catch (err: any) {
             toast({ title: 'Error', description: err.message || 'Failed to load store products', variant: 'destructive' });
@@ -283,7 +292,6 @@ export const AgentPricesPage: React.FC = () => {
             const res = await agentStoreService.deleteProduct(bundleId);
             if (res.success) {
                 toast({ title: 'Removed', description: `${name} has been removed from your store.` });
-                // Mark as not added instead of filtering out entirely
                 setProducts(prev => prev.map(p => p.bundle_id === bundleId ? { ...p, is_added: false } : p));
             }
         } catch (err: any) {
@@ -291,13 +299,16 @@ export const AgentPricesPage: React.FC = () => {
         }
     };
 
-    const handlePriceChange = (bundleId: string, val: string) => {
-        const num = parseFloat(val);
+    const handlePriceChange = (bundleId: string, rawVal: string) => {
+        // Update raw typed string state (allows empty string "" while typing!)
+        setPriceInputs(prev => ({ ...prev, [bundleId]: rawVal }));
+
+        const num = parseFloat(rawVal);
         setProducts(prev => prev.map(p => {
             if (p.bundle_id === bundleId) {
-                const newPrice = isNaN(num) ? 0 : num;
-                const profit = Math.max(0, newPrice - p.base_price_ghc);
-                return { ...p, agent_price_ghc: newPrice, profit_ghc: profit };
+                const numericPrice = !isNaN(num) ? num : 0;
+                const profit = !isNaN(num) ? Math.max(0, num - p.base_price_ghc) : 0;
+                return { ...p, agent_price_ghc: numericPrice, profit_ghc: profit };
             }
             return p;
         }));
@@ -314,21 +325,37 @@ export const AgentPricesPage: React.FC = () => {
 
     const handleSavePrices = async () => {
         const addedProducts = products.filter(p => p.is_added);
+
         // Validate before saving
         for (const p of addedProducts) {
             if (p.is_enabled) {
-                if (p.agent_price_ghc < p.base_price_ghc + pricingRules.min_markup_ghc) {
+                const rawInput = priceInputs[p.bundle_id];
+                const priceNum = rawInput !== undefined && rawInput.trim() !== '' ? parseFloat(rawInput) : NaN;
+
+                if (isNaN(priceNum) || priceNum <= 0) {
                     toast({
                         title: 'Validation Error',
-                        description: `${p.network} ${p.data_amount}: Selling price must be at least GHS ${(p.base_price_ghc + pricingRules.min_markup_ghc).toFixed(2)}`,
+                        description: `${p.network} ${p.data_amount}: Please enter a valid selling price.`,
                         variant: 'destructive'
                     });
                     return;
                 }
-                if (p.agent_price_ghc > p.base_price_ghc + pricingRules.max_markup_ghc) {
+
+                const minPrice = p.base_price_ghc + pricingRules.min_markup_ghc;
+                if (priceNum < minPrice) {
                     toast({
                         title: 'Validation Error',
-                        description: `${p.network} ${p.data_amount}: Selling price exceeds maximum markup limit.`,
+                        description: `${p.network} ${p.data_amount}: Selling price must be at least GHS ${minPrice.toFixed(2)} (Base: GHS ${p.base_price_ghc.toFixed(2)} + Min Markup: GHS ${pricingRules.min_markup_ghc.toFixed(2)})`,
+                        variant: 'destructive'
+                    });
+                    return;
+                }
+
+                const maxPrice = p.base_price_ghc + pricingRules.max_markup_ghc;
+                if (priceNum > maxPrice) {
+                    toast({
+                        title: 'Validation Error',
+                        description: `${p.network} ${p.data_amount}: Selling price exceeds maximum allowed markup of GHS ${pricingRules.max_markup_ghc.toFixed(2)} above base price.`,
                         variant: 'destructive'
                     });
                     return;
@@ -338,11 +365,15 @@ export const AgentPricesPage: React.FC = () => {
 
         setSaving(true);
         try {
-            const payload = addedProducts.map(p => ({
-                bundle_id: p.bundle_id,
-                agent_price_ghc: p.agent_price_ghc,
-                is_enabled: p.is_enabled
-            }));
+            const payload = addedProducts.map(p => {
+                const rawInput = priceInputs[p.bundle_id];
+                const finalPrice = rawInput !== undefined && rawInput.trim() !== '' ? parseFloat(rawInput) : p.agent_price_ghc;
+                return {
+                    bundle_id: p.bundle_id,
+                    agent_price_ghc: finalPrice,
+                    is_enabled: p.is_enabled
+                };
+            });
 
             const res = await agentStoreService.updateProducts(payload);
             if (res.success) {
@@ -546,11 +577,12 @@ export const AgentPricesPage: React.FC = () => {
                                             <td className="p-4 text-slate-400">GHS {(parseFloat(p.base_price_ghc as any) || 0).toFixed(2)}</td>
                                             <td className="p-4">
                                                 <input
-                                                    type="number"
-                                                    step="0.50"
-                                                    value={p.agent_price_ghc}
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={priceInputs[p.bundle_id] !== undefined ? priceInputs[p.bundle_id] : (p.agent_price_ghc ?? '').toString()}
                                                     onChange={(e) => handlePriceChange(p.bundle_id, e.target.value)}
                                                     disabled={!p.is_enabled}
+                                                    placeholder={(p.base_price_ghc + pricingRules.min_markup_ghc).toFixed(2)}
                                                     className={`w-28 px-3 py-1.5 bg-[#18191c] border rounded-lg text-white font-bold focus:outline-none ${
                                                         !isValid ? 'border-red-500' : 'border-white/10 focus:border-[#a3e635]'
                                                     }`}
