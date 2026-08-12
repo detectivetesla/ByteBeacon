@@ -109,7 +109,10 @@ const makePortal02Request = (method, path, apiKey, body = null, baseUrl = null) 
  * Normalize phone to Ghana format (233XXXXXXXXX)
  */
 const normalizeGhanaPhone = (raw) => {
-    const digits = (raw ?? '').replace(/\D/g, '');
+    let digits = (raw ?? '').replace(/\D/g, '');
+    if (digits.startsWith('2330') && digits.length === 13) {
+        digits = `233${digits.slice(4)}`;
+    }
     if (digits.startsWith('233') && digits.length === 12) return digits;
     if (digits.startsWith('0') && digits.length === 10) return `233${digits.slice(1)}`;
     return digits;
