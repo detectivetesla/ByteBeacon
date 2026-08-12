@@ -35,6 +35,19 @@ const mapProviderStatusToInternal = ({ providerStatus, statusCode, errorCode, er
         return INTERNAL_STATUS.PENDING_MTN_APPROVAL;
     }
 
+    // Check for explicit rejection / invalid phone number
+    if (
+        errCode === 'INVALID_PHONE' ||
+        errCode === 'NUMBER_BLOCKED' ||
+        errCode === 'REJECTED' ||
+        errStr.includes('invalid_phone') ||
+        errStr.includes('invalid phone') ||
+        errStr.includes('number blocked') ||
+        errStr.includes('rejected by network')
+    ) {
+        return INTERNAL_STATUS.REJECTED;
+    }
+
     // 2. Check provider status string
     const status = (providerStatus || '').toLowerCase().trim();
 
@@ -46,7 +59,7 @@ const mapProviderStatusToInternal = ({ providerStatus, statusCode, errorCode, er
         return INTERNAL_STATUS.PARTIALLY_APPROVED;
     }
 
-    if (['rejected', 'order.rejected'].includes(status)) {
+    if (['rejected', 'order.rejected', 'invalid', 'blocked'].includes(status)) {
         return INTERNAL_STATUS.REJECTED;
     }
 

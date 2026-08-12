@@ -94,7 +94,9 @@ const datahouseWebhook = async (req, res) => {
         let finalStatus = 'processing';
         if (['order.approved', 'purchase.success', 'order.partially_approved'].includes(eventType)) {
             finalStatus = 'completed';
-        } else if (['order.rejected', 'purchase.failed'].includes(eventType)) {
+        } else if (eventType === 'order.rejected') {
+            finalStatus = 'rejected';
+        } else if (['purchase.failed'].includes(eventType)) {
             finalStatus = 'failed';
         } else if (['order.received', 'order.processing'].includes(eventType)) {
             finalStatus = 'processing';
@@ -175,6 +177,25 @@ const datahouseWebhook = async (req, res) => {
 
         // --- Execute Updates based on Order Source ---
         let isRefunded = false;
+
+        if (finalStatus === 'rejected') {
+            console.log(`🚫 Order ${targetId} (${orderSource}) rejected by DataHouse. Purging order row completely from database.`);
+            
+            if (orderSource === 'transactions') {
+                const { processAutomatedRefund } = require('../utils/refundHelper');
+                await processAutomatedRefund({
+                    transactionId: targetId,
+                    userId: transaction.user_id,
+                    reason: `Datahouse order rejected (${eventType})`
+                }).catch(() => {});
+
+                await pool.execute('DELETE FROM transactions WHERE id = ?::uuid', [targetId]);
+            } else if (orderSource === 'agent_orders') {
+                await pool.execute('DELETE FROM agent_orders WHERE id = ?::uuid', [targetId]);
+            }
+
+            return res.json({ success: true, message: 'Rejected order purged from system', status: 'rejected' });
+        }
 
         if (orderSource === 'transactions') {
             await pool.execute(

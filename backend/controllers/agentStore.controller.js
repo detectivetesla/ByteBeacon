@@ -1123,9 +1123,23 @@ exports.initializeCustomerPurchase = async (req, res) => {
         const sellingPrice = parseFloat(prod.agent_price_ghc);
         const profit = Math.max(0, sellingPrice - basePrice);
 
-        const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY;
-        if (!paystackSecretKey) {
-            return res.status(500).json({ success: false, error: 'Payment gateway not configured' });
+        // Pre-check phone number with provider/DataHouse
+        const { precheckPublicBeneficiary, normalizeGhanaPhone } = require('../utils/datahouse');
+        const normalizedPhone = normalizeGhanaPhone(customerPhone);
+        if (!normalizedPhone || normalizedPhone.length < 10) {
+            return res.status(400).json({ success: false, error: 'Recipient phone number is invalid. Purchase cancelled.' });
+        }
+
+        try {
+            const precheckRes = await precheckPublicBeneficiary(prod.network, [customerPhone]);
+            if (precheckRes.success && precheckRes.data && Array.isArray(precheckRes.data)) {
+                const match = precheckRes.data.find(b => b.phoneNumber === customerPhone || b.phone === customerPhone || b.msisdn === customerPhone);
+                if (match && match.valid === false) {
+                    return res.status(400).json({ success: false, error: 'Recipient phone number was rejected by network provider. No order was created.' });
+                }
+            }
+        } catch (preErr) {
+            console.warn('⚠️ Public precheck soft warning during initialize:', preErr.message);
         }
 
         const reference = `AG-ORD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -1385,6 +1399,16 @@ exports.verifyCustomerPurchase = async (req, res) => {
                  WHERE id = ?::uuid`,
                 [JSON.stringify(fulfillmentApiResponse), order.id]
             );
+        } else if (finalFulfillmentStatus === 'rejected') {
+            // Rejection rule: If number is rejected by DataHouse, PURGE/DELETE the order from agent_orders completely
+            console.log(`🚫 Order ${order.id} rejected by provider. Deleting order record from database so it does not reflect in system.`);
+            await connection.execute(`DELETE FROM agent_orders WHERE id = ?::uuid`, [order.id]);
+
+            return res.status(400).json({
+                success: false,
+                status: 'rejected',
+                error: 'Recipient phone number was rejected by network provider. Payment will be refunded and no order was recorded.'
+            });
         } else {
             // Update order status as failed
             await connection.execute(
