@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { adminService, UserDetails } from '@/services/admin.service';
 import { walletService } from '@/services';
+import { useSocket } from '@/contexts/SocketContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -87,6 +88,7 @@ export default function AdminUserDetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { toast } = useToast();
+    const { socket } = useSocket();
     const [data, setData] = useState<UserDetails | null>(null);
     const [loading, setLoading] = useState(true);
     const [showPricingModal, setShowPricingModal] = useState(false);
@@ -165,27 +167,60 @@ export default function AdminUserDetailPage() {
         }
     };
 
-    const fetchUserDetails = useCallback(async () => {
+    const fetchUserDetails = useCallback(async (silent = false) => {
         if (!id) return;
-        setLoading(true);
+        if (!silent) setLoading(true);
         try {
-            const result = await adminService.getUserDetails(id);
+            const result = await adminService.getUserDetails(id, startDate, endDate);
             setData(result);
         } catch (error) {
             console.error('Error fetching user details:', error);
-            toast({
-                title: 'Error',
-                description: 'Failed to load user details.',
-                variant: 'destructive',
-            });
+            if (!silent) {
+                toast({
+                    title: 'Error',
+                    description: 'Failed to load user details.',
+                    variant: 'destructive',
+                });
+            }
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
-    }, [id, toast]);
+    }, [id, startDate, endDate, toast]);
 
     useEffect(() => {
         fetchUserDetails();
     }, [fetchUserDetails]);
+
+    // Real-time Push Event Listeners
+    useEffect(() => {
+        if (!socket || !id) return;
+
+        const handleRealtimeUpdate = (payload: any) => {
+            if (payload?.userId && payload.userId !== id) return;
+            if (payload?.targetUserId && payload.targetUserId !== id) return;
+
+            console.log('⚡ Realtime update received for user:', id, payload);
+            fetchUserDetails(true);
+        };
+
+        socket.on('transactionUpdate', handleRealtimeUpdate);
+        socket.on('balanceUpdate', handleRealtimeUpdate);
+        socket.on('newRefund', handleRealtimeUpdate);
+        socket.on('newDeposit', handleRealtimeUpdate);
+        socket.on('userActivity', handleRealtimeUpdate);
+        socket.on('roleUpdate', handleRealtimeUpdate);
+        socket.on('userStatsUpdate', handleRealtimeUpdate);
+
+        return () => {
+            socket.off('transactionUpdate', handleRealtimeUpdate);
+            socket.off('balanceUpdate', handleRealtimeUpdate);
+            socket.off('newRefund', handleRealtimeUpdate);
+            socket.off('newDeposit', handleRealtimeUpdate);
+            socket.off('userActivity', handleRealtimeUpdate);
+            socket.off('roleUpdate', handleRealtimeUpdate);
+            socket.off('userStatsUpdate', handleRealtimeUpdate);
+        };
+    }, [socket, id, fetchUserDetails]);
 
     if (loading) {
         return (
@@ -526,19 +561,19 @@ export default function AdminUserDetailPage() {
                 <TabsList className="mb-4">
                     <TabsTrigger value="transactions">
                         <ShoppingBag className="w-4 h-4 mr-2" />
-                        Transactions ({filteredTransactions.length})
+                        Transactions ({stats.transactionCount ?? (startDate || endDate ? filteredTransactions.length : transactions.length)})
                     </TabsTrigger>
                     <TabsTrigger value="activity">
                         <Activity className="w-4 h-4 mr-2" />
-                        Activity ({filteredActivityLogs.length})
+                        Activity ({stats.activityCount ?? (startDate || endDate ? filteredActivityLogs.length : activityLogs.length)})
                     </TabsTrigger>
                     <TabsTrigger value="deposits">
                         <CreditCard className="w-4 h-4 mr-2" />
-                        Deposits ({filteredDeposits.length})
+                        Deposits ({stats.depositCount ?? (startDate || endDate ? filteredDeposits.length : deposits.length)})
                     </TabsTrigger>
                     <TabsTrigger value="refunds">
                         <RefreshCw className="w-4 h-4 mr-2" />
-                        Refunds ({filteredRefunds.length})
+                        Refunds ({stats.refundCount ?? (startDate || endDate ? filteredRefunds.length : refunds.length)})
                     </TabsTrigger>
                 </TabsList>
 

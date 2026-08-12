@@ -1,6 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { useAuth } from './AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { io as socketIO, Socket } from 'socket.io-client';
 
 export interface SocketInterface {
     on: (event: string, callback: (data: any) => void) => void;
@@ -26,15 +24,65 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const [socket, setSocket] = useState<SocketInterface | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const callbacksRef = useRef<Record<string, Array<(data: any) => void>>>({});
+    const ioRef = useRef<Socket | null>(null);
 
     useEffect(() => {
         if (!user || !user.id) {
+            if (ioRef.current) {
+                ioRef.current.disconnect();
+                ioRef.current = null;
+            }
             setSocket(null);
             setIsConnected(false);
             return;
         }
 
         console.log('📡 Initializing Resilient Realtime Bridge for user:', user.id);
+
+        // Determine socket URL based on window or env
+        let socketUrl = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || '';
+        if (!socketUrl || socketUrl.startsWith('/')) {
+            socketUrl = typeof window !== 'undefined' ? window.location.origin : '';
+        }
+        socketUrl = socketUrl.replace(/\/api\/?$/, '');
+
+        let realSocket: Socket | null = null;
+        try {
+            realSocket = socketIO(socketUrl, {
+                transports: ['websocket', 'polling'],
+                autoConnect: true,
+                reconnection: true,
+                reconnectionAttempts: 10,
+                reconnectionDelay: 1000,
+                auth: { token: localStorage.getItem('auth_token') }
+            });
+            ioRef.current = realSocket;
+
+            realSocket.on('connect', () => {
+                console.log('🔌 Socket.IO connected successfully:', realSocket?.id);
+                setIsConnected(true);
+                realSocket?.emit('join', { userId: user.id, role: role || 'customer' });
+            });
+
+            realSocket.on('disconnect', () => {
+                console.log('🔌 Socket.IO disconnected');
+                setIsConnected(false);
+            });
+
+            realSocket.onAny((event: string, data: any) => {
+                console.log(`📡 Realtime Socket Event [${event}]:`, data);
+                const callbacks = callbacksRef.current[event] || [];
+                callbacks.forEach(cb => {
+                    try {
+                        cb(data);
+                    } catch (err) {
+                        console.error(`Error in event listener for ${event}:`, err);
+                    }
+                });
+            });
+        } catch (err) {
+            console.warn('⚠️ Could not initialize socket.io-client connection:', err);
+        }
 
         // 1. Create the bridge object that mimic's socket.io-client
         const bridge: SocketInterface = {
@@ -51,10 +99,15 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 }
             },
             emit: (event, data) => {
-                console.log(`📡 Bridge emit (ignored): ${event}`, data);
+                if (ioRef.current && ioRef.current.connected) {
+                    ioRef.current.emit(event, data);
+                } else {
+                    console.log(`📡 Bridge emit fallback: ${event}`, data);
+                }
             },
             disconnect: () => {
                 console.log('📡 Bridge disconnecting');
+                if (ioRef.current) ioRef.current.disconnect();
             }
         };
 
@@ -182,7 +235,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
 
         return () => {
-            console.log('📡 Cleaning up Supabase Realtime subscriptions');
+            console.log('📡 Cleaning up Realtime subscriptions');
+            if (ioRef.current) {
+                ioRef.current.disconnect();
+                ioRef.current = null;
+            }
             channels.forEach(ch => {
                 if (ch) supabase.removeChannel(ch);
             });

@@ -112,8 +112,12 @@ export const adminService = {
         return api.post('/admin/users', data);
     },
 
-    getUserDetails: async (userId: string): Promise<UserDetails> => {
-        return api.get<UserDetails>(`/admin/users/${userId}`);
+    getUserDetails: async (userId: string, startDate?: string, endDate?: string): Promise<UserDetails> => {
+        const queryParams = new URLSearchParams();
+        if (startDate) queryParams.append('startDate', startDate);
+        if (endDate) queryParams.append('endDate', endDate);
+        const query = queryParams.toString();
+        return api.get<UserDetails>(`/admin/users/${userId}${query ? `?${query}` : ''}`);
     },
 
     toggleUserStatus: async (userId: string, isActive: boolean): Promise<{ message: string; isActive: boolean }> => {
@@ -435,6 +439,10 @@ export interface UserDetails {
         dailyOrders?: number;
         dailyRefunds?: number;
         totalRefunds?: number;
+        transactionCount?: number;
+        activityCount?: number;
+        depositCount?: number;
+        refundCount?: number;
     };
 }
 

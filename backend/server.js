@@ -64,8 +64,9 @@ const io = new Server(server, {
     }
 });
 
-// Make io accessible in routing/controllers
+// Make io accessible in routing/controllers & global scope
 app.set('io', io);
+global.io = io;
 
 // Socket.IO Connection handling
 io.on('connection', (socket) => {

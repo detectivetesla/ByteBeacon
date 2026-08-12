@@ -43,6 +43,22 @@ const logActivity = async (userId, action, description, metadata = null, ipAddre
             'INSERT INTO activity_logs (id, user_id, action, description, metadata, ip_address) VALUES (?::uuid, ?::uuid, ?, ?, ?::jsonb, ?)',
             [id, userId, action, description, serializedMetadata, ipAddress || null]
         );
+
+        if (global.io) {
+            const activityObj = {
+                id,
+                action,
+                description,
+                metadata: metadata && typeof metadata === 'object' ? metadata : null,
+                ipAddress: ipAddress || null,
+                createdAt: new Date().toISOString()
+            };
+            const eventPayload = { userId, activity: activityObj };
+            global.io.to(userId).emit('userActivity', eventPayload);
+            global.io.to('admins').emit('userActivity', eventPayload);
+            global.io.emit('userActivity', eventPayload);
+            global.io.emit('userStatsUpdate', { userId });
+        }
     } catch (error) {
         // Log error but don't throw - activity logging should not break the main flow
         console.error('❌ Activity log error:', error.message);

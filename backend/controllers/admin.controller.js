@@ -202,6 +202,15 @@ const changeUserRole = async (req, res) => {
 
         logActivity(req.user?.id, 'USER_ROLE_CHANGED', `Changed user ${id.slice(0, 8)} role from ${oldRole} to ${role}`, { targetUserId: id, oldRole, newRole: role }, req.ip);
 
+        const io = req.app.get('io') || global.io;
+        if (io) {
+            const rolePayload = { userId: id, role };
+            io.to(id).emit('roleUpdate', rolePayload);
+            io.to('admins').emit('roleUpdate', rolePayload);
+            io.emit('roleUpdate', rolePayload);
+            io.emit('userStatsUpdate', { userId: id });
+        }
+
         res.json({ message: `User role changed to ${role}` });
 
     } catch (error) {
@@ -1404,6 +1413,7 @@ const getActivityLogs = async (req, res) => {
 const getUserDetails = async (req, res) => {
     try {
         const { id } = req.params;
+        const { startDate, endDate } = req.query;
 
         // Get user profile
         const [profiles] = await pool.execute(
@@ -1423,72 +1433,199 @@ const getUserDetails = async (req, res) => {
 
         const user = profiles[0];
 
+        // Build date filter conditions if provided
+        let txDateCond = '';
+        let logDateCond = '';
+        let depDateCond = '';
+        let refDateCond = '';
+
+        const txParams = [id];
+        const logParams = [id];
+        const depParams = [id];
+        const refParams = [id];
+
+        if (startDate) {
+            txDateCond += ` AND t.created_at >= ?::timestamptz`;
+            logDateCond += ` AND created_at >= ?::timestamptz`;
+            depDateCond += ` AND created_at >= ?::timestamptz`;
+            refDateCond += ` AND created_at >= ?::timestamptz`;
+            const sDate = `${startDate}T00:00:00.000Z`;
+            txParams.push(sDate);
+            logParams.push(sDate);
+            depParams.push(sDate);
+            refParams.push(sDate);
+        }
+
+        if (endDate) {
+            txDateCond += ` AND t.created_at <= ?::timestamptz`;
+            logDateCond += ` AND created_at <= ?::timestamptz`;
+            depDateCond += ` AND created_at <= ?::timestamptz`;
+            refDateCond += ` AND created_at <= ?::timestamptz`;
+            const eDate = `${endDate}T23:59:59.999Z`;
+            txParams.push(eDate);
+            logParams.push(eDate);
+            depParams.push(eDate);
+            refParams.push(eDate);
+        }
+
+        // 1. Transactions & Total Transaction Count
         let transactions = [];
+        let totalTransactions = 0;
         try {
+            const [countRows] = await pool.execute(
+                `SELECT COUNT(*)::integer as count FROM transactions t WHERE t.user_id = ?::uuid ${txDateCond}`,
+                txParams
+            );
+            totalTransactions = parseInt(countRows[0]?.count) || 0;
+
             const [txRows] = await pool.execute(
                 `SELECT t.id, t.recipient_phone, t.amount_ghc, t.status, t.created_at,
                         db.network, db.data_amount
                  FROM transactions t
                  LEFT JOIN data_bundles db ON t.bundle_id = db.id::uuid
-                 WHERE t.user_id = ?::uuid
+                 WHERE t.user_id = ?::uuid ${txDateCond}
                  ORDER BY t.created_at DESC
-                 LIMIT 50`,
-                [id]
+                 LIMIT 200`,
+                txParams
             );
             transactions = txRows;
         } catch (txErr) {
             console.error('getUserDetails transactions error:', txErr);
         }
 
+        // 2. Activity Logs & Total Activity Count
         let activityLogs = [];
+        let totalActivityLogs = 0;
         try {
+            const [logCountRows] = await pool.execute(
+                `SELECT COUNT(*)::integer as count FROM activity_logs WHERE user_id = ?::uuid ${logDateCond}`,
+                logParams
+            );
+            totalActivityLogs = parseInt(logCountRows[0]?.count) || 0;
+
             const [logRows] = await pool.execute(
                 `SELECT id, action, description, metadata, ip_address, created_at
                  FROM activity_logs
-                 WHERE user_id = ?::uuid
+                 WHERE user_id = ?::uuid ${logDateCond}
                  ORDER BY created_at DESC
-                 LIMIT 50`,
-                [id]
+                 LIMIT 200`,
+                logParams
             );
             activityLogs = logRows;
         } catch (logErr) {
             console.error('getUserDetails activityLogs error:', logErr);
         }
 
+        // 3. Deposits & Total Deposits Count
         let deposits = [];
+        let totalDeposits = 0;
         try {
+            const [depCountRows] = await pool.execute(
+                `SELECT COUNT(*)::integer as count FROM deposits WHERE user_id = ?::uuid ${depDateCond}`,
+                depParams
+            );
+            totalDeposits = parseInt(depCountRows[0]?.count) || 0;
+
             const [depRows] = await pool.execute(
                 `SELECT id, amount_ghc, reference, status, created_at
                  FROM deposits
-                 WHERE user_id = ?::uuid
+                 WHERE user_id = ?::uuid ${depDateCond}
                  ORDER BY created_at DESC
-                 LIMIT 20`,
-                [id]
+                 LIMIT 200`,
+                depParams
             );
             deposits = depRows;
         } catch (depErr) {
             console.error('getUserDetails deposits error:', depErr);
         }
 
-        let statsData = {};
+        // 4. Refunds & Total Refunds Count
+        let refunds = [];
+        let totalRefundsCount = 0;
+        try {
+            const [refCountRows] = await pool.execute(
+                `SELECT COUNT(*)::integer as count FROM refunds WHERE user_id = ?::uuid ${refDateCond}`,
+                refParams
+            );
+            totalRefundsCount = parseInt(refCountRows[0]?.count) || 0;
+
+            const [refundsList] = await pool.execute(
+                `SELECT id, amount_ghc, notes, created_at
+                 FROM refunds
+                 WHERE user_id = ?::uuid ${refDateCond}
+                 ORDER BY created_at DESC
+                 LIMIT 200`,
+                refParams
+            );
+            refunds = refundsList;
+        } catch (refErr) {
+            console.error('getUserDetails refunds error:', refErr);
+        }
+
+        // 5. Database Statistics & Financial Aggregation
+        let statsData = {
+            totalOrders: 0,
+            completedOrders: 0,
+            failedOrders: 0,
+            pendingOrders: 0,
+            totalSpent: 0,
+            dailySpent: 0,
+            dailyOrders: 0,
+            dailyRefunds: 0,
+            totalRefunds: 0,
+            transactionCount: totalTransactions,
+            activityCount: totalActivityLogs,
+            depositCount: totalDeposits,
+            refundCount: totalRefundsCount
+        };
+
         try {
             const [statRows] = await pool.execute(
                 `SELECT 
-                    COUNT(*) as "totalOrders",
-                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as "completedOrders",
-                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as "failedOrders",
-                    SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as "pendingOrders",
-                    SUM(amount_ghc) as "totalSpent"
-                 FROM transactions
-                 WHERE user_id = ?::uuid`,
-                [id]
+                    COUNT(CASE WHEN status = 'completed' THEN 1 END)::integer as "completedOrders",
+                    COUNT(CASE WHEN status = 'failed' THEN 1 END)::integer as "failedOrders",
+                    COUNT(CASE WHEN status = 'processing' OR status = 'pending' THEN 1 END)::integer as "pendingOrders",
+                    COALESCE(SUM(CASE WHEN status = 'completed' THEN amount_ghc ELSE 0 END), 0)::float as "totalSpent",
+                    COUNT(CASE WHEN status = 'completed' AND created_at >= CURRENT_DATE THEN 1 END)::integer as "dailyOrders",
+                    COALESCE(SUM(CASE WHEN status = 'completed' AND created_at >= CURRENT_DATE THEN amount_ghc ELSE 0 END), 0)::float as "dailySpent"
+                 FROM transactions t
+                 WHERE t.user_id = ?::uuid ${txDateCond}`,
+                txParams
             );
-            if (statRows.length > 0) statsData = statRows[0];
+
+            if (statRows.length > 0) {
+                const s = statRows[0];
+                statsData.completedOrders = parseInt(s.completedOrders) || 0;
+                statsData.totalOrders = parseInt(s.completedOrders) || 0; // Completed qualifying orders
+                statsData.failedOrders = parseInt(s.failedOrders) || 0;
+                statsData.pendingOrders = parseInt(s.pendingOrders) || 0;
+                statsData.totalSpent = parseFloat(s.totalSpent) || 0;
+                statsData.dailyOrders = parseInt(s.dailyOrders) || 0;
+                statsData.dailySpent = parseFloat(s.dailySpent) || 0;
+            }
         } catch (statErr) {
             console.error('getUserDetails stats error:', statErr);
         }
 
-        const resultJson = {
+        try {
+            const [refundSumRows] = await pool.execute(
+                `SELECT 
+                    COALESCE(SUM(amount_ghc), 0)::float as "totalRefunds",
+                    COALESCE(SUM(CASE WHEN created_at >= CURRENT_DATE THEN amount_ghc ELSE 0 END), 0)::float as "dailyRefunds"
+                 FROM refunds
+                 WHERE user_id = ?::uuid ${refDateCond}`,
+                refParams
+            );
+
+            if (refundSumRows.length > 0) {
+                statsData.totalRefunds = parseFloat(refundSumRows[0].totalRefunds) || 0;
+                statsData.dailyRefunds = parseFloat(refundSumRows[0].dailyRefunds) || 0;
+            }
+        } catch (refSumErr) {
+            console.error('getUserDetails refund sum error:', refSumErr);
+        }
+
+        res.json({
             user: {
                 id: user.id,
                 fullName: user.full_name || user.backup_name || 'User',
@@ -1522,68 +1659,14 @@ const getUserDetails = async (req, res) => {
                 status: d.status,
                 createdAt: d.created_at
             })),
-            stats: {
-                totalOrders: parseInt(statsData.totalOrders) || 0,
-                completedOrders: parseInt(statsData.completedOrders) || 0,
-                failedOrders: parseInt(statsData.failedOrders) || 0,
-                pendingOrders: parseInt(statsData.pendingOrders) || 0,
-                totalSpent: parseFloat(statsData.totalSpent) || 0,
-                dailySpent: 0,
-                dailyOrders: 0,
-                dailyRefunds: 0,
-                totalRefunds: 0
-            },
-            refunds: []
-        };
-
-        try {
-            const [dailyRows] = await pool.execute(
-                `SELECT 
-                    COUNT(*)::integer as "dailyOrders",
-                    COALESCE(SUM(CASE WHEN status = 'completed' THEN amount_ghc ELSE 0 END), 0) as "dailySpent"
-                 FROM transactions
-                 WHERE user_id = ?::uuid AND created_at >= CURRENT_DATE`,
-                [id]
-            );
-            if (dailyRows && dailyRows.length > 0) {
-                resultJson.stats.dailySpent = parseFloat(dailyRows[0].dailySpent) || 0;
-                resultJson.stats.dailyOrders = parseInt(dailyRows[0].dailyOrders) || 0;
-            }
-        } catch (dailyErr) {}
-
-        try {
-            const [refundRows] = await pool.execute(
-                `SELECT 
-                    COALESCE(SUM(amount_ghc), 0) as "totalRefunds",
-                    COALESCE(SUM(CASE WHEN created_at >= CURRENT_DATE THEN amount_ghc ELSE 0 END), 0) as "dailyRefunds"
-                 FROM refunds
-                 WHERE user_id = ?::uuid`,
-                [id]
-            );
-            if (refundRows && refundRows.length > 0) {
-                resultJson.stats.dailyRefunds = parseFloat(refundRows[0].dailyRefunds) || 0;
-                resultJson.stats.totalRefunds = parseFloat(refundRows[0].totalRefunds) || 0;
-            }
-        } catch (refErr) {}
-
-        try {
-            const [refundsList] = await pool.execute(
-                `SELECT id, amount_ghc, notes, created_at
-                 FROM refunds
-                 WHERE user_id = ?::uuid
-                 ORDER BY created_at DESC
-                 LIMIT 50`,
-                [id]
-            );
-            resultJson.refunds = refundsList.map(r => ({
+            refunds: refunds.map(r => ({
                 id: r.id,
                 amount: parseFloat(r.amount_ghc || 0),
                 notes: r.notes || 'No description',
                 createdAt: r.created_at
-            }));
-        } catch (refListErr) {}
-
-        res.json(resultJson);
+            })),
+            stats: statsData
+        });
 
     } catch (error) {
         console.error('Get user details error:', error);
@@ -2070,12 +2153,41 @@ const creditUserWallet = async (req, res) => {
                 [messageId, 'system', id, msgSubject, msgBody]
             );
 
-            const io = req.app.get('io');
+            const io = req.app.get('io') || global.io;
             if (io) {
                 const [pRows] = await connection.execute('SELECT wallet_balance FROM profiles WHERE id = ?::uuid', [id]);
                 const newBal = pRows.length > 0 ? parseFloat(pRows[0].wallet_balance) : 0;
                 
-                io.to(id).emit('balanceUpdate', { newBalance: newBal });
+                const balancePayload = { userId: id, newBalance: newBal, walletBalance: newBal };
+                io.to(id).emit('balanceUpdate', balancePayload);
+                io.to('admins').emit('balanceUpdate', balancePayload);
+                io.emit('balanceUpdate', balancePayload);
+
+                if (action === 'refund') {
+                    const refundPayload = {
+                        userId: id,
+                        refundId: uuidv4(),
+                        amount: parsedAmount,
+                        notes: notes || 'Manual admin refund',
+                        createdAt: new Date().toISOString()
+                    };
+                    io.to(id).emit('newRefund', refundPayload);
+                    io.to('admins').emit('newRefund', refundPayload);
+                    io.emit('newRefund', refundPayload);
+                }
+
+                const depositPayload = {
+                    userId: id,
+                    depositId,
+                    amount: delta,
+                    reference,
+                    status: 'completed',
+                    createdAt: new Date().toISOString()
+                };
+                io.to(id).emit('newDeposit', depositPayload);
+                io.to('admins').emit('newDeposit', depositPayload);
+                io.emit('newDeposit', depositPayload);
+
                 io.to(id).emit('newNotification', {
                     id: notificationId,
                     title: notifTitle,
@@ -2084,6 +2196,8 @@ const creditUserWallet = async (req, res) => {
                     isRead: false,
                     createdAt: new Date()
                 });
+
+                io.emit('userStatsUpdate', { userId: id });
             }
 
             // Log activity
