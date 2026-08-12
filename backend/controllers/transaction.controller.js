@@ -184,8 +184,9 @@ const purchaseBundle = async (req, res) => {
                         // 3. Purge transaction so NO order record exists in transactions table
                         await pool.execute('DELETE FROM transactions WHERE id = ?::uuid', [transactionId]);
 
-                        return res.json({
-                            success: true,
+                        return res.status(422).json({
+                            success: false,
+                            code: 'BENEFICIARY_NOT_VALIDATED',
                             status: 'pending_mtn_approval',
                             message: 'Awaiting MTN Approval — This recipient\'s MTN number requires approval before data can be delivered.'
                         });

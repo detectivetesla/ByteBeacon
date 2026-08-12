@@ -654,7 +654,7 @@ const beneficiaryPrecheck = async (req, res) => {
         
         let result;
         if (netUpper === 'MTN' || record) {
-            result = await precheckBeneficiary(network, phonesArr, true);
+            result = await precheckBeneficiary(network, phonesArr, true, null, null, source, bundleSize);
         } else {
             result = await precheckPublicBeneficiary(network, phonesArr);
         }

@@ -56,7 +56,7 @@ const validateBeneficiaryBeforeOrder = async ({
     // 3. Perform DataHouse precheck with opt-in record=true
     try {
         console.log(`🔍 [MTN PRECHECK GATE] Checking MTN recipient ${recipientPhone} (normalized: ${normalizedPhone}) for ${source}...`);
-        const precheckRes = await precheckBeneficiary('MTN', [recipientPhone], true);
+        const precheckRes = await precheckBeneficiary('MTN', [recipientPhone], true, null, null, source, bundleSize);
 
         // Fail-closed if API response is not successful
         if (!precheckRes.success) {

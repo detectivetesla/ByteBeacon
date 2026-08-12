@@ -126,7 +126,7 @@ const purchaseData = async (req, res) => {
             network: bundle.network,
             recipientPhone: phoneField,
             bundleSize: bundle.data_amount,
-            source: 'Partner API'
+            source: 'API'
         });
 
         if (!validation.allowed) {
@@ -336,8 +336,9 @@ const purchaseData = async (req, res) => {
                     // 3. Purge transaction so NO order record exists in transactions table
                     await pool.execute('DELETE FROM transactions WHERE id = ?::uuid', [transactionId]);
 
-                    return res.status(200).json({
-                        success: true,
+                    return res.status(422).json({
+                        success: false,
+                        code: 'BENEFICIARY_NOT_VALIDATED',
                         transaction_id: null,
                         status: 'pending_mtn_approval',
                         message: 'Awaiting MTN Approval — This recipient\'s MTN number requires approval before data can be delivered.'
@@ -363,7 +364,7 @@ const purchaseData = async (req, res) => {
                         phone: phoneField,
                         network: bundle.network,
                         bundleSize: bundle.data_amount,
-                        source: 'Partner API',
+                        source: 'API',
                         orderId: transactionId,
                         orderReference: transactionId
                     }).catch(err => console.warn('⚠️ Record pending beneficiary warning:', err.message));

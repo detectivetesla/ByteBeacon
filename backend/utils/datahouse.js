@@ -557,7 +557,7 @@ const extractProviderId = (apiResponse, fallbackId, targetPhone) => {
  * Precheck beneficiary numbers against MTN validation list
  * Endpoint: POST /agent/beneficiaries/precheck
  */
-const precheckBeneficiary = async (network, phoneNumbers, record = false, apiKey = null, baseUrl = null) => {
+const precheckBeneficiary = async (network, phoneNumbers, record = false, apiKey = null, baseUrl = null, source = null, bundleSize = null) => {
     const datahouseApiKey = await resolveDatahouseApiKey(apiKey);
     if (!datahouseApiKey) {
         return { success: false, error: 'DATAHOUSE_API_KEY not configured' };
@@ -569,6 +569,15 @@ const precheckBeneficiary = async (network, phoneNumbers, record = false, apiKey
             phoneNumbers: Array.isArray(phoneNumbers) ? phoneNumbers : [phoneNumbers],
             record: Boolean(record)
         };
+
+        if (source) {
+            payload.source = source;
+            payload.channel = source;
+        }
+        if (bundleSize) {
+            payload.bundleSize = bundleSize;
+            payload.bundle_size = bundleSize;
+        }
 
         const res = await makeDatahouseRequest('POST', '/agent/beneficiaries/precheck', datahouseApiKey, payload, baseUrl);
         const dataPayload = res.data?.data || null;
