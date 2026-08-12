@@ -85,6 +85,28 @@ const makeDatahouseRequest = (method, path, apiKey, body = null, baseUrl = null)
 };
 
 /**
+ * Helper to resolve Datahouse API key from params, environment, or database
+ */
+const resolveDatahouseApiKey = async (providedKey) => {
+    if (providedKey && typeof providedKey === 'string' && providedKey.trim() !== '') {
+        return providedKey.trim();
+    }
+    if (process.env.DATAHOUSE_API_KEY && process.env.DATAHOUSE_API_KEY.trim() !== '') {
+        return process.env.DATAHOUSE_API_KEY.trim();
+    }
+    try {
+        const { getSourcingConfig } = require('./sourcing');
+        const config = await getSourcingConfig();
+        if (config && config.datahouse_api_key && config.datahouse_api_key.trim() !== '') {
+            return config.datahouse_api_key.trim();
+        }
+    } catch (e) {
+        console.warn('⚠️ Could not load Datahouse API key from database:', e.message);
+    }
+    return null;
+};
+
+/**
  * Normalize phone to Ghana format (233XXXXXXXXX)
  */
 const normalizeGhanaPhone = (raw) => {
@@ -192,7 +214,7 @@ const findBundle = (bundles, volume) => {
  * Place a data bundle order via Datahouse API
  */
 const placeDataOrder = async ({ network, dataAmount, recipientPhone, transactionId, apiKey, baseUrl }) => {
-    const datahouseApiKey = apiKey || process.env.DATAHOUSE_API_KEY;
+    const datahouseApiKey = await resolveDatahouseApiKey(apiKey);
     console.log('🚀 Starting Datahouse order request...');
 
     if (!datahouseApiKey) {
@@ -327,7 +349,7 @@ const { v4: uuidv4, validate: uuidValidate } = require('uuid');
  * Check Datahouse account balance
  */
 const checkBalance = async (apiKey, baseUrl = null) => {
-    const datahouseApiKey = apiKey || process.env.DATAHOUSE_API_KEY;
+    const datahouseApiKey = await resolveDatahouseApiKey(apiKey);
 
     if (!datahouseApiKey) {
         return { success: false, error: 'API key not configured' };
@@ -398,7 +420,7 @@ const checkBalance = async (apiKey, baseUrl = null) => {
  * Check order status from Datahouse
  */
 const checkOrderStatus = async (orderIdOrReference, apiKey, baseUrl = null) => {
-    const datahouseApiKey = apiKey || process.env.DATAHOUSE_API_KEY;
+    const datahouseApiKey = await resolveDatahouseApiKey(apiKey);
 
     if (!datahouseApiKey) {
         return { success: false, error: 'API key not configured' };
@@ -536,7 +558,7 @@ const extractProviderId = (apiResponse, fallbackId, targetPhone) => {
  * Endpoint: POST /agent/beneficiaries/precheck
  */
 const precheckBeneficiary = async (network, phoneNumbers, record = false, apiKey = null, baseUrl = null) => {
-    const datahouseApiKey = apiKey || process.env.DATAHOUSE_API_KEY;
+    const datahouseApiKey = await resolveDatahouseApiKey(apiKey);
     if (!datahouseApiKey) {
         return { success: false, error: 'DATAHOUSE_API_KEY not configured' };
     }
@@ -598,7 +620,7 @@ const precheckPublicBeneficiary = async (network, phoneNumbers, baseUrl = null) 
  * Endpoint: GET /agent/beneficiaries
  */
 const getBeneficiaryApprovalStatus = async ({ status, network, search, page = 1, limit = 30, apiKey = null, baseUrl = null } = {}) => {
-    const datahouseApiKey = apiKey || process.env.DATAHOUSE_API_KEY;
+    const datahouseApiKey = await resolveDatahouseApiKey(apiKey);
     if (!datahouseApiKey) {
         return { success: false, error: 'DATAHOUSE_API_KEY not configured' };
     }
