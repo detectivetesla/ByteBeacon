@@ -117,7 +117,7 @@ export default function Auth() {
 
     if (isAgentFlow) {
       // AGENT STORE AUTHENTICATION ENTRY POINT
-      // Gate: Only agent, superagent, or admin roles may enter the Agent Store Portal
+      // Gate 1: Only agent, superagent, or admin roles may attempt Agent Store Portal access
       if (role !== 'agent' && role !== 'superagent' && role !== 'admin') {
         toast({
           title: 'Agent Access Denied',
@@ -128,6 +128,7 @@ export default function Auth() {
         return;
       }
 
+      // Gate 2: User must have an existing store to enter the Agent Store Portal
       try {
         const storeRes = await agentStoreService.getMyStore();
         if (storeRes.success && storeRes.hasStore && storeRes.store) {
@@ -142,22 +143,29 @@ export default function Auth() {
           } else {
             toast({
               title: `Store Status: ${store.effective_status.replace(/_/g, ' ')}`,
-              description: 'Opening store registration/activation console.',
+              description: `Your store "${store.store_name}" is not yet active. Redirecting to activation console.`,
             });
             navigate('/dashboard/agent-store');
             return;
           }
         } else {
+          // No store exists — reject access
           toast({
-            title: 'No Active Agent Store Found',
-            description: 'Complete store creation or activation to open reseller console.',
+            title: 'No Agent Store Found',
+            description: 'You do not have an Agent Store. Create one from your dashboard first.',
+            variant: 'destructive',
           });
-          navigate('/dashboard/agent-store');
+          navigate('/dashboard');
           return;
         }
       } catch (err) {
         console.error('Error verifying agent store status during agent sign-in:', err);
-        navigate('/dashboard/agent-store');
+        toast({
+          title: 'Store Verification Failed',
+          description: 'Could not verify your store status. Please try again.',
+          variant: 'destructive',
+        });
+        navigate('/dashboard');
         return;
       }
     }
