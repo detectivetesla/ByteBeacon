@@ -554,6 +554,59 @@ const precheckBeneficiary = async (network, phoneNumbers, record = false, apiKey
         return { success: false, error: err.message };
     }
 };
+/**
+ * Public precheck endpoint (unauthenticated, max 10 numbers)
+ * Endpoint: POST /orders/beneficiaries/precheck
+ */
+const precheckPublicBeneficiary = async (network, phoneNumbers, baseUrl = null) => {
+    try {
+        const payload = {
+            network: network.toUpperCase(),
+            phoneNumbers: Array.isArray(phoneNumbers) ? phoneNumbers.slice(0, 10) : [phoneNumbers]
+        };
+
+        const res = await makeDatahouseRequest('POST', '/orders/beneficiaries/precheck', '', payload, baseUrl);
+        return {
+            success: res.ok && res.data?.success,
+            data: res.data?.data || null,
+            error: res.data?.error?.message || res.data?.message || null
+        };
+    } catch (err) {
+        console.error('❌ Datahouse precheckPublicBeneficiary error:', err);
+        return { success: false, error: err.message };
+    }
+};
+
+/**
+ * Check MTN-approval status of numbers submitted to DataHouse
+ * Endpoint: GET /agent/beneficiaries
+ */
+const getBeneficiaryApprovalStatus = async ({ status, network, search, page = 1, limit = 30, apiKey = null, baseUrl = null } = {}) => {
+    const datahouseApiKey = apiKey || process.env.DATAHOUSE_API_KEY;
+    if (!datahouseApiKey) {
+        return { success: false, error: 'DATAHOUSE_API_KEY not configured' };
+    }
+
+    try {
+        const queryParams = new URLSearchParams();
+        if (status) queryParams.append('status', status);
+        if (network) queryParams.append('network', network);
+        if (search) queryParams.append('search', search);
+        if (page) queryParams.append('page', String(page));
+        if (limit) queryParams.append('limit', String(limit));
+
+        const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+        const res = await makeDatahouseRequest('GET', `/agent/beneficiaries${queryString}`, datahouseApiKey, null, baseUrl);
+        return {
+            success: res.ok && res.data?.success,
+            data: res.data?.data || null,
+            error: res.data?.error?.message || res.data?.message || null
+        };
+    } catch (err) {
+        console.error('❌ Datahouse getBeneficiaryApprovalStatus error:', err);
+        return { success: false, error: err.message };
+    }
+};
 
 module.exports = {
     placeDataOrder,
@@ -563,5 +616,7 @@ module.exports = {
     checkBalance,
     checkOrderStatus,
     extractProviderId,
-    precheckBeneficiary
+    precheckBeneficiary,
+    precheckPublicBeneficiary,
+    getBeneficiaryApprovalStatus
 };

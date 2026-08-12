@@ -22,7 +22,8 @@ const {
     getPublicStorefront,
     initializeCustomerPurchase,
     verifyCustomerPurchase,
-    trackPublicOrder
+    trackPublicOrder,
+    getAgentBeneficiaries
 } = require('../controllers/agentStore.controller');
 
 // =============================================
@@ -56,6 +57,7 @@ router.get('/orders', auth, getAgentOrders);
 router.get('/transactions', auth, getAgentTransactions);
 router.get('/customers', auth, getAgentCustomers);
 router.get('/analytics', auth, getAgentAnalytics);
+router.get('/beneficiaries', auth, getAgentBeneficiaries);
 
 // Financial Ledger & Withdrawals
 router.post('/withdrawals', auth, agentOrAdmin, withdrawalLimiter, requestWithdrawal);

@@ -641,6 +641,30 @@ const testSourcingProvider = async (req, res) => {
     }
 };
 
+const beneficiaryPrecheck = async (req, res) => {
+    try {
+        const { network, phoneNumbers, record } = req.body;
+        if (!network || !phoneNumbers) {
+            return res.status(400).json({ success: false, error: 'Network and phoneNumbers are required' });
+        }
+
+        const { precheckBeneficiary } = require('../utils/datahouse');
+        const result = await precheckBeneficiary(network, phoneNumbers, record);
+
+        if (!result.success) {
+            return res.status(400).json({ success: false, error: result.error || 'Beneficiary precheck failed' });
+        }
+
+        res.json({
+            success: true,
+            data: result.data
+        });
+    } catch (err) {
+        console.error('Beneficiary precheck error:', err);
+        res.status(500).json({ success: false, error: 'Failed to precheck beneficiary' });
+    }
+};
+
 module.exports = {
     getMaintenanceStatus,
     updateMaintenanceStatus,
@@ -654,5 +678,6 @@ module.exports = {
     updateSourcingProvider,
     deleteSourcingProvider,
     activateSourcingProvider,
-    testSourcingProvider
+    testSourcingProvider,
+    beneficiaryPrecheck
 };

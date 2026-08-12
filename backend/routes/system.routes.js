@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getMaintenanceStatus, processWorker, cronSync, getSystemConfig, getPortalStatus } = require('../controllers/system.controller');
+const { getMaintenanceStatus, processWorker, cronSync, getSystemConfig, getPortalStatus, beneficiaryPrecheck } = require('../controllers/system.controller');
 
 // Public route to check maintenance status
 router.get('/maintenance', getMaintenanceStatus);
@@ -10,6 +10,9 @@ router.get('/portal-status', getPortalStatus);
 
 // Public route to get public system configuration
 router.get('/config', getSystemConfig);
+
+// Public route for MTN beneficiary pre-check (Up2U rule)
+router.post('/beneficiary-precheck', beneficiaryPrecheck);
 
 // Worker route to trigger order queue processing
 // Secured with secret key in controller

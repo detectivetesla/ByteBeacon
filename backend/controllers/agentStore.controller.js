@@ -1387,3 +1387,21 @@ exports.trackPublicOrder = async (req, res) => {
         if (connection) connection.release();
     }
 };
+
+// 19. GET AGENT MTN BENEFICIARY APPROVAL STATUSES FROM DATAHOUSE
+exports.getAgentBeneficiaries = async (req, res) => {
+    try {
+        const { status, network, search, page, limit } = req.query;
+        const { getBeneficiaryApprovalStatus } = require('../utils/datahouse');
+        const result = await getBeneficiaryApprovalStatus({ status, network, search, page, limit });
+
+        if (!result.success) {
+            return res.status(400).json({ success: false, error: result.error || 'Failed to fetch MTN beneficiaries' });
+        }
+
+        res.json({ success: true, data: result.data });
+    } catch (error) {
+        console.error('Error fetching agent beneficiaries:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch beneficiaries' });
+    }
+};
