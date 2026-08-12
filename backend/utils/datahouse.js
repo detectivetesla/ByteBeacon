@@ -248,11 +248,15 @@ const placeDataOrder = async ({ network, dataAmount, recipientPhone, transaction
 
         console.log(`✅ Using bundle: ${bundle.name} (ID: ${bundle.id})`);
 
-        // 5. Build order payload
+const { v4: uuidv4, validate: uuidValidate } = require('uuid');
+
+        // 5. Build order payload (Ensure idempotencyKey is a valid UUID v4)
+        const validIdempotencyKey = (transactionId && uuidValidate(transactionId)) ? transactionId : uuidv4();
+
         const orderPayload = {
             bundleId: bundle.id,
             phoneNumber: phone,
-            idempotencyKey: transactionId,
+            idempotencyKey: validIdempotencyKey,
             email: 'orders@bytebeacon.com' // Safe fallback email
         };
 
@@ -282,12 +286,18 @@ const placeDataOrder = async ({ network, dataAmount, recipientPhone, transaction
             }
         }
 
+        const providerPublicId = orderData?.publicId || orderData?.id || null;
+        const providerReferenceCode = orderData?.referenceCode || null;
+
         return {
             success: success,
             status: finalStatus,
             apiResponse: orderRes.data,
-            orderId: orderData?.id,
-            orderReference: orderData?.referenceCode,
+            orderId: providerPublicId || transactionId,
+            providerPublicId: providerPublicId,
+            providerReferenceCode: providerReferenceCode,
+            providerOrderId: orderData?.id || null,
+            orderReference: providerReferenceCode,
             volume,
             orderNetwork: datahouseNetwork,
             message: orderRes.data?.message || (orderRes.data?.error?.message) || (
@@ -516,6 +526,35 @@ const extractProviderId = (apiResponse, fallbackId, targetPhone) => {
     }
 };
 
+/**
+ * Precheck beneficiary numbers against MTN validation list
+ * Endpoint: POST /agent/beneficiaries/precheck
+ */
+const precheckBeneficiary = async (network, phoneNumbers, record = false, apiKey = null, baseUrl = null) => {
+    const datahouseApiKey = apiKey || process.env.DATAHOUSE_API_KEY;
+    if (!datahouseApiKey) {
+        return { success: false, error: 'DATAHOUSE_API_KEY not configured' };
+    }
+
+    try {
+        const payload = {
+            network: network.toUpperCase(),
+            phoneNumbers: Array.isArray(phoneNumbers) ? phoneNumbers : [phoneNumbers],
+            record: Boolean(record)
+        };
+
+        const res = await makeDatahouseRequest('POST', '/agent/beneficiaries/precheck', datahouseApiKey, payload, baseUrl);
+        return {
+            success: res.ok && res.data?.success,
+            data: res.data?.data || null,
+            error: res.data?.error?.message || res.data?.message || null
+        };
+    } catch (err) {
+        console.error('❌ Datahouse precheckBeneficiary error:', err);
+        return { success: false, error: err.message };
+    }
+};
+
 module.exports = {
     placeDataOrder,
     normalizeGhanaPhone,
@@ -523,5 +562,6 @@ module.exports = {
     findBundle,
     checkBalance,
     checkOrderStatus,
-    extractProviderId
+    extractProviderId,
+    precheckBeneficiary
 };

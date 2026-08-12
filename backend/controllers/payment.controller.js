@@ -232,10 +232,18 @@ exports.verifyPayment = async (req, res) => {
             });
         }
 
-        // Update transaction with final status
+        // Update transaction with final status and provider identifiers
+        const combinedApiResponse = {
+            paystack: verifyData,
+            datahouse: orderData,
+            portal02: orderData,
+            providerPublicId: fulfillment.providerPublicId || fulfillment.orderId,
+            providerReferenceCode: fulfillment.providerReferenceCode || fulfillment.orderReference,
+            orderId: fulfillment.orderId
+        };
         await connection.execute(
             `UPDATE transactions SET status = ?, api_response = ? WHERE id = ?::uuid`,
-            [finalStatus, JSON.stringify({ paystack: verifyData, portal02: orderData }), transaction.id]
+            [finalStatus, JSON.stringify(combinedApiResponse), transaction.id]
         );
 
         // Emit real-time transaction update via Socket.IO

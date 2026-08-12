@@ -1293,16 +1293,23 @@ exports.verifyCustomerPurchase = async (req, res) => {
         });
 
         const finalFulfillmentStatus = fulfillment.status;
+        const fulfillmentApiResponse = {
+            paystack: verifyData,
+            provider_fulfillment: fulfillment.apiResponse,
+            providerPublicId: fulfillment.providerPublicId || fulfillment.orderId,
+            providerReferenceCode: fulfillment.providerReferenceCode || fulfillment.orderReference,
+            orderId: fulfillment.orderId
+        };
 
         if (finalFulfillmentStatus === 'completed') {
             await connection.beginTransaction();
 
-            // Update order status
+            // Update order status and api_response
             await connection.execute(
                 `UPDATE agent_orders 
-                 SET fulfillment_status = 'completed', updated_at = NOW() 
+                 SET fulfillment_status = 'completed', api_response = ?, updated_at = NOW() 
                  WHERE id = ?::uuid`,
-                [order.id]
+                [JSON.stringify(fulfillmentApiResponse), order.id]
             );
 
             // Credit agent profit to agent_wallets

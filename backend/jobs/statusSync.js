@@ -166,7 +166,53 @@ const syncPendingTransactions = async (io) => {
             await new Promise(resolve => setTimeout(resolve, 300));
         }
 
-        console.log('✅ Background status sync completed');
+        console.log('✅ Background status sync completed for main transactions');
+
+        // --- PASS 2.5: Sync Status for Ongoing Agent Storefront Orders ---
+        try {
+            const [agentOrders] = await pool.execute(`
+                SELECT id, agent_id, customer_phone, fulfillment_status, api_response, created_at
+                FROM agent_orders
+                WHERE fulfillment_status IN ('processing', 'pending', 'ongoing')
+                AND created_at >= ?
+                AND created_at < NOW() - INTERVAL '5 seconds'
+                ORDER BY created_at ASC
+                LIMIT 50
+            `, [DATAHOUSE_MIGRATION_DATE]);
+
+            if (agentOrders.length > 0) {
+                console.log(`📋 Found ${agentOrders.length} storefront agent orders to check`);
+                for (const ao of agentOrders) {
+                    try {
+                        let providerIdentifier = extractProviderId(ao.api_response, ao.id, ao.customer_phone);
+                        const result = await checkOrderStatus(providerIdentifier);
+
+                        if (result.success && result.status !== 'processing') {
+                            const newStatus = result.status === 'completed' ? 'completed' : 'refunded';
+                            console.log(`✅ [STOREFRONT SYNC] Status changed for order ${ao.id}: -> ${newStatus}`);
+
+                            await pool.execute(
+                                `UPDATE agent_orders SET fulfillment_status = ?, updated_at = NOW() WHERE id = ?::uuid`,
+                                [newStatus, ao.id]
+                            );
+
+                            if (io && ao.agent_id) {
+                                io.to(ao.agent_id).emit('agentOrderUpdate', {
+                                    orderId: ao.id,
+                                    status: newStatus,
+                                    message: `Storefront order status updated to ${newStatus}`
+                                });
+                            }
+                        }
+                    } catch (aoErr) {
+                        console.error(`❌ Error syncing agent order ${ao.id}:`, aoErr.message);
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+            }
+        } catch (aoSyncErr) {
+            console.error('❌ [SYNC JOB] Agent orders sync error:', aoSyncErr.message);
+        }
 
         // --- PASS 3: Process Partner Webhook Outbox Queue ---
         try {

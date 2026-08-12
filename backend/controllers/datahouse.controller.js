@@ -5,48 +5,59 @@ const { triggerTransactionWebhook } = require('../services/partnerWebhook.servic
 
 /**
  * Handle GetMorePayLess Datahouse webhook callbacks
- * This endpoint receives status updates from Datahouse about order fulfillment
- * Signature verification: HMAC-SHA256 via x-telecom-signature header
+ * Receives real-time fulfillment updates from Datahouse
+ * Signature verification: HMAC-SHA256 via x-telecom-signature header (t=<ts>,v1=<hex>)
  */
 const datahouseWebhook = async (req, res) => {
     try {
-        // --- Signature Verification (HMAC-SHA256, Stripe-style) ---
+        // --- Signature Verification (HMAC-SHA256, Stripe/Datahouse style) ---
         const webhookSecret = process.env.DATAHOUSE_WEBHOOK_SECRET;
-        const signature = req.headers['x-telecom-signature'];
+        const signatureHeader = req.headers['x-telecom-signature'] || req.headers['X-Telecom-Signature'];
 
         if (webhookSecret) {
-            if (!signature) {
+            if (!signatureHeader) {
                 console.error('❌ Datahouse Webhook: Missing x-telecom-signature header');
                 return res.status(401).json({ error: 'Missing webhook signature' });
             }
 
-            // Use rawBody (set by express.json verify option in server.js)
-            const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body));
-            const computedSig = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
-
-            // Compare signatures (timing-safe)
-            const sigToCompare = signature.startsWith('sha256=') ? signature.slice(7) : signature;
             try {
-                const isValid = crypto.timingSafeEqual(
-                    Buffer.from(computedSig, 'hex'),
-                    Buffer.from(sigToCompare, 'hex')
-                );
+                const parts = signatureHeader.split(',');
+                let ts = null;
+                let sig = null;
+                for (const part of parts) {
+                    const [k, v] = part.trim().split('=');
+                    if (k === 't') ts = v;
+                    if (k === 'v1') sig = v;
+                }
+
+                if (!ts || !sig) {
+                    sig = signatureHeader.startsWith('sha256=') ? signatureHeader.slice(7) : signatureHeader;
+                }
+
+                if (ts && Math.abs(Date.now() / 1000 - Number(ts)) > 300) {
+                    console.error('❌ Datahouse Webhook: Signature timestamp expired');
+                    return res.status(401).json({ error: 'Webhook timestamp expired' });
+                }
+
+                const rawBody = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body);
+                const payloadToSign = ts ? `${ts}.${rawBody}` : rawBody;
+                const expectedSig = crypto.createHmac('sha256', webhookSecret).update(payloadToSign).digest('hex');
+
+                const isValid = crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expectedSig, 'hex'));
                 if (!isValid) {
                     console.error('❌ Datahouse Webhook: Signature mismatch');
                     return res.status(401).json({ error: 'Invalid webhook signature' });
                 }
+                console.log('✅ Datahouse Webhook signature verified successfully');
             } catch (sigErr) {
                 console.error('❌ Datahouse Webhook: Signature comparison error:', sigErr.message);
                 return res.status(401).json({ error: 'Invalid webhook signature format' });
             }
-
-            console.log('✅ Datahouse Webhook signature verified');
         } else {
             console.warn('⚠️ DATAHOUSE_WEBHOOK_SECRET not set — skipping signature verification');
         }
 
         const eventData = req.body;
-        
         console.log('📞 Datahouse Webhook raw body:', JSON.stringify(eventData, null, 2));
 
         if (!eventData || !eventData.type) {
@@ -55,17 +66,17 @@ const datahouseWebhook = async (req, res) => {
         }
 
         const eventType = eventData.type;
-        const payloadData = eventData.data;
+        const payloadData = eventData.data || {};
 
-        // Skip wallet updates for transaction status updates
+        // Skip non-order events (e.g. wallet deposits)
         if (eventType === 'wallet.updated') {
             console.log('💰 Datahouse wallet updated event received, ignoring for transaction processing.');
             return res.json({ success: true, message: 'Wallet update acknowledged' });
         }
 
-        // Identify transaction identifiers
-        const orderId = payloadData?.order_id || payloadData?.id;
-        const reference = payloadData?.reference || payloadData?.referenceCode;
+        // Identify order identifiers
+        const orderId = payloadData.order_id || payloadData.id;
+        const reference = payloadData.reference || payloadData.reference_code || payloadData.referenceCode;
 
         console.log('📞 Datahouse Webhook parsed details:', {
             eventType,
@@ -79,60 +90,73 @@ const datahouseWebhook = async (req, res) => {
             return res.status(400).json({ error: 'Missing transaction identifiers' });
         }
 
-        // Map event type to our final status
+        // Map event type to final status
         let finalStatus = 'processing';
-        if (['order.approved', 'purchase.success'].includes(eventType)) {
+        if (['order.approved', 'purchase.success', 'order.partially_approved'].includes(eventType)) {
             finalStatus = 'completed';
         } else if (['order.rejected', 'purchase.failed'].includes(eventType)) {
             finalStatus = 'failed';
-        } else if (['order.partially_approved'].includes(eventType)) {
-            finalStatus = 'completed'; // Partially approved is treated as completed (remaining got refunded)
-        } else if (['order.received'].includes(eventType)) {
+        } else if (['order.received', 'order.processing'].includes(eventType)) {
             finalStatus = 'processing';
         }
 
-        console.log(`📋 Updating transaction status for orderId: ${orderId}, reference: ${reference} to: ${finalStatus}`);
+        console.log(`📋 Updating status for orderId: ${orderId}, reference: ${reference} to: ${finalStatus}`);
 
+        // --- Cross-Table Lookup: Search transactions AND agent_orders ---
         let transaction = null;
+        let orderSource = 'transactions';
 
-        // 1. Search by reference (UUID format check)
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reference);
-        if (isUuid) {
-            const [txById] = await pool.execute('SELECT id, user_id, status, api_response, amount_ghc FROM transactions WHERE id = ?::uuid', [reference]);
-            if (txById.length > 0) transaction = txById[0];
-        }
+        // 1. Search main transactions table
+        const [txRows] = await pool.execute(
+            `SELECT id, user_id, status, api_response, amount_ghc FROM transactions 
+             WHERE id::text = ? OR paystack_reference = ?
+             OR api_response->'data'->>'id' = ? 
+             OR api_response->'data'->>'publicId' = ?
+             OR api_response->'data'->>'referenceCode' = ? 
+             OR api_response->>'orderId' = ? 
+             OR api_response->>'providerPublicId' = ?
+             OR api_response->>'providerReferenceCode' = ?`,
+            [orderId || '', reference || '', orderId || '', orderId || '', reference || '', orderId || '', orderId || '', reference || '']
+        );
 
-        // 2. Search database by matches in JSON api_response
-        if (!transaction) {
-            const [txByRef] = await pool.execute(
-                `SELECT id, user_id, status, api_response, amount_ghc FROM transactions 
-                 WHERE api_response->'data'->>'id' = ? 
-                 OR api_response->'data'->>'referenceCode' = ? 
-                 OR api_response->>'orderId' = ? 
-                 OR api_response->>'orderReference' = ?
-                 OR api_response->'order'->>'id' = ?
-                 OR api_response->'order'->>'referenceCode' = ?
-                 OR id::text = ?
-                 OR api_response->>'id' = ?`,
-                [orderId, reference, orderId, reference, orderId, reference, reference, orderId]
+        if (txRows.length > 0) {
+            transaction = txRows[0];
+            orderSource = 'transactions';
+        } else {
+            // 2. Search agent_orders table (Storefront purchases)
+            const [agentOrderRows] = await pool.execute(
+                `SELECT id, store_id, agent_id, customer_phone, base_price_ghc, selling_price_ghc, profit_ghc, paystack_reference, fulfillment_status as status, api_response 
+                 FROM agent_orders 
+                 WHERE id::text = ? OR paystack_reference = ?
+                 OR api_response->'data'->>'id' = ?
+                 OR api_response->'data'->>'publicId' = ?
+                 OR api_response->'data'->>'referenceCode' = ?
+                 OR api_response->>'orderId' = ?
+                 OR api_response->>'providerPublicId' = ?
+                 OR api_response->>'providerReferenceCode' = ?`,
+                [orderId || '', reference || '', orderId || '', orderId || '', reference || '', orderId || '', orderId || '', reference || '']
             );
-            if (txByRef.length > 0) transaction = txByRef[0];
+            if (agentOrderRows.length > 0) {
+                transaction = agentOrderRows[0];
+                orderSource = 'agent_orders';
+            }
         }
 
         if (!transaction) {
-            console.error(`❌ No transaction found for Datahouse identifiers: order_id=${orderId}, reference=${reference}`);
-            return res.status(404).json({ error: 'Transaction not found' });
+            console.error(`❌ No order found in transactions or agent_orders for Datahouse identifiers: order_id=${orderId}, reference=${reference}`);
+            return res.status(404).json({ error: 'Order not found' });
         }
 
-        const transactionId = transaction.id;
+        const targetId = transaction.id;
 
-        // SECURITY: Prevent status changes once a transaction is in a final state
-        if (transaction.status === 'completed' || transaction.status === 'failed') {
-            console.warn(`🛡️ Webhook: Transaction ${transactionId} is already in final state ${transaction.status}. Ignoring update.`);
-            return res.status(200).json({ success: true, message: 'Transaction already in final state', status: transaction.status });
+        // Replay/Idempotency check: Skip if already in final state
+        const currentStatus = transaction.status;
+        if (currentStatus === 'completed' || currentStatus === 'fulfilled' || currentStatus === 'failed' || currentStatus === 'refunded') {
+            console.warn(`🛡️ Webhook: Order ${targetId} is already in final state "${currentStatus}". Ignoring duplicate event.`);
+            return res.status(200).json({ success: true, message: 'Order already in final state', status: currentStatus });
         }
 
-        // Merge existing api_response with new webhook data
+        // Merge api_response metadata
         let existingApiResponse = {};
         try {
             if (transaction.api_response) {
@@ -140,9 +164,7 @@ const datahouseWebhook = async (req, res) => {
                     ? JSON.parse(transaction.api_response)
                     : transaction.api_response;
             }
-        } catch (e) {
-            console.error('Error parsing existing api_response:', e);
-        }
+        } catch (e) {}
 
         const updatedApiResponse = {
             ...existingApiResponse,
@@ -151,43 +173,79 @@ const datahouseWebhook = async (req, res) => {
             updated_at: new Date().toISOString()
         };
 
-        // Update transaction
-        await pool.execute(
-            'UPDATE transactions SET status = ?, api_response = ? WHERE id = ?::uuid',
-            [finalStatus, JSON.stringify(updatedApiResponse), transactionId]
-        );
-
+        // --- Execute Updates based on Order Source ---
         let isRefunded = false;
-        if (finalStatus === 'failed') {
-            const { processAutomatedRefund } = require('../utils/refundHelper');
-            const refundRes = await processAutomatedRefund({
-                transactionId: transactionId,
-                userId: transaction.user_id,
-                reason: `Datahouse webhook failure event (${eventType})`
-            });
-            isRefunded = refundRes.success;
+
+        if (orderSource === 'transactions') {
+            await pool.execute(
+                'UPDATE transactions SET status = ?, api_response = ? WHERE id = ?::uuid',
+                [finalStatus, JSON.stringify(updatedApiResponse), targetId]
+            );
+
+            if (finalStatus === 'failed') {
+                const { processAutomatedRefund } = require('../utils/refundHelper');
+                const refundRes = await processAutomatedRefund({
+                    transactionId: targetId,
+                    userId: transaction.user_id,
+                    reason: `Datahouse webhook failure event (${eventType})`
+                });
+                isRefunded = refundRes.success;
+            }
+
+            triggerTransactionWebhook(targetId, finalStatus).catch(() => {});
+
+            // Socket.IO notification for main customer
+            const io = req.app.get('io');
+            if (io && transaction.user_id) {
+                io.to(transaction.user_id).emit('transactionUpdate', {
+                    transactionId: targetId,
+                    status: finalStatus,
+                    message: finalStatus === 'completed'
+                        ? 'Your data bundle has been delivered!'
+                        : finalStatus === 'failed'
+                            ? (isRefunded ? 'Data bundle delivery failed. Your wallet has been automatically refunded.' : 'Data bundle delivery failed. Please contact support.')
+                            : 'Your order status has been updated.'
+                });
+            }
+
+        } else if (orderSource === 'agent_orders') {
+            const dbFulfillmentStatus = finalStatus === 'completed' ? 'completed' : (finalStatus === 'failed' ? 'refunded' : 'processing');
+            
+            await pool.execute(
+                `UPDATE agent_orders 
+                 SET fulfillment_status = ?, api_response = ?, updated_at = NOW() 
+                 WHERE id = ?::uuid`,
+                [dbFulfillmentStatus, JSON.stringify(updatedApiResponse), targetId]
+            );
+
+            // If storefront order succeeded, credit agent profit
+            if (dbFulfillmentStatus === 'completed') {
+                const profitGhc = parseFloat(transaction.profit_ghc || 0);
+                if (profitGhc > 0 && transaction.agent_id) {
+                    await pool.execute(
+                        `UPDATE agent_wallets 
+                         SET available_balance = available_balance + ?,
+                             total_profit_earned = total_profit_earned + ?,
+                             updated_at = NOW()
+                         WHERE agent_id = ?::uuid`,
+                        [profitGhc, profitGhc, transaction.agent_id]
+                    ).catch(err => console.error('Error crediting agent profit on webhook:', err));
+                }
+            }
+
+            // Socket.IO notification for storefront agent & customer
+            const io = req.app.get('io');
+            if (io && transaction.agent_id) {
+                io.to(transaction.agent_id).emit('agentOrderUpdate', {
+                    orderId: targetId,
+                    status: dbFulfillmentStatus,
+                    message: dbFulfillmentStatus === 'completed' ? 'Storefront order completed & delivered!' : 'Storefront order updated'
+                });
+            }
         }
 
-        console.log(`✅ Transaction ${transactionId} updated to ${finalStatus} via Webhook`);
-
-        // Trigger partner webhook if applicable
-        triggerTransactionWebhook(transactionId, finalStatus).catch(() => {});
-
-        // Emit socket/real-time event
-        const io = req.app.get('io');
-        if (io) {
-            io.to(transaction.user_id).emit('transactionUpdate', {
-                transactionId: transactionId,
-                status: finalStatus,
-                message: finalStatus === 'completed'
-                    ? 'Your data bundle has been delivered!'
-                    : finalStatus === 'failed'
-                        ? (isRefunded ? 'Data bundle delivery failed. Your wallet has been automatically refunded.' : 'Data bundle delivery failed. Please contact support.')
-                        : 'Your order status has been updated.'
-            });
-        }
-
-        res.json({ success: true, message: 'Webhook processed', status: finalStatus });
+        console.log(`✅ Order ${targetId} (${orderSource}) updated to ${finalStatus} via Webhook`);
+        res.json({ success: true, message: 'Webhook processed', status: finalStatus, source: orderSource });
 
     } catch (error) {
         console.error('❌ Datahouse webhook error:', error);
