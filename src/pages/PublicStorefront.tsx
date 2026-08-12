@@ -494,10 +494,20 @@ export default function PublicStorefront() {
 
         setIsInitializing(true);
         try {
-            const res = await agentStoreService.initializeCustomerPurchase(slug, {
+            const res: any = await agentStoreService.initializeCustomerPurchase(slug, {
                 bundleId: selectedBundle.bundle_id,
                 customerPhone: customerPhone.trim()
             });
+
+            if (res.status === 'pending_mtn_approval' || res.success === false) {
+                toast({
+                    title: '⚠️ MTN Number Pending Approval',
+                    description: res.message || 'This recipient number is not currently verified for MTN data delivery. Your order has NOT been placed and you have NOT been charged. The number has been submitted for MTN approval.',
+                    variant: 'destructive',
+                    duration: 9000
+                });
+                return;
+            }
 
             if (res.success && res.authorization_url) {
                 window.location.href = res.authorization_url;

@@ -546,16 +546,22 @@ const precheckBeneficiary = async (network, phoneNumbers, record = false, apiKey
         };
 
         const res = await makeDatahouseRequest('POST', '/agent/beneficiaries/precheck', datahouseApiKey, payload, baseUrl);
+        const dataPayload = res.data?.data || null;
+        const results = dataPayload?.results || (Array.isArray(dataPayload) ? dataPayload : []);
+
         return {
-            success: res.ok && res.data?.success,
-            data: res.data?.data || null,
+            success: Boolean(res.ok && res.data?.success),
+            results: results,
+            data: dataPayload,
+            raw: res.data || null,
             error: res.data?.error?.message || res.data?.message || null
         };
     } catch (err) {
         console.error('❌ Datahouse precheckBeneficiary error:', err);
-        return { success: false, error: err.message };
+        return { success: false, error: err.message, results: [] };
     }
 };
+
 /**
  * Public precheck endpoint (unauthenticated, max 10 numbers)
  * Endpoint: POST /orders/beneficiaries/precheck
@@ -568,14 +574,19 @@ const precheckPublicBeneficiary = async (network, phoneNumbers, baseUrl = null) 
         };
 
         const res = await makeDatahouseRequest('POST', '/orders/beneficiaries/precheck', '', payload, baseUrl);
+        const dataPayload = res.data?.data || null;
+        const results = dataPayload?.results || (Array.isArray(dataPayload) ? dataPayload : []);
+
         return {
-            success: res.ok && res.data?.success,
-            data: res.data?.data || null,
+            success: Boolean(res.ok && res.data?.success),
+            results: results,
+            data: dataPayload,
+            raw: res.data || null,
             error: res.data?.error?.message || res.data?.message || null
         };
     } catch (err) {
         console.error('❌ Datahouse precheckPublicBeneficiary error:', err);
-        return { success: false, error: err.message };
+        return { success: false, error: err.message, results: [] };
     }
 };
 

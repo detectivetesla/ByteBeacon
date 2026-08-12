@@ -1123,36 +1123,29 @@ exports.initializeCustomerPurchase = async (req, res) => {
         const sellingPrice = parseFloat(prod.agent_price_ghc);
         const profit = Math.max(0, sellingPrice - basePrice);
 
-        // Pre-check phone number with provider/DataHouse
-        const { precheckPublicBeneficiary, normalizeGhanaPhone } = require('../utils/datahouse');
-        const normalizedPhone = normalizeGhanaPhone(customerPhone);
-        if (!normalizedPhone || normalizedPhone.length < 10) {
-            return res.status(400).json({ success: false, error: 'Recipient phone number is invalid. Purchase cancelled.' });
-        }
+        // PRECHECK: Centralized MTN beneficiary validation BEFORE Paystack initialization or order creation
+        const { validateBeneficiaryBeforeOrder } = require('../services/mtnValidation.service');
+        const validation = await validateBeneficiaryBeforeOrder({
+            network: prod.network,
+            recipientPhone: customerPhone,
+            bundleSize: prod.data_amount,
+            source: 'Agent Storefront'
+        });
 
-        try {
-            const precheckRes = await precheckPublicBeneficiary(prod.network, [customerPhone]);
-            if (precheckRes.success && precheckRes.data && Array.isArray(precheckRes.data)) {
-                const match = precheckRes.data.find(b => b.phoneNumber === customerPhone || b.phone === customerPhone || b.msisdn === customerPhone);
-                if (match && (match.known === false || match.valid === false)) {
-                    console.log(`📱 [STOREFRONT PRECHECK] MTN recipient ${customerPhone} requires MTN approval. Routing to Pending MTN Approval (No order created).`);
-                    const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
-                    await recordPendingBeneficiary({
-                        phone: customerPhone,
-                        network: prod.network,
-                        bundleSize: prod.data_amount,
-                        source: 'Agent Storefront'
-                    });
-
-                    return res.status(200).json({
-                        success: true,
-                        status: 'pending_mtn_approval',
-                        message: 'Awaiting MTN Approval — This recipient\'s MTN number requires approval before data can be delivered.'
-                    });
-                }
+        if (!validation.allowed) {
+            connection.release();
+            if (validation.status === 'pending_mtn_approval') {
+                return res.status(200).json({
+                    success: false,
+                    status: 'pending_mtn_approval',
+                    message: validation.message,
+                    phone: customerPhone
+                });
             }
-        } catch (preErr) {
-            console.warn('⚠️ Public precheck soft warning during initialize:', preErr.message);
+            return res.status(400).json({
+                success: false,
+                error: validation.error || 'Recipient phone number is invalid or unverified.'
+            });
         }
 
         const reference = `AG-ORD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;

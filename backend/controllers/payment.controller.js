@@ -29,33 +29,29 @@ exports.processPayment = async (req, res) => {
             return res.status(400).json({ success: false, error: 'This data plan is currently disabled and unavailable for purchase' });
         }
 
-        // PRECHECK: Validate MTN beneficiary BEFORE initializing Paystack or creating transaction
-        if ((network || '').toUpperCase() === 'MTN') {
-            try {
-                const { precheckBeneficiary } = require('../utils/datahouse');
-                const precheckRes = await precheckBeneficiary('MTN', [recipientPhone], true);
-                if (precheckRes.success && precheckRes.data && Array.isArray(precheckRes.data)) {
-                    const match = precheckRes.data.find(b => b.phoneNumber === recipientPhone || b.phone === recipientPhone || b.msisdn === recipientPhone);
-                    if (match && match.known === false) {
-                        console.log(`📱 [PAYSTACK PRECHECK] MTN recipient ${recipientPhone} is unvalidated. Routing to Pending MTN Approval (No order created).`);
-                        const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
-                        await recordPendingBeneficiary({
-                            phone: recipientPhone,
-                            network: 'MTN',
-                            bundleSize: dataAmount || 'Unknown',
-                            source: 'Web App'
-                        });
+        // PRECHECK: Centralized MTN beneficiary validation BEFORE initializing Paystack or creating transaction
+        const { validateBeneficiaryBeforeOrder } = require('../services/mtnValidation.service');
+        const validation = await validateBeneficiaryBeforeOrder({
+            network: network || 'MTN',
+            recipientPhone: recipientPhone,
+            bundleSize: dataAmount || 'Unknown',
+            source: 'Web App'
+        });
 
-                        return res.json({
-                            success: true,
-                            status: 'pending_mtn_approval',
-                            message: 'Awaiting MTN Approval — This recipient\'s MTN number requires approval before data can be delivered.'
-                        });
-                    }
-                }
-            } catch (precheckErr) {
-                console.warn('⚠️ MTN Precheck soft error in processPayment:', precheckErr.message);
+        if (!validation.allowed) {
+            connection.release();
+            if (validation.status === 'pending_mtn_approval') {
+                return res.status(200).json({
+                    success: false,
+                    status: 'pending_mtn_approval',
+                    message: validation.message,
+                    phone: recipientPhone
+                });
             }
+            return res.status(400).json({
+                success: false,
+                error: validation.error || 'Beneficiary validation failed'
+            });
         }
 
         const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY;

@@ -243,10 +243,21 @@ export default function DataBundlesPage() {
 
             try {
                 // Make purchase through API
-                const response = await transactionService.purchase({
+                const response: any = await transactionService.purchase({
                     bundleId: selectedBundle.id,
                     recipientPhone: recipientPhone,
                 });
+
+                if (response.status === 'pending_mtn_approval' || response.success === false) {
+                    toast({
+                        title: '⚠️ MTN Number Pending Approval',
+                        description: response.message || 'This recipient\'s MTN number has not been verified. Your order was NOT placed and you were NOT charged. The number has been submitted for MTN approval.',
+                        variant: 'destructive',
+                        duration: 8000,
+                    });
+                    setShowModal(false);
+                    return;
+                }
 
                 // Refresh wallet balance
                 const balanceData = await walletService.getBalance();
@@ -265,7 +276,7 @@ export default function DataBundlesPage() {
                     title: 'Purchase failed',
                     description: err.message || 'An error occurred. Please try again.',
                     variant: 'destructive',
-                    duration: 3000,
+                    duration: 5000,
                 });
             } finally {
                 setPurchasing(false);

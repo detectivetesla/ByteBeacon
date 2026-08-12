@@ -648,8 +648,15 @@ const beneficiaryPrecheck = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Network and phoneNumbers are required' });
         }
 
-        const { precheckBeneficiary } = require('../utils/datahouse');
-        const result = await precheckBeneficiary(network, phoneNumbers, record);
+        const { precheckPublicBeneficiary, precheckBeneficiary } = require('../utils/datahouse');
+        const phonesArr = Array.isArray(phoneNumbers) ? phoneNumbers : [phoneNumbers];
+        
+        let result;
+        if (record) {
+            result = await precheckBeneficiary(network, phonesArr, true);
+        } else {
+            result = await precheckPublicBeneficiary(network, phonesArr);
+        }
 
         if (!result.success) {
             return res.status(400).json({ success: false, error: result.error || 'Beneficiary precheck failed' });
@@ -657,7 +664,8 @@ const beneficiaryPrecheck = async (req, res) => {
 
         res.json({
             success: true,
-            data: result.data
+            results: result.results || [],
+            data: result.data || null
         });
     } catch (err) {
         console.error('Beneficiary precheck error:', err);

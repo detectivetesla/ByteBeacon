@@ -120,37 +120,37 @@ const purchaseData = async (req, res) => {
             activePartner.wallet_balance = parseFloat(activePartner.wallet_balance) || 0.00;
         }
 
-        // PRECHECK: Validate MTN beneficiary BEFORE charging or creating transaction
-        if ((bundle.network || '').toUpperCase() === 'MTN') {
-            try {
-                const { precheckBeneficiary } = require('../utils/datahouse');
-                const precheckRes = await precheckBeneficiary('MTN', [phoneField], true);
-                if (precheckRes.success && precheckRes.data && Array.isArray(precheckRes.data)) {
-                    const match = precheckRes.data.find(b => b.phoneNumber === phoneField || b.phone === phoneField || b.msisdn === phoneField);
-                    if (match && match.known === false) {
-                        console.log(`📱 [PARTNER API PRECHECK] MTN recipient ${phoneField} is unvalidated. Routing to Pending MTN Approval (No order created).`);
-                        await connection.rollback();
-                        connection.release();
+        // PRECHECK: Centralized MTN beneficiary validation BEFORE charging or creating transaction
+        const { validateBeneficiaryBeforeOrder } = require('../services/mtnValidation.service');
+        const validation = await validateBeneficiaryBeforeOrder({
+            network: bundle.network,
+            recipientPhone: phoneField,
+            bundleSize: bundle.data_amount,
+            source: 'Partner API'
+        });
 
-                        const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
-                        await recordPendingBeneficiary({
-                            phone: phoneField,
-                            network: 'MTN',
-                            bundleSize: bundle.data_amount,
-                            source: 'Partner API'
-                        });
+        if (!validation.allowed) {
+            await connection.rollback();
+            connection.release();
 
-                        return res.status(200).json({
-                            success: true,
-                            transaction_id: null,
-                            status: 'pending_mtn_approval',
-                            message: 'Awaiting MTN Approval — This recipient\'s MTN number requires approval before data can be delivered.'
-                        });
+            if (validation.status === 'pending_mtn_approval') {
+                return res.status(200).json({
+                    success: false,
+                    code: 'BENEFICIARY_NOT_VALIDATED',
+                    message: 'This MTN number has not yet been approved for data delivery.',
+                    data: {
+                        phoneNumber: phoneField,
+                        network: bundle.network,
+                        status: 'pending_approval'
                     }
-                }
-            } catch (precheckErr) {
-                console.warn('⚠️ MTN Precheck soft error in partner purchaseData:', precheckErr.message);
+                });
             }
+
+            return res.status(400).json({
+                success: false,
+                error: 'Validation Error',
+                message: validation.error || 'Beneficiary validation failed.'
+            });
         }
 
         // Determine final pricing
