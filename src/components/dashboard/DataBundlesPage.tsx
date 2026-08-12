@@ -272,7 +272,8 @@ export default function DataBundlesPage() {
             } catch (error: unknown) {
                 const err = error as any;
                 console.error('Purchase error:', err);
-                if (err?.code === 'BENEFICIARY_PENDING_MTN_APPROVAL' || err?.data?.code === 'BENEFICIARY_PENDING_MTN_APPROVAL') {
+                const code = err?.code || err?.data?.code;
+                if (code === 'BENEFICIARY_NOT_VALIDATED' || code === 'BENEFICIARY_PENDING_MTN_APPROVAL') {
                     toast({
                         title: '⚠️ MTN Number Pending Approval',
                         description: err?.data?.message || err.message || 'This recipient\'s MTN number has not been verified. Your order was NOT placed and you were NOT charged.',
@@ -321,7 +322,8 @@ export default function DataBundlesPage() {
             } catch (error: unknown) {
                 const err = error as any;
                 console.error('Paystack purchase process error:', err);
-                if (err?.code === 'BENEFICIARY_PENDING_MTN_APPROVAL' || err?.data?.code === 'BENEFICIARY_PENDING_MTN_APPROVAL') {
+                const code = err?.code || err?.data?.code;
+                if (code === 'BENEFICIARY_NOT_VALIDATED' || code === 'BENEFICIARY_PENDING_MTN_APPROVAL') {
                     toast({
                         title: '⚠️ MTN Number Pending Approval',
                         description: err?.data?.message || err.message || 'This recipient\'s MTN number has not been verified. Your order was NOT placed and you were NOT charged.',

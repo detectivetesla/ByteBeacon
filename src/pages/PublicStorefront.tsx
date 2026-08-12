@@ -513,7 +513,8 @@ export default function PublicStorefront() {
                 window.location.href = res.authorization_url;
             }
         } catch (err: any) {
-            if (err?.code === 'BENEFICIARY_PENDING_MTN_APPROVAL' || err?.data?.code === 'BENEFICIARY_PENDING_MTN_APPROVAL') {
+            const code = err?.code || err?.data?.code;
+            if (code === 'BENEFICIARY_NOT_VALIDATED' || code === 'BENEFICIARY_PENDING_MTN_APPROVAL') {
                 toast({
                     title: '⚠️ MTN Number Pending Approval',
                     description: err?.data?.message || err.message || 'This recipient number is not currently verified for MTN data delivery. Your order has NOT been placed and you have NOT been charged.',
