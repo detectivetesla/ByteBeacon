@@ -198,17 +198,18 @@ exports.updateStoreSettings = async (req, res) => {
         }
 
         const storeId = stores[0].id;
+        const cleanLogoUrl = logo_url !== undefined ? String(logo_url || '').trim() : null;
 
         await connection.execute(
             `UPDATE agent_stores 
              SET store_name = COALESCE(?, store_name),
                  description = COALESCE(?, description),
                  phone = COALESCE(?, phone),
-                 logo_url = COALESCE(?, logo_url),
+                 logo_url = CASE WHEN ?::text IS NOT NULL THEN ?::text ELSE logo_url END,
                  is_visible = COALESCE(?, is_visible),
                  updated_at = NOW()
              WHERE id = ?::uuid`,
-            [store_name, description, phone, logo_url, is_visible, storeId]
+            [store_name, description, phone, cleanLogoUrl, cleanLogoUrl, is_visible, storeId]
         );
 
         // Log activity (non-blocking)

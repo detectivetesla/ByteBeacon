@@ -25,6 +25,7 @@ import {
     Check
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { getStoreBranding, GENERIC_STORE_SVG_DATA_URI } from '@/utils/storeBranding';
 
 // Helper for formatting WhatsApp URL safely
 const formatWhatsAppUrl = (phoneStr?: string) => {
@@ -348,10 +349,54 @@ export default function PublicStorefront() {
         loadStorefront();
     }, [slug]);
 
+    // Dynamic White-Label Head Metadata & Favicon Management
     useEffect(() => {
+        const originalTitle = document.title;
+        const iconLink = document.querySelector<HTMLLinkElement>("link[rel*='icon']");
+        const originalIcon = iconLink ? iconLink.href : '/logo.png';
+
+        const branding = getStoreBranding(storeInfo);
+
         if (storeInfo?.store_name) {
-            document.title = `${storeInfo.store_name} - Data Marketplace`;
+            document.title = `${branding.name} — Data Store`;
+
+            // Dynamic Favicon Update
+            if (iconLink) {
+                iconLink.href = branding.faviconUrl;
+            }
+
+            // Dynamic Meta Description & Social Graph Metadata
+            const updateMetaTag = (selector: string, content: string) => {
+                let tag = document.querySelector<HTMLMetaElement>(selector);
+                if (!tag) {
+                    tag = document.createElement('meta');
+                    if (selector.startsWith('meta[name=')) {
+                        tag.name = selector.replace("meta[name='", '').replace("']", '');
+                    } else if (selector.startsWith('meta[property=')) {
+                        tag.setAttribute('property', selector.replace("meta[property='", '').replace("']", ''));
+                    }
+                    document.head.appendChild(tag);
+                }
+                tag.content = content;
+            };
+
+            updateMetaTag("meta[name='description']", branding.description);
+            updateMetaTag("meta[property='og:title']", `${branding.name} — Data Store`);
+            updateMetaTag("meta[property='og:description']", branding.description);
+            if (branding.hasCustomLogo) {
+                updateMetaTag("meta[property='og:image']", branding.logoUrl!);
+                updateMetaTag("meta[name='twitter:image']", branding.logoUrl!);
+            }
+            updateMetaTag("meta[name='twitter:title']", `${branding.name} — Data Store`);
+            updateMetaTag("meta[name='twitter:description']", branding.description);
         }
+
+        return () => {
+            document.title = originalTitle;
+            if (iconLink) {
+                iconLink.href = originalIcon;
+            }
+        };
     }, [storeInfo]);
 
     // Handle payment callback verification if reference in URL
@@ -546,16 +591,24 @@ export default function PublicStorefront() {
                     {/* Branding */}
                     <div className="flex items-center gap-3.5">
                         {storeInfo?.logo_url ? (
-                            <img src={storeInfo.logo_url} alt={storeInfo.store_name} className={`w-11 h-11 rounded-2xl object-cover border ${
-                                isDark ? 'border-white/10' : 'border-slate-200'
-                            }`} />
-                        ) : (
-                            <div className={`w-11 h-11 rounded-2xl border flex items-center justify-center ${
-                                isDark ? 'bg-[#a3e635]/10 border-[#a3e635]/30 text-[#a3e635]' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600'
-                            }`}>
-                                <StoreIcon className="w-6 h-6" />
-                            </div>
-                        )}
+                            <img
+                                src={storeInfo.logo_url}
+                                alt={storeInfo.store_name}
+                                className={`w-11 h-11 rounded-2xl object-cover border ${
+                                    isDark ? 'border-white/10' : 'border-slate-200'
+                                }`}
+                                onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                    const fallback = e.currentTarget.parentElement?.querySelector('.header-fallback-icon');
+                                    if (fallback) fallback.classList.remove('hidden');
+                                }}
+                            />
+                        ) : null}
+                        <div className={`header-fallback-icon ${storeInfo?.logo_url ? 'hidden' : ''} w-11 h-11 rounded-2xl border flex items-center justify-center ${
+                            isDark ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-blue-50 border-blue-200 text-blue-600'
+                        }`}>
+                            <StoreIcon className="w-6 h-6" />
+                        </div>
                         <div>
                             <h1 className={`text-lg sm:text-xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{storeInfo?.store_name}</h1>
                             <p className={`text-[11px] hidden sm:block max-w-sm truncate ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
@@ -1416,7 +1469,6 @@ export default function PublicStorefront() {
 
                 <div className="pt-4 border-t border-current/10 text-[11px] text-slate-400 flex flex-col sm:flex-row items-center justify-between max-w-5xl mx-auto gap-2">
                     <p>© {new Date().getFullYear()} {storeInfo?.store_name || 'Storefront'}. All rights reserved.</p>
-                    <p className="text-[10px] text-slate-400 font-semibold">Powered by ByteBeacon</p>
                 </div>
             </footer>
 

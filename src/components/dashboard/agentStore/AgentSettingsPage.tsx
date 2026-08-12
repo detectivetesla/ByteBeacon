@@ -3,6 +3,7 @@ import { agentStoreService, AgentStore } from '@/services/agentStore.service';
 import { Settings, Save, Globe, Copy, Check, ExternalLink, RefreshCw, Store, Phone, Image, FileText } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { getStorefrontUrl } from '@/utils/domain';
+import { isValidLogoUrl } from '@/utils/storeBranding';
 
 export const AgentSettingsPage: React.FC = () => {
     const { toast } = useToast();
@@ -56,13 +57,23 @@ export const AgentSettingsPage: React.FC = () => {
             return;
         }
 
+        const trimmedLogo = logoUrl.trim();
+        if (trimmedLogo && !isValidLogoUrl(trimmedLogo)) {
+            toast({ 
+                title: 'Validation Error', 
+                description: 'Please enter a valid image URL starting with http:// or https://', 
+                variant: 'destructive' 
+            });
+            return;
+        }
+
         setSaving(true);
         try {
             const res = await agentStoreService.updateSettings({
                 store_name: storeName.trim(),
                 description: description.trim(),
                 phone: phone.trim(),
-                logo_url: logoUrl.trim()
+                logo_url: trimmedLogo
             });
 
             if (res.success) {
@@ -176,17 +187,76 @@ export const AgentSettingsPage: React.FC = () => {
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                            <Image className="w-3.5 h-3.5 text-[#a3e635]" />
-                            Logo Image URL
-                        </label>
+                        <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                                <Image className="w-3.5 h-3.5 text-[#a3e635]" />
+                                Logo Image URL
+                            </label>
+                            {logoUrl.trim() && (
+                                <button
+                                    type="button"
+                                    onClick={() => setLogoUrl('')}
+                                    className="text-[11px] font-bold text-red-400 hover:text-red-300 hover:underline"
+                                >
+                                    Clear Logo
+                                </button>
+                            )}
+                        </div>
                         <input
                             type="url"
                             value={logoUrl}
                             onChange={(e) => setLogoUrl(e.target.value)}
-                            placeholder="https://..."
+                            placeholder="https://example.com/logo.png"
                             className="w-full px-4 py-2.5 bg-[#18191c] border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#a3e635]"
                         />
+
+                        {/* Live Logo Preview Box */}
+                        <div className="mt-2 p-3 bg-[#18191c] rounded-xl border border-white/5 flex items-center gap-3">
+                            {logoUrl.trim() ? (
+                                <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-[#202227] border border-white/10 flex items-center justify-center shrink-0">
+                                    <img
+                                        src={logoUrl.trim()}
+                                        alt="Logo preview"
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                            const fallback = e.currentTarget.parentElement?.querySelector('.fallback-icon');
+                                            if (fallback) fallback.classList.remove('hidden');
+                                            const errMsg = e.currentTarget.parentElement?.parentElement?.querySelector('.logo-error-msg');
+                                            if (errMsg) errMsg.classList.remove('hidden');
+                                        }}
+                                        onLoad={(e) => {
+                                            (e.currentTarget as HTMLImageElement).style.display = 'block';
+                                            const fallback = e.currentTarget.parentElement?.querySelector('.fallback-icon');
+                                            if (fallback) fallback.classList.add('hidden');
+                                            const errMsg = e.currentTarget.parentElement?.parentElement?.querySelector('.logo-error-msg');
+                                            if (errMsg) errMsg.classList.add('hidden');
+                                        }}
+                                    />
+                                    <div className="fallback-icon hidden w-full h-full flex items-center justify-center bg-blue-500/10 text-blue-400">
+                                        <Store className="w-5 h-5" />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                                    <Store className="w-5 h-5" />
+                                </div>
+                            )}
+                            <div className="text-xs">
+                                <p className="font-bold text-slate-300">
+                                    {logoUrl.trim() ? 'Logo Preview' : 'Default Storefront Icon'}
+                                </p>
+                                <p className="text-[11px] text-slate-400">
+                                    {logoUrl.trim()
+                                        ? 'Your custom logo will appear in header, favicon, and social previews.'
+                                        : 'No logo set. Using generic storefront icon (no platform branding).'
+                                    }
+                                </p>
+                                <p className="logo-error-msg hidden text-[11px] text-amber-400 font-medium mt-0.5">
+                                    ⚠️ Unable to load image from URL. Generic icon will be used as fallback.
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
