@@ -362,7 +362,7 @@ const getAllTransactions = async (req, res) => {
                 LEFT JOIN users u ON o.agent_id = u.uuid
                 LEFT JOIN data_bundles b ON o.bundle_id = b.id::uuid
             ) combined_orders
-            WHERE 1=1
+            WHERE status != 'pending_mtn_approval'
         `;
         const params = [];
 

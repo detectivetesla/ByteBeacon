@@ -232,7 +232,7 @@ const getTransactions = async (req, res) => {
                    d.network, d.data_amount
             FROM transactions t
             LEFT JOIN data_bundles d ON t.bundle_id = d.id::uuid
-            WHERE t.user_id = ?::uuid
+            WHERE t.user_id = ?::uuid AND t.status != 'pending_mtn_approval'
         `;
         const params = [userId];
 

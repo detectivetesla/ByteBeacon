@@ -713,7 +713,7 @@ exports.getDashboardStats = async (req, res) => {
         const [recentOrders] = await connection.execute(
             `SELECT id, customer_phone, network, data_amount, selling_price_ghc, profit_ghc, fulfillment_status, created_at
              FROM agent_orders
-             WHERE store_id = ?::uuid
+             WHERE store_id = ?::uuid AND fulfillment_status != 'pending_mtn_approval'
              ORDER BY created_at DESC
              LIMIT 5`,
             [store.id]
@@ -765,7 +765,7 @@ exports.getAgentOrders = async (req, res) => {
             SELECT id, customer_phone, network, data_amount, base_price_ghc, selling_price_ghc, profit_ghc,
                    paystack_reference, payment_status, fulfillment_status, created_at
             FROM agent_orders
-            WHERE store_id = ?::uuid
+            WHERE store_id = ?::uuid AND fulfillment_status != 'pending_mtn_approval'
         `;
         const params = [storeId];
 

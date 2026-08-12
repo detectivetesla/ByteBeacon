@@ -387,13 +387,13 @@ const getTransactions = async (req, res) => {
             ? `SELECT t.id, t.status, t.recipient_phone, t.amount_ghc, t.created_at, d.network, d.data_amount
                FROM transactions t
                LEFT JOIN data_bundles d ON t.bundle_id = d.id::uuid
-               WHERE t.user_id = ?::uuid
+               WHERE t.user_id = ?::uuid AND t.status != 'pending_mtn_approval'
                ORDER BY t.created_at DESC
                LIMIT ? OFFSET ?`
             : `SELECT t.id, t.status, t.recipient_phone, t.amount_ghc, t.created_at, d.network, d.data_amount
                FROM transactions t
                LEFT JOIN data_bundles d ON t.bundle_id = d.id::uuid
-               WHERE t.partner_id = ?::uuid
+               WHERE t.partner_id = ?::uuid AND t.status != 'pending_mtn_approval'
                ORDER BY t.created_at DESC
                LIMIT ? OFFSET ?`;
 
