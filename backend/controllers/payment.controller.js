@@ -432,10 +432,7 @@ exports.paystackWebhook = async (req, res) => {
 
                         await connection.commit();
                     } else if (fulfillment.status === 'pending_mtn_approval') {
-                        await connection.execute(
-                            `UPDATE agent_orders SET fulfillment_status = 'pending_mtn_approval', api_response = ?, updated_at = NOW() WHERE id = ?::uuid`,
-                            [JSON.stringify(fulfillment.apiResponse || {}), order.id]
-                        );
+                        console.log(`📱 [PAYSTACK WEBHOOK] Order ${order.id} requires Pending MTN Approval. Purging from agent_orders.`);
                         const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
                         await recordPendingBeneficiary({
                             phone: order.customer_phone,
@@ -445,6 +442,9 @@ exports.paystackWebhook = async (req, res) => {
                             orderId: order.id,
                             orderReference: reference
                         }).catch(err => console.warn('⚠️ Record pending beneficiary warning:', err.message));
+
+                        // Purge order record so NO record exists in normal order tables
+                        await connection.execute(`DELETE FROM agent_orders WHERE id = ?::uuid`, [order.id]);
                     } else {
                         await connection.execute(
                             `UPDATE agent_orders SET fulfillment_status = 'failed', updated_at = NOW() WHERE id = ?::uuid`,

@@ -639,6 +639,46 @@ const initializeTables = async () => {
             `).catch(() => {});
             console.log('✅ Migrated historical confirmed refunded records');
 
+            // Reconcile and purge any historical pending_mtn_approval rows from normal orders tables
+            console.log('🛠️ Reconciling historical Pending MTN Approval records...');
+            try {
+                const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
+
+                // 1. Fetch any transactions with status 'pending_mtn_approval'
+                const [legacyTxs] = await pool.execute(`SELECT recipient_phone, amount_ghc, created_at, id FROM transactions WHERE status = 'pending_mtn_approval'`);
+                for (const tx of legacyTxs) {
+                    await recordPendingBeneficiary({
+                        phone: tx.recipient_phone,
+                        network: 'MTN',
+                        bundleSize: 'Unknown',
+                        source: 'Reconciled Legacy'
+                    }).catch(() => {});
+                }
+                if (legacyTxs.length > 0) {
+                    await pool.execute(`DELETE FROM transactions WHERE status = 'pending_mtn_approval'`);
+                    console.log(`✅ Reconciled ${legacyTxs.length} historical pending_mtn_approval transactions`);
+                }
+
+                // 2. Fetch any agent_orders with fulfillment_status 'pending_mtn_approval'
+                const [legacyOrders] = await pool.execute(`SELECT customer_phone, data_amount, id, paystack_reference FROM agent_orders WHERE fulfillment_status = 'pending_mtn_approval'`);
+                for (const ord of legacyOrders) {
+                    await recordPendingBeneficiary({
+                        phone: ord.customer_phone,
+                        network: 'MTN',
+                        bundleSize: ord.data_amount || 'Unknown',
+                        source: 'Reconciled Legacy Agent Order',
+                        orderId: ord.id,
+                        orderReference: ord.paystack_reference
+                    }).catch(() => {});
+                }
+                if (legacyOrders.length > 0) {
+                    await pool.execute(`DELETE FROM agent_orders WHERE fulfillment_status = 'pending_mtn_approval'`);
+                    console.log(`✅ Reconciled ${legacyOrders.length} historical pending_mtn_approval agent orders`);
+                }
+            } catch (recErr) {
+                console.warn('⚠️ Pending MTN approval reconciliation warning:', recErr.message);
+            }
+
             console.log('✅ Agent Store & Reseller Marketplace tables initialized successfully');
         } catch (colErr) {
             console.error('⚠️ Migration error:', colErr.message);

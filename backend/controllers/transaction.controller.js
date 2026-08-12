@@ -74,6 +74,35 @@ const purchaseBundle = async (req, res) => {
             return res.status(400).json({ error: 'Insufficient wallet balance' });
         }
 
+        // PRECHECK: Validate MTN beneficiary BEFORE creating any order or deducting wallet
+        if ((bundle.network || '').toUpperCase() === 'MTN') {
+            try {
+                const { precheckBeneficiary } = require('../utils/datahouse');
+                const precheckRes = await precheckBeneficiary('MTN', [recipientPhone], true);
+                if (precheckRes.success && precheckRes.data && Array.isArray(precheckRes.data)) {
+                    const match = precheckRes.data.find(b => b.phoneNumber === recipientPhone || b.phone === recipientPhone || b.msisdn === recipientPhone);
+                    if (match && match.known === false) {
+                        console.log(`📱 [PRECHECK] MTN recipient ${recipientPhone} is unvalidated. Routing to Pending MTN Approval (No order created).`);
+                        const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
+                        await recordPendingBeneficiary({
+                            phone: recipientPhone,
+                            network: 'MTN',
+                            bundleSize: bundle.data_amount,
+                            source: 'Web App'
+                        });
+
+                        return res.json({
+                            success: true,
+                            status: 'pending_mtn_approval',
+                            message: 'Awaiting MTN Approval — This recipient\'s MTN number requires approval before data can be delivered.'
+                        });
+                    }
+                }
+            } catch (precheckErr) {
+                console.warn('⚠️ MTN Precheck soft error in purchaseBundle:', precheckErr.message);
+            }
+        }
+
         // Start transaction
         let connection;
         try {
@@ -118,8 +147,7 @@ const purchaseBundle = async (req, res) => {
 
             await connection.commit();
 
-            // --- INLINE Portal-02 Order Placement ---
-            // Must happen BEFORE sending response (Vercel kills async work after response)
+            // --- INLINE Order Placement ---
             let finalStatus = initialStatus;
             let apiResponse = null;
 
@@ -136,20 +164,41 @@ const purchaseBundle = async (req, res) => {
 
                     apiResponse = fulfillment.apiResponse || { error: fulfillment.message || fulfillment.error };
 
-                    // Only update to 'failed' if Portal-02 explicitly rejected the order
-                    // Keep as 'processing' for transient errors so cron can retry
+                    if (fulfillment.status === 'pending_mtn_approval') {
+                        console.log(`📱 [PURCHASE] Provider returned pending_mtn_approval for ${transactionId}. Refunding wallet and purging order record.`);
+                        
+                        // 1. Record in MTN Beneficiary Approval system
+                        const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
+                        await recordPendingBeneficiary({
+                            phone: recipientPhone,
+                            network: bundle.network,
+                            bundleSize: bundle.data_amount,
+                            source: 'Web App'
+                        });
+
+                        // 2. Refund wallet balance
+                        await pool.execute('UPDATE profiles SET wallet_balance = wallet_balance + ? WHERE id = ?::uuid', [finalPrice, userId]);
+                        await pool.execute('UPDATE users SET wallet_balance = wallet_balance + ? WHERE uuid = ?::uuid', [finalPrice, userId]);
+
+                        // 3. Purge transaction so NO order record exists in transactions table
+                        await pool.execute('DELETE FROM transactions WHERE id = ?::uuid', [transactionId]);
+
+                        return res.json({
+                            success: true,
+                            status: 'pending_mtn_approval',
+                            message: 'Awaiting MTN Approval — This recipient\'s MTN number requires approval before data can be delivered.'
+                        });
+                    }
+
                     if (fulfillment.success) {
                         finalStatus = fulfillment.status; // 'completed' or 'processing'
                     } else if (fulfillment.apiResponse && fulfillment.status === 'failed') {
-                        // Portal-02 responded but explicitly rejected — real failure
                         finalStatus = 'failed';
                     } else {
-                        // Transient error (timeout, network issue, no API response) — keep processing
                         finalStatus = 'processing';
-                        console.log(`⏳ [PURCHASE] Order ${transactionId} kept as 'processing' for retry (error: ${fulfillment.error || fulfillment.message})`);
                     }
 
-                    // Update transaction with Portal-02 result
+                    // Update transaction with result
                     await pool.execute(
                         'UPDATE transactions SET status = ?, api_response = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
                         [finalStatus, JSON.stringify(apiResponse), transactionId]

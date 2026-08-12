@@ -1134,8 +1134,21 @@ exports.initializeCustomerPurchase = async (req, res) => {
             const precheckRes = await precheckPublicBeneficiary(prod.network, [customerPhone]);
             if (precheckRes.success && precheckRes.data && Array.isArray(precheckRes.data)) {
                 const match = precheckRes.data.find(b => b.phoneNumber === customerPhone || b.phone === customerPhone || b.msisdn === customerPhone);
-                if (match && match.valid === false) {
-                    return res.status(400).json({ success: false, error: 'Recipient phone number was rejected by network provider. No order was created.' });
+                if (match && (match.known === false || match.valid === false)) {
+                    console.log(`📱 [STOREFRONT PRECHECK] MTN recipient ${customerPhone} requires MTN approval. Routing to Pending MTN Approval (No order created).`);
+                    const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
+                    await recordPendingBeneficiary({
+                        phone: customerPhone,
+                        network: prod.network,
+                        bundleSize: prod.data_amount,
+                        source: 'Agent Storefront'
+                    });
+
+                    return res.status(200).json({
+                        success: true,
+                        status: 'pending_mtn_approval',
+                        message: 'Awaiting MTN Approval — This recipient\'s MTN number requires approval before data can be delivered.'
+                    });
                 }
             }
         } catch (preErr) {
@@ -1397,14 +1410,8 @@ exports.verifyCustomerPurchase = async (req, res) => {
                 [JSON.stringify(fulfillmentApiResponse), order.id]
             );
         } else if (finalFulfillmentStatus === 'pending_mtn_approval') {
-            // Update order status as pending MTN approval
-            await connection.execute(
-                `UPDATE agent_orders 
-                 SET fulfillment_status = 'pending_mtn_approval', api_response = ?, updated_at = NOW() 
-                 WHERE id = ?::uuid`,
-                [JSON.stringify(fulfillmentApiResponse), order.id]
-            );
-
+            console.log(`📱 Order ${order.id} requires Pending MTN Approval. Purging from agent_orders and recording in MTN approvals system.`);
+            
             // Record in mtn_beneficiary_approvals database system
             const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
             await recordPendingBeneficiary({
@@ -1413,8 +1420,17 @@ exports.verifyCustomerPurchase = async (req, res) => {
                 bundleSize: order.data_amount,
                 source: 'Agent Storefront',
                 orderId: order.id,
-                orderReference: order.paystack_reference || order.id
+                orderReference: order.paystack_reference || reference
             }).catch(err => console.warn('⚠️ Record pending beneficiary warning:', err.message));
+
+            // Purge from agent_orders so NO record exists in normal order tables
+            await connection.execute(`DELETE FROM agent_orders WHERE id = ?::uuid`, [order.id]);
+
+            return res.json({
+                success: true,
+                status: 'pending_mtn_approval',
+                message: 'Awaiting MTN Approval — This recipient\'s MTN number requires approval before data can be delivered.'
+            });
         } else if (finalFulfillmentStatus === 'rejected') {
             // Rejection rule: If number is rejected by DataHouse, PURGE/DELETE the order from agent_orders completely
             console.log(`🚫 Order ${order.id} rejected by provider. Deleting order record from database so it does not reflect in system.`);

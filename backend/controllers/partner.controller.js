@@ -120,6 +120,39 @@ const purchaseData = async (req, res) => {
             activePartner.wallet_balance = parseFloat(activePartner.wallet_balance) || 0.00;
         }
 
+        // PRECHECK: Validate MTN beneficiary BEFORE charging or creating transaction
+        if ((bundle.network || '').toUpperCase() === 'MTN') {
+            try {
+                const { precheckBeneficiary } = require('../utils/datahouse');
+                const precheckRes = await precheckBeneficiary('MTN', [phoneField], true);
+                if (precheckRes.success && precheckRes.data && Array.isArray(precheckRes.data)) {
+                    const match = precheckRes.data.find(b => b.phoneNumber === phoneField || b.phone === phoneField || b.msisdn === phoneField);
+                    if (match && match.known === false) {
+                        console.log(`📱 [PARTNER API PRECHECK] MTN recipient ${phoneField} is unvalidated. Routing to Pending MTN Approval (No order created).`);
+                        await connection.rollback();
+                        connection.release();
+
+                        const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
+                        await recordPendingBeneficiary({
+                            phone: phoneField,
+                            network: 'MTN',
+                            bundleSize: bundle.data_amount,
+                            source: 'Partner API'
+                        });
+
+                        return res.status(200).json({
+                            success: true,
+                            transaction_id: null,
+                            status: 'pending_mtn_approval',
+                            message: 'Awaiting MTN Approval — This recipient\'s MTN number requires approval before data can be delivered.'
+                        });
+                    }
+                }
+            } catch (precheckErr) {
+                console.warn('⚠️ MTN Precheck soft error in partner purchaseData:', precheckErr.message);
+            }
+        }
+
         // Determine final pricing
         let finalPrice = parseFloat(bundle.price_ghc);
         if (activePartner.user_id) {
@@ -274,6 +307,41 @@ const purchaseData = async (req, res) => {
                 });
 
                 apiResponse = fulfillment.apiResponse || { error: fulfillment.message || fulfillment.error };
+
+                if (fulfillment.status === 'pending_mtn_approval') {
+                    console.log(`📱 [PARTNER API] Provider returned pending_mtn_approval for ${transactionId}. Restoring balance and purging order record.`);
+                    
+                    // 1. Record in MTN Beneficiary Approval system
+                    const { recordPendingBeneficiary } = require('../services/mtnApproval.service');
+                    await recordPendingBeneficiary({
+                        phone: phoneField,
+                        network: bundle.network,
+                        bundleSize: bundle.data_amount,
+                        source: 'Partner API'
+                    });
+
+                    // 2. Restore balance/credit if debited
+                    if (!req.isTest && !activePartner.allow_unlimited_purchases && !activePartner.credit_enabled) {
+                        if (isAgent) {
+                            await pool.execute('UPDATE profiles SET wallet_balance = wallet_balance + ? WHERE id = ?::uuid', [finalPrice, activePartner.id]);
+                            await pool.execute('UPDATE users SET wallet_balance = wallet_balance + ? WHERE uuid = ?::uuid', [finalPrice, activePartner.id]);
+                        } else {
+                            await pool.execute('UPDATE partners SET wallet_balance = wallet_balance + ? WHERE id = ?::uuid', [finalPrice, activePartner.id]);
+                        }
+                    } else if (activePartner.credit_enabled || activePartner.allow_unlimited_purchases) {
+                        await pool.execute('UPDATE partners SET outstanding_balance = GREATEST(0, outstanding_balance - ?) WHERE id = ?::uuid', [finalPrice, activePartner.id]);
+                    }
+
+                    // 3. Purge transaction so NO order record exists in transactions table
+                    await pool.execute('DELETE FROM transactions WHERE id = ?::uuid', [transactionId]);
+
+                    return res.status(200).json({
+                        success: true,
+                        transaction_id: null,
+                        status: 'pending_mtn_approval',
+                        message: 'Awaiting MTN Approval — This recipient\'s MTN number requires approval before data can be delivered.'
+                    });
+                }
 
                 if (fulfillment.success) {
                     finalStatus = fulfillment.status; // 'completed' or 'processing'
