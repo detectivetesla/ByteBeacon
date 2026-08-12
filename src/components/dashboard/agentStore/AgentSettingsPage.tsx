@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { agentStoreService, AgentStore } from '@/services/agentStore.service';
 import { Settings, Save, Globe, Copy, Check, ExternalLink, RefreshCw, Store, Phone, Image, FileText } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { getStorefrontUrl } from '@/utils/domain';
 
 export const AgentSettingsPage: React.FC = () => {
     const { toast } = useToast();
@@ -38,7 +39,7 @@ export const AgentSettingsPage: React.FC = () => {
         loadStoreData();
     }, []);
 
-    const publicUrl = store ? `${window.location.origin}/store/${store.slug}` : '';
+    const publicUrl = store ? getStorefrontUrl(store.slug) : '';
 
     const handleCopyLink = () => {
         if (!publicUrl) return;
@@ -118,7 +119,7 @@ export const AgentSettingsPage: React.FC = () => {
                             Public Storefront Link
                         </div>
                         <a
-                            href={`/store/${store.slug}`}
+                            href={publicUrl}
                             target="_blank"
                             rel="noreferrer"
                             className="text-xs text-[#a3e635] font-bold hover:underline flex items-center gap-1"

@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { agentStoreService, AgentStore } from '@/services/agentStore.service';
 import { AgentStoreContainer } from './AgentStoreContainer';
 import { AgentNotificationCenter } from './AgentNotificationCenter';
+import { getStorefrontUrl } from '@/utils/domain';
 import {
     Store,
     BarChart3,
@@ -337,7 +338,7 @@ export const AgentStoreLayout: React.FC = () => {
                         <div className="pt-3.5 border-t border-white/5 mt-3.5 space-y-1 min-w-0">
                             <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Public Storefront</p>
                             <a
-                                href={`/store/${store.slug}`}
+                                href={getStorefrontUrl(store.slug)}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold text-[#a3e635] bg-[#a3e635]/10 border border-[#a3e635]/20 hover:bg-[#a3e635]/20 transition-all min-w-0"
@@ -384,7 +385,7 @@ export const AgentStoreLayout: React.FC = () => {
                     <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
                         {store?.slug && (
                             <a
-                                href={`/store/${store.slug}`}
+                                href={getStorefrontUrl(store.slug)}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="px-3.5 py-1.5 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-[#a3e635]/20 whitespace-nowrap shrink-0"

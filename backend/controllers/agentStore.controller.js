@@ -1128,7 +1128,8 @@ exports.initializeCustomerPurchase = async (req, res) => {
         }
 
         const reference = `AG-ORD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-        const resolvedCallback = callbackUrl || `${process.env.FRONTEND_URL}/store/${slug}?reference=${reference}`;
+        const storefrontBase = (process.env.STOREFRONT_URL || 'https://apisolutions.store').replace(/\/$/, '');
+        const resolvedCallback = callbackUrl || `${storefrontBase}/store/${slug}?reference=${reference}`;
 
         // Initialize Paystack payment
         const paystackResponse = await fetch(`${PAYSTACK_BASE_URL}/transaction/initialize`, {

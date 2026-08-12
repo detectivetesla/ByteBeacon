@@ -9,6 +9,7 @@ import { AgentWalletPage } from './AgentWalletPage';
 import { AgentAnalyticsPage } from './AgentAnalyticsPage';
 import { AgentCustomersPage } from './AgentCustomersPage';
 import { AgentSettingsPage } from './AgentSettingsPage';
+import { getStorefrontUrl } from '@/utils/domain';
 import {
     Store, Search, Bell, Copy, Share2, DollarSign, TrendingUp, ShoppingCart,
     Wallet, Package, ShieldCheck, Tag, ArrowRight, UserCheck, ChevronRight,
@@ -155,10 +156,10 @@ export const AgentStoreDashboard: React.FC = () => {
                     <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0 shrink-0">
                         {/* Store Link Button */}
                         <a
-                            href={`/store/${store.slug}`}
+                            href={getStorefrontUrl(store.slug)}
                             target="_blank"
                             rel="noreferrer"
-                            className="px-3.5 sm:px-4 py-1.5 sm:py-2 bg-[#a3e635] hover:bg-[#b5f73c] text-black font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-[#a3e635]/20 whitespace-nowrap shrink-0"
+                            className="px-3.5 sm:px-4 py-1.5 sm:py-2 bg-[#a3e635] hover:bg-[#b5f73c] text-[#000000] font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-[#a3e635]/20 whitespace-nowrap shrink-0"
                         >
                             + Storefront Link
                         </a>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Copy, Share2, Check, ExternalLink, Globe } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { getStorefrontUrl } from '@/utils/domain';
 
 interface StoreLinkSectionProps {
     storeName: string;
@@ -11,7 +12,7 @@ export const StoreLinkSection: React.FC<StoreLinkSectionProps> = ({ storeName, s
     const { toast } = useToast();
     const [copied, setCopied] = useState(false);
 
-    const publicUrl = `${window.location.origin}/store/${slug}`;
+    const publicUrl = getStorefrontUrl(slug);
 
     const handleCopy = () => {
         navigator.clipboard.writeText(publicUrl);
@@ -49,7 +50,7 @@ export const StoreLinkSection: React.FC<StoreLinkSectionProps> = ({ storeName, s
                     </div>
                 </div>
                 <a
-                    href={`/store/${slug}`}
+                    href={publicUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="p-2 rounded-xl bg-[#18191c] text-slate-400 hover:text-white border border-white/5 transition-all"

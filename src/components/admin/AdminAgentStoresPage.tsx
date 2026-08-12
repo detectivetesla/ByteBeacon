@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { agentStoreService, AgentStore, AgentWithdrawal } from '@/services/agentStore.service';
 import { Store, RefreshCw, Search, ChevronDown, AlertTriangle, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { getStorefrontUrl } from '@/utils/domain';
 
 type StoreWithMeta = AgentStore & { owner_name: string; owner_email: string; total_orders: number };
 type WithdrawalWithMeta = AgentWithdrawal & { store_name: string; agent_name: string; agent_email: string };
@@ -678,9 +679,16 @@ export const AdminAgentStoresPage: React.FC = () => {
                                 <span className="text-muted-foreground">Store</span>
                                 <span className="font-semibold text-foreground">{selectedStore.store_name}</span>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Slug</span>
-                                <span className="font-mono text-muted-foreground">/store/{selectedStore.slug}</span>
+                            <div className="flex justify-between items-center">
+                                <span className="text-muted-foreground">Store Link</span>
+                                <a
+                                    href={getStorefrontUrl(selectedStore.slug)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-mono text-primary text-xs hover:underline flex items-center gap-1"
+                                >
+                                    apisolutions.store/store/{selectedStore.slug}
+                                </a>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Phone</span>

@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { agentStoreService, AgentStore } from '@/services/agentStore.service';
 import { Store, CheckCircle2, Clock, Zap, DollarSign, ArrowRight, ShieldCheck, Sparkles, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { getStorefrontUrl } from '@/utils/domain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -85,7 +86,7 @@ export const AgentStoreLanding: React.FC<AgentStoreLandingProps> = ({ existingSt
                         </div>
                         <div>
                             <h1 className="text-2xl font-display font-bold text-foreground tracking-tight">{store.store_name}</h1>
-                            <p className="text-xs text-muted-foreground font-medium mt-0.5">URL: bytebeacon.online/store/{store.slug}</p>
+                            <p className="text-xs text-muted-foreground font-medium mt-0.5">URL: {getStorefrontUrl(store.slug)}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">

@@ -46,8 +46,11 @@ const io = new Server(server, {
             } else {
                 const allowedOrigins = [
                     process.env.FRONTEND_URL,
+                    process.env.STOREFRONT_URL,
                     'https://www.bytebeacon.online',
-                    'https://bytebeacon.online'
+                    'https://bytebeacon.online',
+                    'https://apisolutions.store',
+                    'https://www.apisolutions.store'
                 ].filter(Boolean);
                 if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
                     callback(null, true);
@@ -94,8 +97,11 @@ app.use(cors((req, callback) => {
     } else {
         const allowedOrigins = [
             process.env.FRONTEND_URL,
+            process.env.STOREFRONT_URL,
             'https://www.bytebeacon.online',
-            'https://bytebeacon.online'
+            'https://bytebeacon.online',
+            'https://apisolutions.store',
+            'https://www.apisolutions.store'
         ].filter(Boolean);
 
         const origin = req.header('Origin');

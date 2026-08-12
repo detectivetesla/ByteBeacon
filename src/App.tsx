@@ -89,14 +89,29 @@ const AppWithMaintenance = () => {
     return <MaintenancePage />;
   }
 
-  // Check if developers subdomain is accessed
-  const isDeveloperSubdomain = window.location.hostname.startsWith('developers.');
+  // Check domain context
+  const hostname = window.location.hostname.toLowerCase();
+  const isDeveloperSubdomain = hostname.startsWith('developers.');
+  const isStorefrontDomainAccess = hostname.includes('apisolutions.store');
 
   if (isDeveloperSubdomain) {
     return (
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="*" element={<DeveloperPortal />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
+
+  // Domain-specific routing for apisolutions.store (Public Storefront platform)
+  if (isStorefrontDomainAccess) {
+    return (
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/store/:slug" element={<PublicStorefront />} />
+          <Route path="/" element={<PublicStorefront />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     );
@@ -120,11 +135,38 @@ const AppWithMaintenance = () => {
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/terms-of-service" element={<TermsOfService />} />
         <Route path="/developers" element={<DeveloperPortal />} />
-        <Route path="/store/:slug" element={<PublicStorefront />} />
+        {/* On main domain (bytebeacon.online), /store/:slug redirects to canonical storefront on apisolutions.store */}
+        <Route
+          path="/store/:slug"
+          element={
+            hostname.includes('bytebeacon.online') ? (
+              <StorefrontRedirect />
+            ) : (
+              <PublicStorefront />
+            )
+          }
+        />
         <Route path="/agent-store/*" element={<AgentStoreLayout />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
+  );
+};
+
+// Redirection component for old storefront URLs on bytebeacon.online
+const StorefrontRedirect = () => {
+  useEffect(() => {
+    const storefrontBase = (import.meta.env.VITE_STOREFRONT_URL || 'https://apisolutions.store').replace(/\/$/, '');
+    const currentPath = window.location.pathname;
+    const searchParams = window.location.search;
+    const targetUrl = `${storefrontBase}${currentPath}${searchParams}`;
+    window.location.replace(targetUrl);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-[#18191c] flex items-center justify-center text-slate-300 text-sm font-medium">
+      Redirecting to public storefront...
+    </div>
   );
 };
 
