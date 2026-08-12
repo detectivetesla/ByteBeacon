@@ -439,15 +439,19 @@ const checkOrderStatus = async (orderIdOrReference, apiKey, baseUrl = null) => {
             };
         }
 
+        const { mapProviderStatusToInternal } = require('./statusMapper');
         const orderData = response.data?.data;
         const portalStatus = String(orderData?.status ?? '').toLowerCase();
-        let mappedStatus = 'processing';
+        const errCode = response.data?.error?.code || orderData?.errorCode || null;
+        const errMsg = response.data?.error?.message || response.data?.message || orderData?.errorMessage || null;
 
-        if (['delivered', 'completed', 'success', 'fulfilled', 'resolved', 'delivered_callback'].includes(portalStatus)) {
-            mappedStatus = 'completed';
-        } else if (['failed', 'error', 'cancelled', 'rejected', 'failed_callback', 'refunded', 'could_not_deliver'].includes(portalStatus)) {
-            mappedStatus = 'failed';
-        }
+        const mappedStatus = mapProviderStatusToInternal({
+            providerStatus: portalStatus,
+            statusCode: response.status,
+            errorCode: errCode,
+            errorMessage: errMsg,
+            data: response.data
+        });
 
         return {
             success: true,

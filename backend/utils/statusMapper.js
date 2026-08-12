@@ -51,7 +51,7 @@ const mapProviderStatusToInternal = ({ providerStatus, statusCode, errorCode, er
     // 2. Check provider status string
     const status = (providerStatus || '').toLowerCase().trim();
 
-    if (['completed', 'success', 'delivered', 'fulfilled', 'resolved', 'delivered_callback'].includes(status)) {
+    if (['completed', 'success', 'delivered', 'fulfilled', 'resolved', 'delivered_callback', 'approved', 'order.approved'].includes(status)) {
         return INTERNAL_STATUS.COMPLETED;
     }
 
@@ -83,7 +83,39 @@ const mapProviderStatusToInternal = ({ providerStatus, statusCode, errorCode, er
     return INTERNAL_STATUS.FAILED;
 };
 
+const TERMINAL_STATUSES = new Set(['completed', 'fulfilled', 'rejected', 'failed', 'refunded', 'partially_approved']);
+
+const isTerminalStatus = (status) => {
+    return TERMINAL_STATUSES.has((status || '').toLowerCase().trim());
+};
+
+const isValidStatusTransition = (currentStatus, newStatus) => {
+    const current = (currentStatus || '').toLowerCase().trim();
+    const target = (newStatus || '').toLowerCase().trim();
+
+    if (!current || current === target) return true; // Idempotent or uninitialized
+
+    // If current status is terminal, prevent regression to non-terminal states
+    if (TERMINAL_STATUSES.has(current)) {
+        if (!TERMINAL_STATUSES.has(target)) {
+            console.warn(`🛡️ [STATUS GUARD] Blocked invalid status regression from terminal "${current}" to non-terminal "${target}".`);
+            return false;
+        }
+        // Allow transition from failed/rejected to refunded
+        if (target === INTERNAL_STATUS.REFUNDED) return true;
+        // Block other terminal-to-terminal changes like completed -> failed/processing
+        if (current === INTERNAL_STATUS.COMPLETED && target !== INTERNAL_STATUS.COMPLETED) {
+            console.warn(`🛡️ [STATUS GUARD] Blocked changing completed order from "${current}" to "${target}".`);
+            return false;
+        }
+    }
+
+    return true;
+};
+
 module.exports = {
     INTERNAL_STATUS,
-    mapProviderStatusToInternal
+    mapProviderStatusToInternal,
+    isTerminalStatus,
+    isValidStatusTransition
 };

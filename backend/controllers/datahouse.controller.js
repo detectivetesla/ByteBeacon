@@ -178,37 +178,20 @@ const datahouseWebhook = async (req, res) => {
         // --- Execute Updates based on Order Source ---
         let isRefunded = false;
 
-        if (finalStatus === 'rejected') {
-            console.log(`🚫 Order ${targetId} (${orderSource}) rejected by DataHouse. Purging order row completely from database.`);
-            
-            if (orderSource === 'transactions') {
-                const { processAutomatedRefund } = require('../utils/refundHelper');
-                await processAutomatedRefund({
-                    transactionId: targetId,
-                    userId: transaction.user_id,
-                    reason: `Datahouse order rejected (${eventType})`
-                }).catch(() => {});
-
-                await pool.execute('DELETE FROM transactions WHERE id = ?::uuid', [targetId]);
-            } else if (orderSource === 'agent_orders') {
-                await pool.execute('DELETE FROM agent_orders WHERE id = ?::uuid', [targetId]);
-            }
-
-            return res.json({ success: true, message: 'Rejected order purged from system', status: 'rejected' });
-        }
-
         if (orderSource === 'transactions') {
+            const dbStatus = (finalStatus === 'rejected' || finalStatus === 'failed') ? 'failed' : finalStatus;
+
             await pool.execute(
                 'UPDATE transactions SET status = ?, api_response = ? WHERE id = ?::uuid',
-                [finalStatus, JSON.stringify(updatedApiResponse), targetId]
+                [dbStatus, JSON.stringify(updatedApiResponse), targetId]
             );
 
-            if (finalStatus === 'failed') {
+            if (finalStatus === 'failed' || finalStatus === 'rejected') {
                 const { processAutomatedRefund } = require('../utils/refundHelper');
                 const refundRes = await processAutomatedRefund({
                     transactionId: targetId,
                     userId: transaction.user_id,
-                    reason: `Datahouse webhook failure event (${eventType})`
+                    reason: `Datahouse webhook event (${eventType})`
                 });
                 isRefunded = refundRes.success;
             }
@@ -223,14 +206,14 @@ const datahouseWebhook = async (req, res) => {
                     status: finalStatus,
                     message: finalStatus === 'completed'
                         ? 'Your data bundle has been delivered!'
-                        : finalStatus === 'failed'
+                        : (finalStatus === 'failed' || finalStatus === 'rejected')
                             ? (isRefunded ? 'Data bundle delivery failed. Your wallet has been automatically refunded.' : 'Data bundle delivery failed. Please contact support.')
                             : 'Your order status has been updated.'
                 });
             }
 
         } else if (orderSource === 'agent_orders') {
-            const dbFulfillmentStatus = finalStatus === 'completed' ? 'completed' : (finalStatus === 'failed' ? 'refunded' : 'processing');
+            const dbFulfillmentStatus = finalStatus === 'completed' ? 'completed' : ((finalStatus === 'failed' || finalStatus === 'rejected') ? 'refunded' : 'processing');
             
             await pool.execute(
                 `UPDATE agent_orders 
@@ -239,8 +222,8 @@ const datahouseWebhook = async (req, res) => {
                 [dbFulfillmentStatus, JSON.stringify(updatedApiResponse), targetId]
             );
 
-            // If storefront order succeeded, credit agent profit
-            if (dbFulfillmentStatus === 'completed') {
+            // If storefront order succeeded, credit agent profit if not already completed
+            if (dbFulfillmentStatus === 'completed' && transaction.status !== 'completed') {
                 const profitGhc = parseFloat(transaction.profit_ghc || 0);
                 if (profitGhc > 0 && transaction.agent_id) {
                     await pool.execute(
