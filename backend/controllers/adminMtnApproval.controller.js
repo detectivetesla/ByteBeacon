@@ -7,30 +7,27 @@ const { normalizeGhanaPhone } = require('../utils/datahouse');
  */
 exports.getMtnApprovals = async (req, res) => {
     try {
-        const { status = 'all', timeframe = 'all', search = '', limit = 50, offset = 0 } = req.query;
+        const { status = 'all', timeframe = 'all', search = '', page = 1, limit = 30 } = req.query;
 
-        let query = `
-            SELECT id, msisdn, display_phone, network, status, occurrences, bundle_sizes, sources,
-                   datahouse_reference, datahouse_status, datahouse_sync_status, datahouse_last_sync_at, datahouse_sync_error,
-                   first_detected_at, last_detected_at, submitted_at, approved_at, rejected_at, resolved_at
-            FROM mtn_beneficiary_approvals
-            WHERE 1=1
-        `;
+        const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+        const parsedLimit = Math.max(1, parseInt(limit, 10) || 30);
+        const offset = (parsedPage - 1) * parsedLimit;
+
+        let whereClause = ' WHERE 1=1';
         const params = [];
 
         // Status Filter
         if (status && status !== 'all') {
-            query += ' AND LOWER(status) = LOWER(?)';
+            whereClause += ' AND LOWER(status) = LOWER(?)';
             params.push(status);
         }
 
         // Timeframe Filter
         if (timeframe && timeframe !== 'all') {
-            const now = new Date();
             let intervalDays = 0;
 
             if (timeframe === 'today') {
-                query += ' AND first_detected_at >= CURRENT_DATE';
+                whereClause += ' AND first_detected_at >= CURRENT_DATE';
             } else {
                 if (timeframe === '7d') intervalDays = 7;
                 else if (timeframe === '30d') intervalDays = 30;
@@ -38,7 +35,7 @@ exports.getMtnApprovals = async (req, res) => {
                 else if (timeframe === '1y') intervalDays = 365;
 
                 if (intervalDays > 0) {
-                    query += ` AND first_detected_at >= NOW() - INTERVAL '${intervalDays} days'`;
+                    whereClause += ` AND first_detected_at >= NOW() - INTERVAL '${intervalDays} days'`;
                 }
             }
         }
@@ -46,15 +43,29 @@ exports.getMtnApprovals = async (req, res) => {
         // Search Filter (Number or normalized MSISDN)
         if (search && search.trim() !== '') {
             const normSearch = normalizeGhanaPhone(search.trim());
-            query += ' AND (msisdn LIKE ? OR display_phone LIKE ? OR msisdn LIKE ? OR datahouse_reference LIKE ?)';
+            whereClause += ' AND (msisdn LIKE ? OR display_phone LIKE ? OR msisdn LIKE ? OR datahouse_reference LIKE ?)';
             const term = `%${search.trim()}%`;
             params.push(term, term, `%${normSearch}%`, term);
         }
 
-        query += ' ORDER BY last_detected_at DESC LIMIT ? OFFSET ?';
-        params.push(parseInt(limit), parseInt(offset));
+        // 1. Get total count for pagination metadata
+        const countQuery = `SELECT COUNT(*)::integer as total FROM mtn_beneficiary_approvals${whereClause}`;
+        const [[countRow]] = await pool.execute(countQuery, params);
+        const total = countRow?.total || 0;
+        const totalPages = Math.max(1, Math.ceil(total / parsedLimit));
 
-        const [rows] = await pool.execute(query, params);
+        // 2. Fetch paginated records with deterministic sort
+        const dataQuery = `
+            SELECT id, msisdn, display_phone, network, status, occurrences, bundle_sizes, sources,
+                   datahouse_reference, datahouse_status, datahouse_sync_status, datahouse_last_sync_at, datahouse_sync_error,
+                   first_detected_at, last_detected_at, submitted_at, approved_at, rejected_at, resolved_at
+            FROM mtn_beneficiary_approvals
+            ${whereClause}
+            ORDER BY last_detected_at DESC, id DESC
+            LIMIT ? OFFSET ?
+        `;
+        const dataParams = [...params, parsedLimit, offset];
+        const [rows] = await pool.execute(dataQuery, dataParams);
 
         // Parse JSON fields
         const formatted = rows.map(r => {
@@ -90,7 +101,14 @@ exports.getMtnApprovals = async (req, res) => {
         res.json({
             success: true,
             data: formatted,
-            count: formatted.length
+            meta: {
+                page: parsedPage,
+                limit: parsedLimit,
+                total,
+                totalPages,
+                hasNextPage: parsedPage < totalPages,
+                hasPreviousPage: parsedPage > 1
+            }
         });
     } catch (error) {
         console.error('Error in getMtnApprovals:', error);

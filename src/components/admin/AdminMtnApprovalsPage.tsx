@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '@/services';
 import { useToast } from '@/hooks/use-toast';
+import { useSocket } from '@/contexts/SocketContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
-    Loader2, Search, Download, RefreshCw, AlertCircle, CheckCircle2, XCircle, Clock, ExternalLink, ShieldAlert
+    Loader2, Search, Download, RefreshCw, AlertCircle, CheckCircle2, XCircle, Clock, ExternalLink, ShieldAlert, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 interface MtnApproval {
@@ -41,8 +42,18 @@ interface LinkedOrder {
     created_at: string;
 }
 
+interface PaginationMeta {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+}
+
 export const AdminMtnApprovalsPage: React.FC = () => {
     const { toast } = useToast();
+    const { socket } = useSocket();
     const [approvals, setApprovals] = useState<MtnApproval[]>([]);
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
@@ -53,22 +64,48 @@ export const AdminMtnApprovalsPage: React.FC = () => {
     const [timeframeFilter, setTimeframeFilter] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState<string>('');
 
+    // Pagination State
+    const [page, setPage] = useState(1);
+    const pageSize = 30;
+    const [total, setTotal] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
+    const [hasNextPage, setHasNextPage] = useState(false);
+    const [hasPreviousPage, setHasPreviousPage] = useState(false);
+
     // Modal state for linked orders
     const [selectedBeneficiary, setSelectedBeneficiary] = useState<MtnApproval | null>(null);
     const [linkedOrders, setLinkedOrders] = useState<LinkedOrder[]>([]);
     const [loadingOrders, setLoadingOrders] = useState(false);
 
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        setPage(1);
+    }, [statusFilter, timeframeFilter, searchQuery]);
+
     const loadApprovals = useCallback(async () => {
         setLoading(true);
         try {
             const params = new URLSearchParams();
+            params.append('page', page.toString());
+            params.append('limit', pageSize.toString());
             if (statusFilter !== 'all') params.append('status', statusFilter);
             if (timeframeFilter !== 'all') params.append('timeframe', timeframeFilter);
             if (searchQuery.trim()) params.append('search', searchQuery.trim());
 
-            const res = await api.get<{ success: boolean; data: MtnApproval[] }>(`/admin/mtn-approvals?${params.toString()}`);
+            const res = await api.get<{ success: boolean; data: MtnApproval[]; meta?: PaginationMeta }>(`/admin/mtn-approvals?${params.toString()}`);
             if (res.success) {
                 setApprovals(res.data || []);
+                if (res.meta) {
+                    setTotal(res.meta.total);
+                    setTotalPages(res.meta.totalPages);
+                    setHasNextPage(res.meta.hasNextPage);
+                    setHasPreviousPage(res.meta.hasPreviousPage);
+
+                    // If current page is beyond totalPages (e.g. after records removed), reset to last valid page
+                    if (res.meta.page > res.meta.totalPages && res.meta.totalPages > 0) {
+                        setPage(res.meta.totalPages);
+                    }
+                }
             }
         } catch (err: any) {
             toast({
@@ -79,11 +116,25 @@ export const AdminMtnApprovalsPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [statusFilter, timeframeFilter, searchQuery, toast]);
+    }, [page, pageSize, statusFilter, timeframeFilter, searchQuery, toast]);
 
     useEffect(() => {
         loadApprovals();
     }, [loadApprovals]);
+
+    // Real-time socket listener for MTN approval updates
+    useEffect(() => {
+        if (!socket) return;
+
+        const handleUpdate = () => {
+            loadApprovals();
+        };
+
+        socket.on('mtnApprovalUpdate', handleUpdate);
+        return () => {
+            socket.off('mtnApprovalUpdate', handleUpdate);
+        };
+    }, [socket, loadApprovals]);
 
     const handleSync = async () => {
         setSyncing(true);
@@ -305,7 +356,9 @@ export const AdminMtnApprovalsPage: React.FC = () => {
             <Card className="bg-card border-border overflow-hidden">
                 <CardHeader className="p-4 border-b border-border/50 flex flex-row items-center justify-between">
                     <CardTitle className="text-sm font-bold text-foreground tracking-wide uppercase">Your Numbers</CardTitle>
-                    <span className="text-xs text-muted-foreground font-semibold">Total: {approvals.length}</span>
+                    <span className="text-xs text-muted-foreground font-semibold">
+                        {loading ? '...' : `Showing ${total === 0 ? 0 : (page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total}`}
+                    </span>
                 </CardHeader>
 
                 <CardContent className="p-0">
@@ -321,79 +374,113 @@ export const AdminMtnApprovalsPage: React.FC = () => {
                             <p className="text-xs max-w-sm mx-auto">No unverified MTN numbers currently match your filter selection.</p>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
-                                <thead>
-                                    <tr className="border-b border-border/60 bg-muted/30 text-muted-foreground uppercase tracking-wider font-semibold">
-                                        <th className="p-4">Number</th>
-                                        <th className="p-4">Bundle Size</th>
-                                        <th className="p-4">Source(s)</th>
-                                        <th className="p-4 text-center">Occurrences</th>
-                                        <th className="p-4">DataHouse Ref</th>
-                                        <th className="p-4">DH Sync</th>
-                                        <th className="p-4">First Detected</th>
-                                        <th className="p-4">Last Detected</th>
-                                        <th className="p-4">Status</th>
-                                        <th className="p-4 text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border/40">
-                                    {approvals.map((b) => (
-                                        <tr key={b.id} className="hover:bg-muted/20 transition-colors">
-                                            <td className="p-4 font-mono font-bold text-foreground">{b.displayPhone}</td>
-                                            <td className="p-4">
-                                                <div className="flex flex-wrap gap-1">
-                                                    {b.bundleSizes.map((sz, i) => (
-                                                        <span key={i} className="px-2 py-0.5 rounded bg-muted text-foreground font-semibold text-[11px] border border-border">
-                                                            {sz}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </td>
-                                            <td className="p-4">
-                                                <div className="flex flex-wrap gap-1">
-                                                    {b.sources.map((src, i) => (
-                                                        <span key={i} className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 font-semibold text-[11px] border border-purple-500/20">
-                                                            {src}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </td>
-                                            <td className="p-4 text-center font-bold text-amber-400">{b.occurrences}</td>
-                                            <td className="p-4 font-mono text-[11px] text-muted-foreground">
-                                                {b.datahouseReference ? (
-                                                    <span className="text-emerald-400 font-medium">{b.datahouseReference}</span>
-                                                ) : (
-                                                    <span className="text-muted-foreground/60">—</span>
-                                                )}
-                                            </td>
-                                            <td className="p-4">
-                                                {b.datahouseSyncStatus === 'synced' ? (
-                                                    <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-semibold text-[10px] border border-emerald-500/20">Synced</span>
-                                                ) : b.datahouseSyncStatus === 'failed' ? (
-                                                    <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 font-semibold text-[10px] border border-rose-500/20" title={b.datahouseSyncError || ''}>Failed</span>
-                                                ) : (
-                                                    <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-semibold text-[10px] border border-amber-500/20">Pending</span>
-                                                )}
-                                            </td>
-                                            <td className="p-4 text-muted-foreground">{formatDate(b.firstDetectedAt)}</td>
-                                            <td className="p-4 text-muted-foreground">{formatDate(b.lastDetectedAt)}</td>
-                                            <td className="p-4">{getStatusBadge(b.status)}</td>
-                                            <td className="p-4 text-right">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleViewOrders(b)}
-                                                    className="text-xs text-primary hover:text-primary/80 h-8 font-semibold gap-1"
-                                                >
-                                                    Orders ({b.occurrences}) <ExternalLink className="w-3 h-3" />
-                                                </Button>
-                                            </td>
+                        <>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs">
+                                    <thead>
+                                        <tr className="border-b border-border/60 bg-muted/30 text-muted-foreground uppercase tracking-wider font-semibold">
+                                            <th className="p-4">Number</th>
+                                            <th className="p-4">Bundle Size</th>
+                                            <th className="p-4">Source(s)</th>
+                                            <th className="p-4 text-center">Occurrences</th>
+                                            <th className="p-4">DataHouse Ref</th>
+                                            <th className="p-4">DH Sync</th>
+                                            <th className="p-4">First Detected</th>
+                                            <th className="p-4">Last Detected</th>
+                                            <th className="p-4">Status</th>
+                                            <th className="p-4 text-right">Actions</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                    </thead>
+                                    <tbody className="divide-y divide-border/40">
+                                        {approvals.map((b) => (
+                                            <tr key={b.id} className="hover:bg-muted/20 transition-colors">
+                                                <td className="p-4 font-mono font-bold text-foreground">{b.displayPhone}</td>
+                                                <td className="p-4">
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {b.bundleSizes.map((sz, i) => (
+                                                            <span key={i} className="px-2 py-0.5 rounded bg-muted text-foreground font-semibold text-[11px] border border-border">
+                                                                {sz}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {b.sources.map((src, i) => (
+                                                            <span key={i} className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 font-semibold text-[11px] border border-purple-500/20">
+                                                                {src}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-center font-bold text-amber-400">{b.occurrences}</td>
+                                                <td className="p-4 font-mono text-[11px] text-muted-foreground">
+                                                    {b.datahouseReference ? (
+                                                        <span className="text-emerald-400 font-medium">{b.datahouseReference}</span>
+                                                    ) : (
+                                                        <span className="text-muted-foreground/60">—</span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4">
+                                                    {b.datahouseSyncStatus === 'synced' ? (
+                                                        <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-semibold text-[10px] border border-emerald-500/20">Synced</span>
+                                                    ) : b.datahouseSyncStatus === 'failed' ? (
+                                                        <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 font-semibold text-[10px] border border-rose-500/20" title={b.datahouseSyncError || ''}>Failed</span>
+                                                    ) : (
+                                                        <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-semibold text-[10px] border border-amber-500/20">Pending</span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-muted-foreground">{formatDate(b.firstDetectedAt)}</td>
+                                                <td className="p-4 text-muted-foreground">{formatDate(b.lastDetectedAt)}</td>
+                                                <td className="p-4">{getStatusBadge(b.status)}</td>
+                                                <td className="p-4 text-right">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleViewOrders(b)}
+                                                        className="text-xs text-primary hover:text-primary/80 h-8 font-semibold gap-1"
+                                                    >
+                                                        Orders ({b.occurrences}) <ExternalLink className="w-3 h-3" />
+                                                    </Button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Pagination Controls */}
+                            <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-border/50 gap-3 text-xs text-muted-foreground">
+                                <p className="font-medium">
+                                    Showing <span className="font-bold text-foreground">{total === 0 ? 0 : (page - 1) * pageSize + 1}</span>–<span className="font-bold text-foreground">{Math.min(page * pageSize, total)}</span> of <span className="font-bold text-foreground">{total}</span> records
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                                        disabled={!hasPreviousPage || page === 1 || loading}
+                                        className="h-8 border-border hover:bg-accent text-xs font-semibold gap-1"
+                                    >
+                                        <ChevronLeft className="w-4 h-4" />
+                                        Previous
+                                    </Button>
+                                    <span className="px-2 font-semibold text-foreground text-xs">
+                                        Page {page} of {totalPages}
+                                    </span>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                        disabled={!hasNextPage || page >= totalPages || loading}
+                                        className="h-8 border-border hover:bg-accent text-xs font-semibold gap-1"
+                                    >
+                                        Next
+                                        <ChevronRight className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        </>
                     )}
                 </CardContent>
             </Card>

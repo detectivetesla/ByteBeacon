@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '@/services';
 import { useToast } from '@/hooks/use-toast';
+import { useSocket } from '@/contexts/SocketContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
-    Loader2, Search, Clock, CheckCircle2, XCircle, AlertCircle, Phone, ShieldAlert, RefreshCw
+    Loader2, Search, Clock, CheckCircle2, XCircle, AlertCircle, Phone, ShieldAlert, RefreshCw, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 interface MtnApproval {
@@ -40,6 +41,15 @@ interface LinkedOrder {
     created_at: string;
 }
 
+interface PaginationMeta {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+}
+
 const STATUS_FILTERS = [
     { value: 'all', label: 'All' },
     { value: 'pending', label: 'Pending' },
@@ -50,6 +60,7 @@ const STATUS_FILTERS = [
 
 export const PendingMtnApprovalsPage: React.FC = () => {
     const { toast } = useToast();
+    const { socket } = useSocket();
     const [approvals, setApprovals] = useState<MtnApproval[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -57,6 +68,14 @@ export const PendingMtnApprovalsPage: React.FC = () => {
     // Filters
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState<string>('');
+
+    // Pagination State
+    const [page, setPage] = useState(1);
+    const pageSize = 30;
+    const [total, setTotal] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
+    const [hasNextPage, setHasNextPage] = useState(false);
+    const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     // Detail modal
     const [selectedApproval, setSelectedApproval] = useState<MtnApproval | null>(null);
@@ -66,18 +85,36 @@ export const PendingMtnApprovalsPage: React.FC = () => {
     // Badge count
     const [pendingCount, setPendingCount] = useState(0);
 
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        setPage(1);
+    }, [statusFilter, searchQuery]);
+
     const loadApprovals = useCallback(async (showRefreshing = false) => {
         if (showRefreshing) setRefreshing(true);
         else setLoading(true);
 
         try {
             const params = new URLSearchParams();
+            params.append('page', page.toString());
+            params.append('limit', pageSize.toString());
             if (statusFilter !== 'all') params.append('status', statusFilter);
             if (searchQuery.trim()) params.append('search', searchQuery.trim());
 
-            const res = await api.get<{ success: boolean; data: MtnApproval[] }>(`/users/mtn-approvals?${params.toString()}`);
+            const res = await api.get<{ success: boolean; data: MtnApproval[]; meta?: PaginationMeta }>(`/users/mtn-approvals?${params.toString()}`);
             if (res.success) {
                 setApprovals(res.data || []);
+                if (res.meta) {
+                    setTotal(res.meta.total);
+                    setTotalPages(res.meta.totalPages);
+                    setHasNextPage(res.meta.hasNextPage);
+                    setHasPreviousPage(res.meta.hasPreviousPage);
+
+                    // If current page is beyond totalPages (e.g. after records removed), reset to last valid page
+                    if (res.meta.page > res.meta.totalPages && res.meta.totalPages > 0) {
+                        setPage(res.meta.totalPages);
+                    }
+                }
             }
         } catch (err: any) {
             toast({
@@ -89,7 +126,7 @@ export const PendingMtnApprovalsPage: React.FC = () => {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [statusFilter, searchQuery, toast]);
+    }, [page, pageSize, statusFilter, searchQuery, toast]);
 
     const loadPendingCount = useCallback(async () => {
         try {
@@ -102,6 +139,21 @@ export const PendingMtnApprovalsPage: React.FC = () => {
         loadApprovals();
         loadPendingCount();
     }, [loadApprovals, loadPendingCount]);
+
+    // Real-time socket listener for MTN approval updates
+    useEffect(() => {
+        if (!socket) return;
+
+        const handleUpdate = () => {
+            loadApprovals();
+            loadPendingCount();
+        };
+
+        socket.on('mtnApprovalUpdate', handleUpdate);
+        return () => {
+            socket.off('mtnApprovalUpdate', handleUpdate);
+        };
+    }, [socket, loadApprovals, loadPendingCount]);
 
     const handleViewDetails = async (approval: MtnApproval) => {
         setSelectedApproval(approval);
@@ -251,7 +303,7 @@ export const PendingMtnApprovalsPage: React.FC = () => {
                 <CardHeader className="p-4 border-b border-border/50 flex flex-row items-center justify-between">
                     <CardTitle className="text-sm font-bold text-foreground tracking-wide uppercase">Your Numbers</CardTitle>
                     <span className="text-xs text-muted-foreground font-semibold">
-                        {loading ? '...' : `${approvals.length} number${approvals.length !== 1 ? 's' : ''}`}
+                        {loading ? '...' : `Showing ${total === 0 ? 0 : (page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total}`}
                     </span>
                 </CardHeader>
 
@@ -270,80 +322,114 @@ export const PendingMtnApprovalsPage: React.FC = () => {
                             </p>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
-                                <thead>
-                                    <tr className="border-b border-border/60 bg-muted/30 text-muted-foreground uppercase tracking-wider font-semibold">
-                                        <th className="p-4">Number</th>
-                                        <th className="p-4">Bundles Requested</th>
-                                        <th className="p-4">Source</th>
-                                        <th className="p-4 text-center">Attempts</th>
-                                        <th className="p-4">First Seen</th>
-                                        <th className="p-4">Last Seen</th>
-                                        <th className="p-4">Status</th>
-                                        <th className="p-4 text-right">Details</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border/40">
-                                    {approvals.map(a => (
-                                        <tr
-                                            key={a.id}
-                                            className="hover:bg-muted/20 transition-colors duration-150"
-                                        >
-                                            <td className="p-4">
-                                                <div className="flex items-center gap-2">
-                                                    <Phone className="w-3.5 h-3.5 text-amber-400" />
-                                                    <span className="font-bold text-foreground tracking-wide">
-                                                        {a.displayPhone || a.msisdn}
-                                                    </span>
-                                                    <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/20">
-                                                        MTN
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td className="p-4">
-                                                <div className="flex flex-wrap gap-1">
-                                                    {a.bundleSizes.map((b, i) => (
-                                                        <span key={i} className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                                                            {b}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </td>
-                                            <td className="p-4">
-                                                <span className="text-muted-foreground font-medium">
-                                                    {a.primarySource || (a.sources.length > 0 ? a.sources[0] : '—')}
-                                                </span>
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-muted/50 text-foreground font-bold text-xs">
-                                                    {a.occurrences}
-                                                </span>
-                                            </td>
-                                            <td className="p-4 text-muted-foreground whitespace-nowrap">
-                                                {formatDate(a.firstDetectedAt)}
-                                            </td>
-                                            <td className="p-4 text-muted-foreground whitespace-nowrap">
-                                                {formatDate(a.lastDetectedAt)}
-                                            </td>
-                                            <td className="p-4">
-                                                {getStatusBadge(a.status)}
-                                            </td>
-                                            <td className="p-4 text-right">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleViewDetails(a)}
-                                                    className="text-xs font-semibold text-muted-foreground hover:text-foreground"
-                                                >
-                                                    View
-                                                </Button>
-                                            </td>
+                        <>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs">
+                                    <thead>
+                                        <tr className="border-b border-border/60 bg-muted/30 text-muted-foreground uppercase tracking-wider font-semibold">
+                                            <th className="p-4">Number</th>
+                                            <th className="p-4">Bundles Requested</th>
+                                            <th className="p-4">Source</th>
+                                            <th className="p-4 text-center">Attempts</th>
+                                            <th className="p-4">First Seen</th>
+                                            <th className="p-4">Last Seen</th>
+                                            <th className="p-4">Status</th>
+                                            <th className="p-4 text-right">Details</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                    </thead>
+                                    <tbody className="divide-y divide-border/40">
+                                        {approvals.map(a => (
+                                            <tr
+                                                key={a.id}
+                                                className="hover:bg-muted/20 transition-colors duration-150"
+                                            >
+                                                <td className="p-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <Phone className="w-3.5 h-3.5 text-amber-400" />
+                                                        <span className="font-bold text-foreground tracking-wide">
+                                                            {a.displayPhone || a.msisdn}
+                                                        </span>
+                                                        <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/20">
+                                                            MTN
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {a.bundleSizes.map((b, i) => (
+                                                            <span key={i} className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                                                {b}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <span className="text-muted-foreground font-medium">
+                                                        {a.primarySource || (a.sources.length > 0 ? a.sources[0] : '—')}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-muted/50 text-foreground font-bold text-xs">
+                                                        {a.occurrences}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-muted-foreground whitespace-nowrap">
+                                                    {formatDate(a.firstDetectedAt)}
+                                                </td>
+                                                <td className="p-4 text-muted-foreground whitespace-nowrap">
+                                                    {formatDate(a.lastDetectedAt)}
+                                                </td>
+                                                <td className="p-4">
+                                                    {getStatusBadge(a.status)}
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleViewDetails(a)}
+                                                        className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+                                                    >
+                                                        View
+                                                    </Button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Pagination Controls */}
+                            <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-border/50 gap-3 text-xs text-muted-foreground">
+                                <p className="font-medium">
+                                    Showing <span className="font-bold text-foreground">{total === 0 ? 0 : (page - 1) * pageSize + 1}</span>–<span className="font-bold text-foreground">{Math.min(page * pageSize, total)}</span> of <span className="font-bold text-foreground">{total}</span> records
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                                        disabled={!hasPreviousPage || page === 1 || loading}
+                                        className="h-8 border-border hover:bg-accent text-xs font-semibold gap-1"
+                                    >
+                                        <ChevronLeft className="w-4 h-4" />
+                                        Previous
+                                    </Button>
+                                    <span className="px-2 font-semibold text-foreground text-xs">
+                                        Page {page} of {totalPages}
+                                    </span>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                        disabled={!hasNextPage || page >= totalPages || loading}
+                                        className="h-8 border-border hover:bg-accent text-xs font-semibold gap-1"
+                                    >
+                                        Next
+                                        <ChevronRight className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        </>
                     )}
                 </CardContent>
             </Card>

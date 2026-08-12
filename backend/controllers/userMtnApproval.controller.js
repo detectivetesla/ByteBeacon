@@ -9,17 +9,15 @@ const { normalizeGhanaPhone } = require('../utils/datahouse');
  */
 exports.getMyMtnApprovals = async (req, res) => {
     try {
-        const { status = 'all', timeframe = 'all', search = '', limit = 50, offset = 0 } = req.query;
+        const { status = 'all', timeframe = 'all', search = '', page = 1, limit = 30 } = req.query;
         const userId = req.user.id;
         const userRole = req.user.role;
 
-        let query = `
-            SELECT a.id, a.msisdn, a.display_phone, a.network, a.status, a.occurrences, a.bundle_sizes, a.sources,
-                   a.primary_source, a.datahouse_reference, a.datahouse_status, a.datahouse_sync_status,
-                   a.first_detected_at, a.last_detected_at, a.submitted_at, a.approved_at, a.rejected_at, a.resolved_at
-            FROM mtn_beneficiary_approvals a
-            WHERE 1=1
-        `;
+        const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+        const parsedLimit = Math.max(1, parseInt(limit, 10) || 30);
+        const offset = (parsedPage - 1) * parsedLimit;
+
+        let whereClause = ' WHERE 1=1';
         const params = [];
 
         // Role-based ownership filter
@@ -27,7 +25,7 @@ exports.getMyMtnApprovals = async (req, res) => {
             // Admin sees everything — no filter
         } else if (userRole === 'agent' || userRole === 'superagent') {
             // Agent/SuperAgent: own submissions + agent orders + store orders
-            query += ` AND (
+            whereClause += ` AND (
                 a.user_id = ?::uuid
                 OR a.agent_id = ?::uuid
                 OR EXISTS (
@@ -43,7 +41,7 @@ exports.getMyMtnApprovals = async (req, res) => {
             params.push(userId, userId, userId, userId, userId);
         } else {
             // Customer: only their own submissions
-            query += ` AND (
+            whereClause += ` AND (
                 a.user_id = ?::uuid
                 OR EXISTS (
                     SELECT 1 FROM mtn_beneficiary_approval_orders o
@@ -55,14 +53,14 @@ exports.getMyMtnApprovals = async (req, res) => {
 
         // Status filter
         if (status && status !== 'all') {
-            query += ' AND LOWER(a.status) = LOWER(?)';
+            whereClause += ' AND LOWER(a.status) = LOWER(?)';
             params.push(status);
         }
 
         // Timeframe filter
         if (timeframe && timeframe !== 'all') {
             if (timeframe === 'today') {
-                query += ' AND a.first_detected_at >= CURRENT_DATE';
+                whereClause += ' AND a.first_detected_at >= CURRENT_DATE';
             } else {
                 let intervalDays = 0;
                 if (timeframe === '7d') intervalDays = 7;
@@ -71,7 +69,7 @@ exports.getMyMtnApprovals = async (req, res) => {
                 else if (timeframe === '1y') intervalDays = 365;
 
                 if (intervalDays > 0) {
-                    query += ` AND a.first_detected_at >= NOW() - INTERVAL '${intervalDays} days'`;
+                    whereClause += ` AND a.first_detected_at >= NOW() - INTERVAL '${intervalDays} days'`;
                 }
             }
         }
@@ -79,15 +77,29 @@ exports.getMyMtnApprovals = async (req, res) => {
         // Search filter
         if (search && search.trim() !== '') {
             const normSearch = normalizeGhanaPhone(search.trim());
-            query += ' AND (a.msisdn LIKE ? OR a.display_phone LIKE ? OR a.msisdn LIKE ?)';
+            whereClause += ' AND (a.msisdn LIKE ? OR a.display_phone LIKE ? OR a.msisdn LIKE ?)';
             const term = `%${search.trim()}%`;
             params.push(term, term, `%${normSearch}%`);
         }
 
-        query += ' ORDER BY a.last_detected_at DESC LIMIT ? OFFSET ?';
-        params.push(parseInt(limit), parseInt(offset));
+        // 1. Get total count for pagination metadata
+        const countQuery = `SELECT COUNT(*)::integer as total FROM mtn_beneficiary_approvals a${whereClause}`;
+        const [[countRow]] = await pool.execute(countQuery, params);
+        const total = countRow?.total || 0;
+        const totalPages = Math.max(1, Math.ceil(total / parsedLimit));
 
-        const [rows] = await pool.execute(query, params);
+        // 2. Fetch paginated records with deterministic sort
+        const dataQuery = `
+            SELECT a.id, a.msisdn, a.display_phone, a.network, a.status, a.occurrences, a.bundle_sizes, a.sources,
+                   a.primary_source, a.datahouse_reference, a.datahouse_status, a.datahouse_sync_status,
+                   a.first_detected_at, a.last_detected_at, a.submitted_at, a.approved_at, a.rejected_at, a.resolved_at
+            FROM mtn_beneficiary_approvals a
+            ${whereClause}
+            ORDER BY a.last_detected_at DESC, a.id DESC
+            LIMIT ? OFFSET ?
+        `;
+        const dataParams = [...params, parsedLimit, offset];
+        const [rows] = await pool.execute(dataQuery, dataParams);
 
         const formatted = rows.map(r => {
             let bundleSizes = [];
@@ -121,7 +133,14 @@ exports.getMyMtnApprovals = async (req, res) => {
         res.json({
             success: true,
             data: formatted,
-            count: formatted.length
+            meta: {
+                page: parsedPage,
+                limit: parsedLimit,
+                total,
+                totalPages,
+                hasNextPage: parsedPage < totalPages,
+                hasPreviousPage: parsedPage > 1
+            }
         });
     } catch (error) {
         console.error('Error in getMyMtnApprovals:', error);

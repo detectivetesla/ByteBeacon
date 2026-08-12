@@ -148,6 +148,9 @@ const recordPendingBeneficiary = async ({
 
         await connection.commit();
         console.log(`📱 Recorded pending MTN approval for ${displayPhone} (Source: ${source}, Bundle: ${bundleSize}, User: ${userId || 'N/A'}, Agent: ${agentId || 'N/A'}, Store: ${agentStoreId || 'N/A'})`);
+        if (global.io) {
+            global.io.emit('mtnApprovalUpdate');
+        }
         return approvalId;
     } catch (error) {
         await connection.rollback().catch(() => {});
@@ -304,6 +307,10 @@ const syncBeneficiaryApprovals = async () => {
                     [remoteStatus, remoteRef, localRec.id]
                 );
             }
+        }
+
+        if ((totalUpdated > 0 || totalRetried > 0) && global.io) {
+            global.io.emit('mtnApprovalUpdate');
         }
 
         return { updated: totalUpdated, retried: totalRetried };
