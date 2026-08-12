@@ -67,10 +67,40 @@ const datahouseWebhook = async (req, res) => {
 
         const eventType = eventData.type;
         const payloadData = eventData.data || {};
+        const eventId = eventData.id || eventData.event_id || eventData.eventId || `${eventType}_${payloadData.id || payloadData.order_id || Date.now()}`;
+
+        // --- Idempotency Check & Webhook Event Logging ---
+        try {
+            const [existingLog] = await pool.execute(
+                `SELECT id, processed FROM datahouse_webhook_logs WHERE event_id = ?`,
+                [eventId]
+            );
+            if (existingLog.length > 0 && existingLog[0].processed) {
+                console.warn(`🛡️ Datahouse Webhook: Event ID ${eventId} already processed. Acknowledging duplicate.`);
+                return res.status(200).json({ success: true, message: 'Webhook event already processed', eventId });
+            }
+
+            if (existingLog.length === 0) {
+                await pool.execute(
+                    `INSERT INTO datahouse_webhook_logs (event_id, event_type, datahouse_order_id, reference_code, payload, processed)
+                     VALUES (?, ?, ?, ?, ?::jsonb, false)`,
+                    [
+                        eventId,
+                        eventType,
+                        payloadData.order_id || payloadData.id || null,
+                        payloadData.reference || payloadData.reference_code || payloadData.referenceCode || null,
+                        JSON.stringify(eventData)
+                    ]
+                ).catch(err => console.warn('⚠️ Could not log webhook event:', err.message));
+            }
+        } catch (logErr) {
+            console.warn('⚠️ Webhook logging error:', logErr.message);
+        }
 
         // Skip non-order events (e.g. wallet deposits)
         if (eventType === 'wallet.updated') {
             console.log('💰 Datahouse wallet updated event received, ignoring for transaction processing.');
+            await pool.execute(`UPDATE datahouse_webhook_logs SET processed = true WHERE event_id = ?`, [eventId]).catch(() => {});
             return res.json({ success: true, message: 'Wallet update acknowledged' });
         }
 
@@ -92,33 +122,35 @@ const datahouseWebhook = async (req, res) => {
 
         // Map event type to final status
         let finalStatus = 'processing';
-        if (['order.approved', 'purchase.success', 'order.partially_approved'].includes(eventType)) {
+        if (['order.approved', 'purchase.success', 'order.partially_approved', 'fulfilled'].includes(eventType)) {
             finalStatus = 'completed';
-        } else if (eventType === 'order.rejected') {
+        } else if (['order.rejected', 'rejected'].includes(eventType)) {
             finalStatus = 'rejected';
-        } else if (['purchase.failed'].includes(eventType)) {
+        } else if (['purchase.failed', 'fulfillment_failed'].includes(eventType)) {
             finalStatus = 'failed';
-        } else if (['order.received', 'order.processing'].includes(eventType)) {
+        } else if (['order.received', 'order.processing', 'received', 'processing'].includes(eventType)) {
             finalStatus = 'processing';
+        } else if (eventType === 'pending_mtn_approval') {
+            finalStatus = 'pending_mtn_approval';
         }
 
         console.log(`📋 Updating status for orderId: ${orderId}, reference: ${reference} to: ${finalStatus}`);
 
-        // --- Cross-Table Lookup: Search transactions AND agent_orders ---
+        // --- Cross-Table Lookup: Search transactions, agent_orders AND bulk_submission_items ---
         let transaction = null;
         let orderSource = 'transactions';
 
         // 1. Search main transactions table
         const [txRows] = await pool.execute(
             `SELECT id, user_id, status, api_response, amount_ghc FROM transactions 
-             WHERE id::text = ? OR paystack_reference = ?
+             WHERE id::text = ? OR paystack_reference = ? OR datahouse_order_id = ? OR reference_code = ?
              OR api_response->'data'->>'id' = ? 
              OR api_response->'data'->>'publicId' = ?
              OR api_response->'data'->>'referenceCode' = ? 
              OR api_response->>'orderId' = ? 
              OR api_response->>'providerPublicId' = ?
              OR api_response->>'providerReferenceCode' = ?`,
-            [orderId || '', reference || '', orderId || '', orderId || '', reference || '', orderId || '', orderId || '', reference || '']
+            [orderId || '', reference || '', orderId || '', reference || '', orderId || '', orderId || '', reference || '', orderId || '', orderId || '', reference || '']
         );
 
         if (txRows.length > 0) {
@@ -129,23 +161,36 @@ const datahouseWebhook = async (req, res) => {
             const [agentOrderRows] = await pool.execute(
                 `SELECT id, store_id, agent_id, customer_phone, base_price_ghc, selling_price_ghc, profit_ghc, paystack_reference, fulfillment_status as status, api_response 
                  FROM agent_orders 
-                 WHERE id::text = ? OR paystack_reference = ?
+                 WHERE id::text = ? OR paystack_reference = ? OR datahouse_order_id = ? OR reference_code = ?
                  OR api_response->'data'->>'id' = ?
                  OR api_response->'data'->>'publicId' = ?
                  OR api_response->'data'->>'referenceCode' = ?
                  OR api_response->>'orderId' = ?
                  OR api_response->>'providerPublicId' = ?
                  OR api_response->>'providerReferenceCode' = ?`,
-                [orderId || '', reference || '', orderId || '', orderId || '', reference || '', orderId || '', orderId || '', reference || '']
+                [orderId || '', reference || '', orderId || '', reference || '', orderId || '', orderId || '', reference || '', orderId || '', orderId || '', reference || '']
             );
             if (agentOrderRows.length > 0) {
                 transaction = agentOrderRows[0];
                 orderSource = 'agent_orders';
+            } else {
+                // 3. Search bulk_submission_items table
+                const [bulkRows] = await pool.execute(
+                    `SELECT id, submission_id, status, phone_number, bundle_size FROM bulk_submission_items
+                     WHERE id::text = ? OR datahouse_order_id = ? OR reference_code = ?
+                     OR api_response->'data'->>'id' = ? OR api_response->'data'->>'referenceCode' = ?`,
+                    [orderId || '', orderId || '', reference || '', orderId || '', reference || '']
+                );
+                if (bulkRows.length > 0) {
+                    transaction = bulkRows[0];
+                    orderSource = 'bulk_submission_items';
+                }
             }
         }
 
         if (!transaction) {
-            console.error(`❌ No order found in transactions or agent_orders for Datahouse identifiers: order_id=${orderId}, reference=${reference}`);
+            console.error(`❌ No order found in transactions, agent_orders or bulk_submission_items for Datahouse identifiers: order_id=${orderId}, reference=${reference}`);
+            await pool.execute(`UPDATE datahouse_webhook_logs SET error_message = 'Order not found', processed = true WHERE event_id = ?`, [eventId]).catch(() => {});
             return res.status(404).json({ error: 'Order not found' });
         }
 
@@ -154,7 +199,8 @@ const datahouseWebhook = async (req, res) => {
         // Replay/Idempotency check: Skip if already in final state
         const currentStatus = transaction.status;
         if (currentStatus === 'completed' || currentStatus === 'fulfilled' || currentStatus === 'failed' || currentStatus === 'refunded') {
-            console.warn(`🛡️ Webhook: Order ${targetId} is already in final state "${currentStatus}". Ignoring duplicate event.`);
+            console.warn(`🛡️ Webhook: Order ${targetId} (${orderSource}) is already in final state "${currentStatus}". Acknowledging duplicate.`);
+            await pool.execute(`UPDATE datahouse_webhook_logs SET processed = true WHERE event_id = ?`, [eventId]).catch(() => {});
             return res.status(200).json({ success: true, message: 'Order already in final state', status: currentStatus });
         }
 
@@ -182,8 +228,27 @@ const datahouseWebhook = async (req, res) => {
             const dbStatus = (finalStatus === 'rejected' || finalStatus === 'failed') ? 'failed' : finalStatus;
 
             await pool.execute(
-                'UPDATE transactions SET status = ?, api_response = ? WHERE id = ?::uuid',
-                [dbStatus, JSON.stringify(updatedApiResponse), targetId]
+                `UPDATE transactions 
+                 SET status = ?, 
+                     api_response = ?,
+                     datahouse_order_id = COALESCE(?, datahouse_order_id),
+                     reference_code = COALESCE(?, reference_code),
+                     current_datahouse_status = ?,
+                     mapped_bytebeacon_status = ?,
+                     last_synced_at = CURRENT_TIMESTAMP,
+                     last_webhook_event_id = ?,
+                     sync_status = 'synced'
+                 WHERE id = ?::uuid`,
+                [
+                    dbStatus, 
+                    JSON.stringify(updatedApiResponse), 
+                    orderId || null, 
+                    reference || null, 
+                    eventType, 
+                    dbStatus, 
+                    eventId, 
+                    targetId
+                ]
             );
 
             if (finalStatus === 'failed' || finalStatus === 'rejected') {
@@ -217,9 +282,27 @@ const datahouseWebhook = async (req, res) => {
             
             await pool.execute(
                 `UPDATE agent_orders 
-                 SET fulfillment_status = ?, api_response = ?, updated_at = NOW() 
+                 SET fulfillment_status = ?, 
+                     api_response = ?,
+                     datahouse_order_id = COALESCE(?, datahouse_order_id),
+                     reference_code = COALESCE(?, reference_code),
+                     current_datahouse_status = ?,
+                     mapped_bytebeacon_status = ?,
+                     last_synced_at = CURRENT_TIMESTAMP,
+                     last_webhook_event_id = ?,
+                     sync_status = 'synced',
+                     updated_at = NOW() 
                  WHERE id = ?::uuid`,
-                [dbFulfillmentStatus, JSON.stringify(updatedApiResponse), targetId]
+                [
+                    dbFulfillmentStatus, 
+                    JSON.stringify(updatedApiResponse), 
+                    orderId || null, 
+                    reference || null, 
+                    eventType, 
+                    dbFulfillmentStatus, 
+                    eventId, 
+                    targetId
+                ]
             );
 
             // If storefront order succeeded, credit agent profit if not already completed
@@ -246,7 +329,35 @@ const datahouseWebhook = async (req, res) => {
                     message: dbFulfillmentStatus === 'completed' ? 'Storefront order completed & delivered!' : 'Storefront order updated'
                 });
             }
+
+        } else if (orderSource === 'bulk_submission_items') {
+            const bulkItemStatus = finalStatus === 'completed' ? 'completed' : ((finalStatus === 'failed' || finalStatus === 'rejected') ? 'failed' : 'processing');
+            await pool.execute(
+                `UPDATE bulk_submission_items
+                 SET status = ?,
+                     datahouse_order_id = COALESCE(?, datahouse_order_id),
+                     reference_code = COALESCE(?, reference_code),
+                     current_datahouse_status = ?,
+                     mapped_bytebeacon_status = ?,
+                     last_synced_at = CURRENT_TIMESTAMP,
+                     last_webhook_event_id = ?,
+                     sync_status = 'synced',
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?::uuid`,
+                [
+                    bulkItemStatus,
+                    orderId || null,
+                    reference || null,
+                    eventType,
+                    bulkItemStatus,
+                    eventId,
+                    targetId
+                ]
+            );
         }
+
+        // Mark webhook log as processed
+        await pool.execute(`UPDATE datahouse_webhook_logs SET processed = true WHERE event_id = ?`, [eventId]).catch(() => {});
 
         console.log(`✅ Order ${targetId} (${orderSource}) updated to ${finalStatus} via Webhook`);
         res.json({ success: true, message: 'Webhook processed', status: finalStatus, source: orderSource });

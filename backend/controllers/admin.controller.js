@@ -418,7 +418,7 @@ const getTransactionStats = async (req, res) => {
         const [stats] = await pool.execute(`
             SELECT 
                 COUNT(*) as "totalTransactions",
-                SUM(CASE WHEN status NOT IN ('failed', 'error', 'cancelled', 'rejected') THEN amount_ghc ELSE 0 END) as "completedValue",
+                SUM(CASE WHEN status = 'completed' THEN amount_ghc ELSE 0 END) as "completedValue",
                 SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as "completedCount",
                 SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as "pendingCount",
                 SUM(CASE WHEN status IN ('failed', 'refunded') THEN 1 ELSE 0 END) as "failedCount"
@@ -647,7 +647,7 @@ const getDashboardStats = async (req, res) => {
         );
 
         const [[{ todayRevenue }]] = await pool.execute(
-            "SELECT COALESCE(SUM(amount_ghc), 0) as \"todayRevenue\" FROM transactions WHERE status NOT IN ('failed', 'error', 'cancelled', 'rejected') AND created_at >= CURRENT_DATE"
+            "SELECT COALESCE(SUM(amount_ghc), 0) as \"todayRevenue\" FROM transactions WHERE status = 'completed' AND created_at >= CURRENT_DATE"
         );
 
         const [[{ pendingOrders }]] = await pool.execute(
@@ -656,7 +656,7 @@ const getDashboardStats = async (req, res) => {
 
         // Get monthly revenue
         const [[{ monthlyRevenue }]] = await pool.execute(
-            "SELECT COALESCE(SUM(amount_ghc), 0) as \"monthlyRevenue\" FROM transactions WHERE status NOT IN ('failed', 'error', 'cancelled', 'rejected') AND date_trunc('month', created_at) = date_trunc('month', CURRENT_DATE)"
+            "SELECT COALESCE(SUM(amount_ghc), 0) as \"monthlyRevenue\" FROM transactions WHERE status = 'completed' AND date_trunc('month', created_at) = date_trunc('month', CURRENT_DATE)"
         );
 
         // Query role stats (User, Agent, SuperAgent)
@@ -664,8 +664,8 @@ const getDashboardStats = async (req, res) => {
             SELECT 
                 COALESCE(ur.role, 'customer') as role,
                 COUNT(*)::integer as "totalOrders",
-                COALESCE(SUM(CASE WHEN t.created_at >= CURRENT_DATE AND t.status NOT IN ('failed', 'error', 'cancelled', 'rejected') THEN t.amount_ghc ELSE 0 END), 0)::float as "dailyRevenue",
-                COALESCE(SUM(CASE WHEN date_trunc('month', t.created_at) = date_trunc('month', CURRENT_DATE) AND t.status NOT IN ('failed', 'error', 'cancelled', 'rejected') THEN t.amount_ghc ELSE 0 END), 0)::float as "monthlyRevenue"
+                COALESCE(SUM(CASE WHEN t.created_at >= CURRENT_DATE AND t.status = 'completed' THEN t.amount_ghc ELSE 0 END), 0)::float as "dailyRevenue",
+                COALESCE(SUM(CASE WHEN date_trunc('month', t.created_at) = date_trunc('month', CURRENT_DATE) AND t.status = 'completed' THEN t.amount_ghc ELSE 0 END), 0)::float as "monthlyRevenue"
             FROM transactions t
             LEFT JOIN user_roles ur ON t.user_id = ur.user_id::uuid
             GROUP BY COALESCE(ur.role, 'customer')
@@ -1004,7 +1004,7 @@ const getAnalytics = async (req, res) => {
         } catch (e) { console.error('Today orders query fail:', e); }
 
         try {
-            const [[resRev]] = await pool.execute("SELECT COALESCE(SUM(amount_ghc), 0) as \"todayRevenue\" FROM transactions WHERE status NOT IN ('failed', 'error', 'cancelled', 'rejected') AND created_at >= CURRENT_DATE");
+            const [[resRev]] = await pool.execute("SELECT COALESCE(SUM(amount_ghc), 0) as \"todayRevenue\" FROM transactions WHERE status = 'completed' AND created_at >= CURRENT_DATE");
             todayRevenue = resRev?.todayRevenue || 0;
         } catch (e) { console.error('Today revenue query fail:', e); }
 

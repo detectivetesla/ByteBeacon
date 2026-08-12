@@ -427,11 +427,54 @@ const initializeTables = async () => {
                         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'data_bundles' AND column_name = 'provider_slug') THEN
                             ALTER TABLE data_bundles ADD COLUMN provider_slug VARCHAR(50) DEFAULT NULL;
                         END IF;
+
+                        -- Add DataHouse authoritative tracking columns to transactions
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'transactions' AND column_name = 'datahouse_order_id') THEN
+                            ALTER TABLE transactions ADD COLUMN datahouse_order_id VARCHAR(255);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'transactions' AND column_name = 'reference_code') THEN
+                            ALTER TABLE transactions ADD COLUMN reference_code VARCHAR(255);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'transactions' AND column_name = 'current_datahouse_status') THEN
+                            ALTER TABLE transactions ADD COLUMN current_datahouse_status VARCHAR(100);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'transactions' AND column_name = 'mapped_bytebeacon_status') THEN
+                            ALTER TABLE transactions ADD COLUMN mapped_bytebeacon_status VARCHAR(100);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'transactions' AND column_name = 'last_synced_at') THEN
+                            ALTER TABLE transactions ADD COLUMN last_synced_at TIMESTAMPTZ;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'transactions' AND column_name = 'last_webhook_event_id') THEN
+                            ALTER TABLE transactions ADD COLUMN last_webhook_event_id VARCHAR(255);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'transactions' AND column_name = 'sync_status') THEN
+                            ALTER TABLE transactions ADD COLUMN sync_status VARCHAR(50) DEFAULT 'pending';
+                        END IF;
                     END $$;
                 `);
                 console.log('✅ Altered transactions and data_bundles tables with redesign columns');
             } catch (txAlterErr) {
                 console.error('⚠️ transactions table redesign alter error:', txAlterErr.message);
+            }
+
+            // Create datahouse_webhook_logs table
+            try {
+                await pool.execute(`
+                    CREATE TABLE IF NOT EXISTS datahouse_webhook_logs (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        event_id VARCHAR(255) UNIQUE,
+                        event_type VARCHAR(100),
+                        datahouse_order_id VARCHAR(255),
+                        reference_code VARCHAR(255),
+                        payload JSONB,
+                        processed BOOLEAN DEFAULT false,
+                        error_message TEXT,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                    );
+                `);
+                console.log('✅ Checked/created datahouse_webhook_logs table');
+            } catch (whLogErr) {
+                console.error('⚠️ datahouse_webhook_logs table creation error:', whLogErr.message);
             }
 
             console.log('✅ Reseller Platform tables checked/created');
@@ -517,6 +560,38 @@ const initializeTables = async () => {
             await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_orders_store ON agent_orders(store_id)`).catch(() => {});
             await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_orders_agent ON agent_orders(agent_id)`).catch(() => {});
             await pool.execute(`CREATE INDEX IF NOT EXISTS idx_agent_orders_paystack ON agent_orders(paystack_reference)`).catch(() => {});
+
+            // Migration for DataHouse tracking columns on agent_orders
+            try {
+                await pool.execute(`
+                    DO $$ 
+                    BEGIN 
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_orders' AND column_name = 'datahouse_order_id') THEN
+                            ALTER TABLE agent_orders ADD COLUMN datahouse_order_id VARCHAR(255);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_orders' AND column_name = 'reference_code') THEN
+                            ALTER TABLE agent_orders ADD COLUMN reference_code VARCHAR(255);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_orders' AND column_name = 'current_datahouse_status') THEN
+                            ALTER TABLE agent_orders ADD COLUMN current_datahouse_status VARCHAR(100);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_orders' AND column_name = 'mapped_bytebeacon_status') THEN
+                            ALTER TABLE agent_orders ADD COLUMN mapped_bytebeacon_status VARCHAR(100);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_orders' AND column_name = 'last_synced_at') THEN
+                            ALTER TABLE agent_orders ADD COLUMN last_synced_at TIMESTAMPTZ;
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_orders' AND column_name = 'last_webhook_event_id') THEN
+                            ALTER TABLE agent_orders ADD COLUMN last_webhook_event_id VARCHAR(255);
+                        END IF;
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_orders' AND column_name = 'sync_status') THEN
+                            ALTER TABLE agent_orders ADD COLUMN sync_status VARCHAR(50) DEFAULT 'pending';
+                        END IF;
+                    END $$;
+                `);
+            } catch (aoErr) {
+                console.error('⚠️ agent_orders DataHouse columns alter error:', aoErr.message);
+            }
 
             await pool.execute(`
                 CREATE TABLE IF NOT EXISTS agent_wallets (

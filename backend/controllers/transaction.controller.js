@@ -205,10 +205,24 @@ const purchaseBundle = async (req, res) => {
                         finalStatus = 'processing';
                     }
 
-                    // Update transaction with result
+                    // Update transaction with DataHouse authoritative identifiers and tracking metadata
+                    const dhOrderId = fulfillment.providerPublicId || fulfillment.providerOrderId || fulfillment.orderId || null;
+                    const dhRefCode = fulfillment.providerReferenceCode || fulfillment.orderReference || null;
+                    const dhStatus = fulfillment.status || finalStatus;
+
                     await pool.execute(
-                        'UPDATE transactions SET status = ?, api_response = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
-                        [finalStatus, JSON.stringify(apiResponse), transactionId]
+                        `UPDATE transactions 
+                         SET status = ?, 
+                             api_response = ?,
+                             datahouse_order_id = COALESCE(?, datahouse_order_id),
+                             reference_code = COALESCE(?, reference_code),
+                             current_datahouse_status = ?,
+                             mapped_bytebeacon_status = ?,
+                             last_synced_at = CURRENT_TIMESTAMP,
+                             sync_status = 'synced',
+                             updated_at = CURRENT_TIMESTAMP 
+                         WHERE id = ?::uuid`,
+                        [finalStatus, JSON.stringify(apiResponse), dhOrderId, dhRefCode, dhStatus, finalStatus, transactionId]
                     );
 
                     let isRefunded = false;

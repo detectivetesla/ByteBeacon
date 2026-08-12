@@ -345,15 +345,40 @@ const fulfillSingleBulkItem = async (sub, item) => {
             transactionId: transactionId
         });
 
+        const dhOrderId = fulfillment.providerPublicId || fulfillment.providerOrderId || fulfillment.orderId || null;
+        const dhRefCode = fulfillment.providerReferenceCode || fulfillment.orderReference || null;
+        const dhStatus = fulfillment.status || 'processing';
+
         if (fulfillment.success && (fulfillment.status === 'completed' || fulfillment.status === 'processing')) {
+            const finalItemStatus = fulfillment.status === 'completed' ? 'completed' : 'processing';
             await pool.execute(
-                `UPDATE bulk_submission_items SET status = 'completed', transaction_id = ?::uuid, datahouse_reference = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid`,
-                [transactionId, fulfillment.orderId || null, item.id]
+                `UPDATE bulk_submission_items 
+                 SET status = ?, 
+                     transaction_id = ?::uuid, 
+                     datahouse_reference = ?,
+                     datahouse_order_id = COALESCE(?, datahouse_order_id),
+                     reference_code = COALESCE(?, reference_code),
+                     current_datahouse_status = ?,
+                     mapped_bytebeacon_status = ?,
+                     last_synced_at = CURRENT_TIMESTAMP,
+                     sync_status = 'synced',
+                     updated_at = CURRENT_TIMESTAMP 
+                 WHERE id = ?::uuid`,
+                [finalItemStatus, transactionId, dhOrderId, dhOrderId, dhRefCode, dhStatus, finalItemStatus, item.id]
             );
             return { success: true };
         } else {
             await pool.execute(
-                `UPDATE bulk_submission_items SET status = 'failed', error_code = 'FULFILLMENT_FAILED', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid`,
+                `UPDATE bulk_submission_items 
+                 SET status = 'failed', 
+                     error_code = 'FULFILLMENT_FAILED', 
+                     error_message = ?, 
+                     current_datahouse_status = 'failed',
+                     mapped_bytebeacon_status = 'failed',
+                     last_synced_at = CURRENT_TIMESTAMP,
+                     sync_status = 'synced',
+                     updated_at = CURRENT_TIMESTAMP 
+                 WHERE id = ?::uuid`,
                 [fulfillment.message || fulfillment.error || 'Provider order failed', item.id]
             );
             return { success: false };

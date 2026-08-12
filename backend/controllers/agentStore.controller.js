@@ -1399,15 +1399,27 @@ exports.verifyCustomerPurchase = async (req, res) => {
             orderId: fulfillment.orderId
         };
 
+        const dhOrderId = fulfillment.providerPublicId || fulfillment.orderId || null;
+        const dhRefCode = fulfillment.providerReferenceCode || fulfillment.orderReference || null;
+        const dhStatus = fulfillment.status || finalFulfillmentStatus;
+
         if (finalFulfillmentStatus === 'completed') {
             await connection.beginTransaction();
 
-            // Update order status and api_response
+            // Update order status, api_response and DataHouse tracking metadata
             await connection.execute(
                 `UPDATE agent_orders 
-                 SET fulfillment_status = 'completed', api_response = ?, updated_at = NOW() 
+                 SET fulfillment_status = 'completed', 
+                     api_response = ?,
+                     datahouse_order_id = COALESCE(?, datahouse_order_id),
+                     reference_code = COALESCE(?, reference_code),
+                     current_datahouse_status = ?,
+                     mapped_bytebeacon_status = 'completed',
+                     last_synced_at = CURRENT_TIMESTAMP,
+                     sync_status = 'synced',
+                     updated_at = NOW() 
                  WHERE id = ?::uuid`,
-                [JSON.stringify(fulfillmentApiResponse), order.id]
+                [JSON.stringify(fulfillmentApiResponse), dhOrderId, dhRefCode, dhStatus, order.id]
             );
 
             // Credit agent profit to agent_wallets
@@ -1436,12 +1448,20 @@ exports.verifyCustomerPurchase = async (req, res) => {
 
             await connection.commit();
         } else if (finalFulfillmentStatus === 'processing' || finalFulfillmentStatus === 'received') {
-            // Update order status as processing (preserve provider reference)
+            // Update order status as processing and save DataHouse tracking metadata
             await connection.execute(
                 `UPDATE agent_orders 
-                 SET fulfillment_status = 'processing', api_response = ?, updated_at = NOW() 
+                 SET fulfillment_status = 'processing', 
+                     api_response = ?,
+                     datahouse_order_id = COALESCE(?, datahouse_order_id),
+                     reference_code = COALESCE(?, reference_code),
+                     current_datahouse_status = ?,
+                     mapped_bytebeacon_status = 'processing',
+                     last_synced_at = CURRENT_TIMESTAMP,
+                     sync_status = 'synced',
+                     updated_at = NOW() 
                  WHERE id = ?::uuid`,
-                [JSON.stringify(fulfillmentApiResponse), order.id]
+                [JSON.stringify(fulfillmentApiResponse), dhOrderId, dhRefCode, dhStatus, order.id]
             );
         } else if (finalFulfillmentStatus === 'pending_mtn_approval') {
             console.log(`📱 Order ${order.id} requires Pending MTN Approval. Purging from agent_orders and recording in MTN approvals system.`);
