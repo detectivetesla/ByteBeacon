@@ -90,19 +90,27 @@ const syncPendingTransactions = async (io) => {
                             }).catch(err => console.error('Automated refund error in sync:', err.message));
                         }
 
-                        // Emit WebSocket update to customer
-                        if (io && transaction.user_id) {
-                            io.to(transaction.user_id).emit('transactionUpdate', {
+                        // Emit WebSocket update to customer and all admin order views
+                        if (io) {
+                            const syncPayload = {
                                 transactionId: transaction.id,
                                 orderId: dhOrderId,
                                 referenceCode: dhRef,
                                 status: dhStatus,
+                                datahouseStatus: dhStatus,
+                                updatedAt: new Date().toISOString(),
                                 message: dhStatus === 'approved'
                                     ? 'Your data bundle has been approved and delivered!'
                                     : dhStatus === 'failed' || dhStatus === 'rejected'
                                         ? 'Data bundle delivery failed. Wallet has been automatically refunded.'
                                         : `Your order is ${dhStatus}.`
-                            });
+                            };
+
+                            if (transaction.user_id) {
+                                io.to(transaction.user_id).emit('transactionUpdate', syncPayload);
+                            }
+                            io.emit('transactionUpdate', syncPayload);
+                            io.emit('adminOrderUpdate', syncPayload);
                         }
 
                         // Trigger partner webhook if applicable

@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { useSocket } from '@/contexts/SocketContext';
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -170,6 +171,55 @@ export default function AdminOrdersPage() {
         updated: true,
         actions: true
     });
+
+    const { socket } = useSocket();
+
+    useEffect(() => {
+        if (!socket) return;
+
+        const handleRealtimeUpdate = (data: any) => {
+            if (!data) return;
+            const targetId = data.transactionId || data.orderId || data.id;
+            const newStatus = data.status || data.datahouseStatus;
+
+            if (targetId && newStatus) {
+                setOrders(prevOrders => prevOrders.map(ord => {
+                    if (
+                        ord.id === targetId ||
+                        ord.reference === data.referenceCode ||
+                        (data.orderId && ord.id === data.orderId) ||
+                        (data.serialId && ord.serialId === data.serialId)
+                    ) {
+                        return {
+                            ...ord,
+                            status: newStatus,
+                            updatedAt: data.updatedAt || new Date().toISOString()
+                        };
+                    }
+                    return ord;
+                }));
+
+                setSelectedOrder(prev => {
+                    if (prev && (prev.id === targetId || prev.reference === data.referenceCode)) {
+                        return {
+                            ...prev,
+                            status: newStatus,
+                            updatedAt: data.updatedAt || new Date().toISOString()
+                        };
+                    }
+                    return prev;
+                });
+            }
+        };
+
+        socket.on('transactionUpdate', handleRealtimeUpdate);
+        socket.on('adminOrderUpdate', handleRealtimeUpdate);
+
+        return () => {
+            socket.off('transactionUpdate', handleRealtimeUpdate);
+            socket.off('adminOrderUpdate', handleRealtimeUpdate);
+        };
+    }, [socket]);
 
     useEffect(() => {
         fetchOrders();

@@ -330,7 +330,7 @@ const getAllTransactions = async (req, res) => {
                     t.id::text as id, 
                     t.recipient_phone, 
                     t.amount_ghc, 
-                    t.status, 
+                    COALESCE(t.current_datahouse_status, t.datahouse_status, t.status) as status, 
                     t.created_at, 
                     t.updated_at,
                     t.serial_id, 
@@ -339,6 +339,11 @@ const getAllTransactions = async (req, res) => {
                     COALESCE(t.source, 'BYTEBEACON') as source, 
                     t.paid, 
                     t.source_provider,
+                    t.datahouse_order_id,
+                    t.reference_code,
+                    t.last_synced_at,
+                    t.sync_status,
+                    t.current_datahouse_status as datahouse_status,
                     d.network, 
                     d.data_amount,
                     COALESCE(p.full_name, u.name, 'Customer') as user_name, 
@@ -363,6 +368,11 @@ const getAllTransactions = async (req, res) => {
                     'AGENT_STORE' as source,
                     o.payment_status as paid,
                     COALESCE(b.provider_slug, 'datahouse') as source_provider,
+                    o.datahouse_order_id,
+                    o.reference_code,
+                    o.updated_at as last_synced_at,
+                    'synced' as sync_status,
+                    o.fulfillment_status as datahouse_status,
                     o.network,
                     o.data_amount,
                     CONCAT(s.store_name, ' (Storefront)') as user_name,
@@ -402,7 +412,13 @@ const getAllTransactions = async (req, res) => {
             balanceAfter: t.balance_after ? parseFloat(t.balance_after) : null,
             source: t.source,
             paid: t.paid,
-            sourceProvider: t.source_provider
+            sourceProvider: t.source_provider,
+            datahouseOrderId: t.datahouse_order_id || null,
+            datahousePublicId: t.datahouse_order_id || null,
+            referenceCode: t.reference_code || null,
+            datahouseStatus: t.datahouse_status || t.status,
+            lastSyncedAt: t.last_synced_at || null,
+            syncStatus: t.sync_status || 'synced'
         }));
 
         res.json(formatted);

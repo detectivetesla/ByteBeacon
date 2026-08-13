@@ -95,14 +95,17 @@ const datahouseWebhook = async (req, res) => {
             finalStatus = 'processing';
         }
 
-        // 3. Find Matching Order Record in ByteBeacon
+        // 3. Find Matching Order Record in ByteBeacon (transactions or agent_orders)
         const [txRows] = await pool.execute(
-            `SELECT id, user_id, status, amount_ghc, datahouse_order_id, reference_code 
+            `SELECT id, user_id, status, amount_ghc, datahouse_order_id, reference_code, serial_id 
              FROM transactions 
              WHERE id::text = ? OR datahouse_order_id = ? OR reference_code = ?
-                OR api_response->>'id' = ? OR api_response->>'publicId' = ? OR api_response->>'referenceCode' = ?`,
-            [orderId || '', orderId || '', reference || '', orderId || '', orderId || '', reference || '']
+                OR api_response->>'id' = ? OR api_response->>'publicId' = ? OR api_response->>'referenceCode' = ?
+                OR api_response->>'order_id' = ?`,
+            [orderId || '', orderId || '', reference || '', orderId || '', orderId || '', reference || '', orderId || '']
         );
+
+        const io = req.app.get('io') || global.io;
 
         if (txRows.length > 0) {
             const tx = txRows[0];
@@ -148,24 +151,66 @@ const datahouseWebhook = async (req, res) => {
                 }
             }
 
-            // 5. Emit Real-time WebSocket Event to Customer
-            const io = req.app.get('io') || global.io;
-            if (io && tx.user_id) {
-                io.to(tx.user_id).emit('transactionUpdate', {
+            // 5. Emit Real-time WebSocket Event to Customer and Admins
+            if (io) {
+                const updatePayload = {
                     transactionId: tx.id,
-                    orderId,
-                    referenceCode: reference,
+                    orderId: orderId || tx.datahouse_order_id,
+                    referenceCode: reference || tx.reference_code,
+                    serialId: tx.serial_id,
                     status: finalStatus,
+                    datahouseStatus: finalStatus,
+                    updatedAt: new Date().toISOString(),
                     message: isSuccessState
                         ? 'Your data bundle has been approved and delivered!'
                         : isFailureState
                             ? 'Data delivery failed or was rejected. Wallet has been automatically refunded.'
                             : 'Your order is currently processing.'
-                });
+                };
+
+                // Customer private room
+                if (tx.user_id) {
+                    io.to(tx.user_id).emit('transactionUpdate', updatePayload);
+                }
+
+                // Global / Admin broadcast for All System Orders
+                io.emit('transactionUpdate', updatePayload);
+                io.emit('adminOrderUpdate', updatePayload);
             }
 
             // Trigger partner webhook if applicable
             triggerTransactionWebhook(tx.id, finalStatus).catch(() => {});
+        } else {
+            // Check agent_orders table (for Agent Storefront purchases)
+            const [agentOrderRows] = await pool.execute(
+                `SELECT id, agent_id, store_id, fulfillment_status, selling_price_ghc, customer_phone 
+                 FROM agent_orders 
+                 WHERE id::text = ? OR datahouse_order_id = ? OR reference_code = ?`,
+                [orderId || '', orderId || '', reference || '']
+            );
+
+            if (agentOrderRows.length > 0) {
+                const aOrder = agentOrderRows[0];
+                await pool.execute(
+                    `UPDATE agent_orders 
+                     SET fulfillment_status = ?,
+                         updated_at = CURRENT_TIMESTAMP
+                     WHERE id = ?::uuid`,
+                    [finalStatus, aOrder.id]
+                );
+
+                if (io) {
+                    const agentPayload = {
+                        orderId: aOrder.id,
+                        transactionId: aOrder.id,
+                        status: finalStatus,
+                        datahouseStatus: finalStatus,
+                        updatedAt: new Date().toISOString()
+                    };
+                    io.emit('transactionUpdate', agentPayload);
+                    io.emit('adminOrderUpdate', agentPayload);
+                }
+            }
         }
 
         // 6. Record delivery as processed in audit log

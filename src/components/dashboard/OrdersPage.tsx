@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSocket } from '@/contexts/SocketContext';
 import { transactionService } from '@/services';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -134,6 +135,51 @@ export default function OrdersPage() {
             setLoading(false);
         }
     }, [user]);
+
+    const { socket } = useSocket();
+
+    useEffect(() => {
+        if (!socket) return;
+
+        const handleTransactionUpdate = (data: any) => {
+            if (!data) return;
+            const targetId = data.transactionId || data.orderId || data.id;
+            const newStatus = data.status || data.datahouseStatus;
+
+            if (targetId && newStatus) {
+                setOrders(prevOrders => prevOrders.map(ord => {
+                    if (
+                        ord.id === targetId ||
+                        (data.orderId && ord.id === data.orderId) ||
+                        (data.serialId && ord.serialId === data.serialId)
+                    ) {
+                        return {
+                            ...ord,
+                            status: newStatus,
+                            updatedAt: data.updatedAt || new Date().toISOString()
+                        };
+                    }
+                    return ord;
+                }));
+
+                setSelectedOrder(prev => {
+                    if (prev && prev.id === targetId) {
+                        return {
+                            ...prev,
+                            status: newStatus,
+                            updatedAt: data.updatedAt || new Date().toISOString()
+                        };
+                    }
+                    return prev;
+                });
+            }
+        };
+
+        socket.on('transactionUpdate', handleTransactionUpdate);
+        return () => {
+            socket.off('transactionUpdate', handleTransactionUpdate);
+        };
+    }, [socket]);
 
     useEffect(() => {
         if (user) {
