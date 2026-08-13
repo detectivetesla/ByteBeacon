@@ -4,23 +4,47 @@ export interface Bundle {
     id: string;
     network: string;
     dataAmount: string;
+    dataSizeGb?: number;
     priceGhc: number;
     agentPriceGhc?: number;
     agentPrice?: number | null;
     userPrice?: number;
     isActive: boolean;
-    createdAt: string;
+    validity?: string;
+    createdAt?: string;
 }
+
+export type OrderStatus =
+    | 'received'
+    | 'processing'
+    | 'approved'
+    | 'partially_approved'
+    | 'rejected'
+    | 'completed'
+    | 'failed'
+    | 'ongoing'
+    | 'queued'
+    | 'pending'
+    | 'pending_mtn_approval';
 
 export interface Transaction {
     id: string;
+    publicId?: string;
+    referenceCode?: string;
     recipientPhone: string;
     amount: number;
-    status: 'processing' | 'completed' | 'failed' | 'ongoing' | 'queued';
+    status: OrderStatus;
     network: string;
     dataAmount: string;
     createdAt: string;
     updatedAt?: string;
+    lastSyncedAt?: string;
+    serialId?: number | string;
+    balanceBefore?: number | null;
+    balanceAfter?: number | null;
+    source?: string;
+    paid?: string;
+    sourceProvider?: string;
 }
 
 export interface PurchaseData {
@@ -29,12 +53,18 @@ export interface PurchaseData {
 }
 
 export interface PurchaseResponse {
+    success: boolean;
     message: string;
     transaction: Transaction;
+    error?: {
+        code?: string;
+        message?: string;
+    };
+    code?: string;
 }
 
 export const bundleService = {
-    // Get all bundles
+    // Get all bundles from authoritative DataHouse catalog
     getAll: async (): Promise<Bundle[]> => {
         return api.get<Bundle[]>('/bundles');
     },
@@ -57,10 +87,11 @@ export const transactionService = {
     },
 
     // Get user transactions
-    getAll: async (params?: { status?: string; limit?: number }): Promise<Transaction[]> => {
+    getAll: async (params?: { status?: string; limit?: number; offset?: number }): Promise<Transaction[]> => {
         const queryParams = new URLSearchParams();
         if (params?.status) queryParams.append('status', params.status);
         if (params?.limit) queryParams.append('limit', params.limit.toString());
+        if (params?.offset) queryParams.append('offset', params.offset.toString());
 
         const query = queryParams.toString();
         return api.get<Transaction[]>(`/transactions${query ? `?${query}` : ''}`);
@@ -71,8 +102,8 @@ export const transactionService = {
         return api.get<Transaction>(`/transactions/${id}`);
     },
 
-    // Sync transaction status
-    sync: async (id: string): Promise<{ message: string; synced: boolean; newStatus?: string }> => {
+    // Sync transaction status with DataHouse
+    sync: async (id: string): Promise<{ message: string; synced: boolean; status?: OrderStatus; datahouseOrder?: any }> => {
         return api.get(`/transactions/${id}/sync`);
     },
 };

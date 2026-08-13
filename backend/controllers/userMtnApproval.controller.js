@@ -1,5 +1,5 @@
 const pool = require('../config/database');
-const { normalizeGhanaPhone } = require('../utils/datahouse');
+const { normalizePhone } = require('../integrations/datahouse');
 const { sendExportResponse } = require('../utils/exportHelper');
 
 /**
@@ -77,7 +77,7 @@ exports.getMyMtnApprovals = async (req, res) => {
 
         // Search filter
         if (search && search.trim() !== '') {
-            const normSearch = normalizeGhanaPhone(search.trim());
+            const normSearch = normalizePhone(search.trim());
             whereClause += ' AND (a.msisdn LIKE ? OR a.display_phone LIKE ? OR a.msisdn LIKE ?)';
             const term = `%${search.trim()}%`;
             params.push(term, term, `%${normSearch}%`);
@@ -303,7 +303,7 @@ exports.exportMyMtnApprovals = async (req, res) => {
         // Search filter
         if (search && search.trim() !== '') {
             const trimmed = search.trim();
-            const normSearch = normalizeGhanaPhone(trimmed);
+            const normSearch = normalizePhone(trimmed);
             whereClause += ' AND (a.msisdn LIKE ? OR a.display_phone LIKE ? OR a.msisdn LIKE ?)';
             const term = `%${trimmed}%`;
             params.push(term, term, `%${normSearch}%`);

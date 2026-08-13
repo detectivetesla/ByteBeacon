@@ -2555,12 +2555,12 @@ const reprocessTransaction = async (req, res) => {
         // 5. Emit real-time update
         const io = req.app.get('io');
         if (io) {
-            io.emit('transactionUpdate', { transactionId: id, status: 'processing', message: 'Order has been requeued for processing.' });
+            io.emit('transactionUpdate', { transactionId: id, status: 'processing', message: 'Order has been requeued for processing with DataHouse.' });
         }
 
-        // 6. Trigger order queue immediately
-        const { processOrderQueue } = require('../services/orderQueue.service');
-        processOrderQueue(io).catch(err => console.error('Queue trigger error after reprocess:', err));
+        // 6. Trigger status reconciliation with DataHouse
+        const { syncPendingTransactions } = require('../jobs/statusSync');
+        syncPendingTransactions(io).catch(err => console.error('DataHouse sync error after reprocess:', err));
 
         res.json({ message: `Transaction requeued for processing. ₵${amount.toFixed(2)} deducted from wallet.`, status: 'processing', amountDebited: amount });
 
@@ -2610,9 +2610,9 @@ const massReprocessFailedTransactions = async (req, res) => {
             io.emit('transactionUpdate', { status: 'processing', message: `${failedCount} failed orders have been requeued for processing.` });
         }
 
-        // 5. Trigger order queue immediately
-        const { processOrderQueue } = require('../services/orderQueue.service');
-        processOrderQueue(io).catch(err => console.error('Queue trigger error after mass reprocess:', err));
+        // 5. Trigger DataHouse status reconciliation
+        const { syncPendingTransactions } = require('../jobs/statusSync');
+        syncPendingTransactions(io).catch(err => console.error('DataHouse sync error after mass reprocess:', err));
 
         res.json({ message: `${failedCount} failed transaction(s) requeued for processing.`, count: failedCount });
 

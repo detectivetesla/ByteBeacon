@@ -166,12 +166,10 @@ app.use('/api/v1/orders/bulk', bulkOrderRoutes);
 app.use('/api/payment', paymentLimiter, paymentRoutes);
 app.use('/api/v1', partnerRoutes);
 
-// Portal-02 webhook routes (external service callback)
-const portal02Routes = require('./routes/portal02.routes');
-app.use('/api/portal02', paymentLimiter, portal02Routes);
-
-// Datahouse webhook routes (external service callback)
+// Webhook routes (external service callbacks)
+const webhookRoutes = require('./routes/webhook.routes');
 const datahouseRoutes = require('./routes/datahouse.routes');
+app.use('/api/webhooks', paymentLimiter, webhookRoutes);
 app.use('/api/datahouse', paymentLimiter, datahouseRoutes);
 
 // Error handling middleware
@@ -198,7 +196,6 @@ const { initBulkTables } = require('./utils/bulkMigrations');
 
 // Background jobs
 const { startStatusSyncJob } = require('./jobs/statusSync');
-const { runBulkWatchdog, processNextBulkChunk } = require('./services/bulkOrder.service');
 
 const isServerless = process.env.VERCEL || process.env.NOW_REGION || (process.env.NODE_ENV === 'production' && !process.env.BACKEND_URL);
 
@@ -222,12 +219,6 @@ const startServer = async () => {
 
                 // Start background status sync job only in persistent environments
                 startStatusSyncJob(io);
-
-                // Start periodic bulk watchdog & queue runner
-                setInterval(() => {
-                    runBulkWatchdog().catch(() => {});
-                    processNextBulkChunk().catch(() => {});
-                }, 60 * 1000);
             });
         }
     } catch (err) {

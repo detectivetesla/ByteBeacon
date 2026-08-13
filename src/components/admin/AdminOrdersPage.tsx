@@ -310,8 +310,12 @@ export default function AdminOrdersPage() {
 
     const getStatusIcon = (status: string) => {
         switch (status) {
+            case 'approved':
             case 'completed':
                 return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
+            case 'partially_approved':
+                return <CheckCircle2 className="w-4 h-4 text-teal-400" />;
+            case 'received':
             case 'processing':
             case 'pending':
             case 'ongoing':
@@ -319,6 +323,7 @@ export default function AdminOrdersPage() {
                 return <Clock className="w-4 h-4 text-amber-500 animate-pulse" />;
             case 'refunded':
                 return <RotateCcw className="w-4 h-4 text-purple-400" />;
+            case 'rejected':
             case 'failed':
             default:
                 return <XCircle className="w-4 h-4 text-red-500" />;
@@ -327,8 +332,12 @@ export default function AdminOrdersPage() {
 
     const getStatusBadge = (status: string) => {
         switch (status) {
+            case 'approved':
             case 'completed':
                 return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+            case 'partially_approved':
+                return 'bg-teal-500/10 text-teal-400 border border-teal-500/20';
+            case 'received':
             case 'processing':
             case 'pending':
             case 'ongoing':
@@ -336,6 +345,7 @@ export default function AdminOrdersPage() {
                 return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
             case 'refunded':
                 return 'bg-purple-500/10 text-purple-400 border border-purple-500/20';
+            case 'rejected':
             case 'failed':
             default:
                 return 'bg-red-500/10 text-red-400 border border-red-500/20';

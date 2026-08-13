@@ -1,9 +1,10 @@
 const pool = require('../config/database');
 const { submitBulkOrder, reconcileBulkSubmission } = require('../services/bulkOrder.service');
-const { normalizeGhanaPhone } = require('../utils/datahouse');
+const { normalizePhone } = require('../integrations/datahouse');
 
 /**
  * Controller for Bulk Order Ingestion, Status Tracking, & Items Pagination
+ * DataHouse is the telecom authority for bulk order processing.
  */
 
 // 1. Submit Bulk Order (POST /api/bulk-orders)
@@ -60,6 +61,12 @@ const getBulkSubmissionStatus = async (req, res) => {
         }
 
         const sub = subs[0];
+
+        // Reconcile status with DataHouse if active
+        if (['queued', 'processing'].includes(sub.status)) {
+            await reconcileBulkSubmission(sub.id).catch(() => {});
+        }
+
         const total = parseInt(sub.total_recipients, 10) || 0;
         const completed = parseInt(sub.completed_count, 10) || 0;
         const failed = parseInt(sub.failed_count, 10) || 0;
@@ -135,7 +142,7 @@ const getBulkSubmissionItems = async (req, res) => {
         }
 
         if (search && search.trim() !== '') {
-            const normSearch = normalizeGhanaPhone(search.trim());
+            const normSearch = normalizePhone(search.trim());
             query += ' AND (recipient_phone LIKE ? OR normalized_phone LIKE ?)';
             const term = `%${search.trim()}%`;
             params.push(term, `%${normSearch}%`);
@@ -168,55 +175,8 @@ const getBulkSubmissionItems = async (req, res) => {
     }
 };
 
-// 4. Retry Failed Items in Batch (POST /api/bulk-orders/:id/retry)
-const retryBulkSubmission = async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        const [subs] = await pool.execute(
-            `SELECT id, reference_code FROM bulk_submissions WHERE id::text = ? OR public_id = ? OR reference_code = ?`,
-            [id, id, id]
-        );
-
-        if (subs.length === 0) {
-            return res.status(404).json({ success: false, error: 'Bulk submission not found' });
-        }
-        const submissionId = subs[0].id;
-
-        // Re-enqueue eligible failed items
-        const [result] = await pool.execute(
-            `UPDATE bulk_submission_items
-             SET status = 'queued', attempt_count = 0, next_retry_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-             WHERE submission_id = ?::uuid AND status IN ('failed', 'error')`,
-            [submissionId]
-        );
-
-        const requeuedCount = result.affectedRows || 0;
-
-        if (requeuedCount > 0) {
-            await pool.execute(
-                `UPDATE bulk_submissions SET status = 'processing', last_progress_at = CURRENT_TIMESTAMP WHERE id = ?::uuid`,
-                [submissionId]
-            );
-            const { processNextBulkChunk } = require('../services/bulkOrder.service');
-            setImmediate(() => processNextBulkChunk().catch(() => {}));
-        }
-
-        return res.json({
-            success: true,
-            message: `Requeued ${requeuedCount} failed items for batch ${subs[0].reference_code}.`,
-            requeuedCount
-        });
-
-    } catch (err) {
-        console.error('Error in retryBulkSubmission:', err);
-        return res.status(500).json({ success: false, error: 'Internal Server Error' });
-    }
-};
-
 module.exports = {
     createBulkSubmission,
     getBulkSubmissionStatus,
-    getBulkSubmissionItems,
-    retryBulkSubmission
+    getBulkSubmissionItems
 };

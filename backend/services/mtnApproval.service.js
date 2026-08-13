@@ -1,11 +1,11 @@
 const pool = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
-const { normalizeGhanaPhone, getBeneficiaryApprovalStatus } = require('../utils/datahouse');
+const { normalizePhone, listBeneficiaries } = require('../integrations/datahouse');
 
 /**
  * Record a beneficiary phone number in the Pending MTN Approval workflow.
  * Normalizes phone number, aggregates duplicate occurrences, bundle sizes, and sources.
- * Also stores and updates DataHouse approval references and synchronization metadata.
+ * Synchronizes with DataHouse's authoritative beneficiary registry.
  */
 const recordPendingBeneficiary = async ({
     phone,
@@ -23,7 +23,7 @@ const recordPendingBeneficiary = async ({
     datahouseSyncError = null
 }) => {
     if (!phone) return null;
-    const normalizedPhone = normalizeGhanaPhone(phone);
+    const normalizedPhone = normalizePhone(phone);
     const displayPhone = phone.startsWith('0') ? phone : (phone.startsWith('233') ? `0${phone.slice(3)}` : phone);
     const calculatedSyncStatus = datahouseSyncStatus || (datahouseReference ? 'synced' : 'pending');
 
@@ -49,7 +49,7 @@ const recordPendingBeneficiary = async ({
                 currentBundleSizes = typeof existing[0].bundle_sizes === 'string' 
                     ? JSON.parse(existing[0].bundle_sizes) 
                     : (existing[0].bundle_sizes || []);
-            } catch (e) { currentBundleSizes = []; }
+            } catch { currentBundleSizes = []; }
             if (bundleSize && !currentBundleSizes.includes(bundleSize)) {
                 currentBundleSizes.push(bundleSize);
             }
@@ -59,7 +59,7 @@ const recordPendingBeneficiary = async ({
                 currentSources = typeof existing[0].sources === 'string' 
                     ? JSON.parse(existing[0].sources) 
                     : (existing[0].sources || []);
-            } catch (e) { currentSources = []; }
+            } catch { currentSources = []; }
             if (source && !currentSources.includes(source)) {
                 currentSources.push(source);
             }
@@ -147,10 +147,8 @@ const recordPendingBeneficiary = async ({
         );
 
         await connection.commit();
-        console.log(`📱 Recorded pending MTN approval for ${displayPhone} (Source: ${source}, Bundle: ${bundleSize}, User: ${userId || 'N/A'}, Agent: ${agentId || 'N/A'}, Store: ${agentStoreId || 'N/A'})`);
-        if (global.io) {
-            global.io.emit('mtnApprovalUpdate');
-        }
+        console.log(`📱 Recorded pending MTN approval for ${displayPhone} (Source: ${source}, Bundle: ${bundleSize})`);
+
         return approvalId;
     } catch (error) {
         await connection.rollback().catch(() => {});
@@ -162,83 +160,34 @@ const recordPendingBeneficiary = async ({
 };
 
 /**
- * Synchronize status of pending MTN beneficiaries with DataHouse API.
- * Automatically retries un-synced local records and updates ByteBeacon when DataHouse status changes.
+ * Synchronize local beneficiary approval states with authoritative DataHouse GET /agent/beneficiaries
  */
 const syncBeneficiaryApprovals = async () => {
     try {
-        console.log('🔄 [MTN Sync] Querying DataHouse for beneficiary approval status updates...');
-        const { precheckBeneficiary } = require('../utils/datahouse');
-        let totalUpdated = 0;
-        let totalRetried = 0;
+        console.log('🔄 [MTN Sync] Reconciling beneficiary approvals with DataHouse...');
 
-        // --- STEP 1: Retry un-synced / failed DataHouse beneficiary registrations ---
-        const [unsyncedRecords] = await pool.execute(
-            `SELECT id, msisdn, display_phone, network, sources, bundle_sizes 
-             FROM mtn_beneficiary_approvals 
-             WHERE status IN ('pending', 'submitted') AND datahouse_sync_status IN ('pending', 'failed')
-             LIMIT 30`
-        );
-
-        if (unsyncedRecords.length > 0) {
-            console.log(`🔄 [MTN Sync] Retrying DataHouse registration for ${unsyncedRecords.length} un-synced records...`);
-            for (const rec of unsyncedRecords) {
-                try {
-                    const regRes = await precheckBeneficiary('MTN', [rec.display_phone], true);
-                    if (regRes.success) {
-                        await pool.execute(
-                            `UPDATE mtn_beneficiary_approvals
-                             SET datahouse_sync_status = 'synced',
-                                 datahouse_reference = COALESCE(?, datahouse_reference),
-                                 datahouse_status = 'pending',
-                                 datahouse_sync_error = NULL,
-                                 datahouse_last_sync_at = CURRENT_TIMESTAMP
-                             WHERE id = ?::uuid`,
-                            [regRes.datahouseReference || null, rec.id]
-                        );
-                        totalRetried++;
-                        console.log(`✅ [MTN Sync] Successfully registered ${rec.display_phone} on DataHouse during retry job.`);
-                    } else {
-                        await pool.execute(
-                            `UPDATE mtn_beneficiary_approvals
-                             SET datahouse_sync_status = 'failed',
-                                 datahouse_sync_error = ?,
-                                 datahouse_last_sync_at = CURRENT_TIMESTAMP
-                             WHERE id = ?::uuid`,
-                            [regRes.error || 'DataHouse registration failed', rec.id]
-                        );
-                    }
-                } catch (retryErr) {
-                    console.warn(`⚠️ [MTN Sync] Retry registration error for ${rec.display_phone}:`, retryErr.message);
-                }
-                // Rate limiting delay (500ms between calls)
-                await new Promise(r => setTimeout(r, 500));
-            }
-        }
-
-        // --- STEP 2: Fetch active pending/submitted records from local DB ---
+        // Fetch active pending/submitted records from local DB
         const [localRecords] = await pool.execute(
             `SELECT id, msisdn, display_phone, status, datahouse_reference 
              FROM mtn_beneficiary_approvals WHERE status IN ('pending', 'submitted')`
         );
 
         if (localRecords.length === 0) {
-            console.log('ℹ️ [MTN Sync] No active pending MTN beneficiary approvals in local queue.');
-            return { updated: totalUpdated, retried: totalRetried };
+            return { updated: 0 };
         }
 
-        // --- STEP 3: Query DataHouse GET /agent/beneficiaries API ---
-        const dhResponse = await getBeneficiaryApprovalStatus({ network: 'MTN', limit: 100 });
-        if (!dhResponse.success || !dhResponse.data) {
-            console.warn('⚠️ [MTN Sync] DataHouse getBeneficiaryApprovalStatus returned non-success:', dhResponse.error);
-            return { updated: totalUpdated, retried: totalRetried, error: dhResponse.error };
+        const dhResponse = await listBeneficiaries({ limit: 100 });
+        if (!dhResponse.ok) {
+            console.warn('⚠️ [MTN Sync] DataHouse listBeneficiaries returned non-success:', dhResponse.error);
+            return { updated: 0, error: dhResponse.error };
         }
 
-        const remoteList = Array.isArray(dhResponse.data) ? dhResponse.data : (dhResponse.data.items || dhResponse.data.data || []);
+        const remoteList = Array.isArray(dhResponse.data) ? dhResponse.data : (dhResponse.data?.items || dhResponse.data?.data || []);
+        let totalUpdated = 0;
 
         for (const localRec of localRecords) {
             const match = remoteList.find(r => {
-                const rPhone = normalizeGhanaPhone(r.phoneNumber || r.phone || r.msisdn || '');
+                const rPhone = normalizePhone(r.phoneNumber || r.phone || r.msisdn || '');
                 const rRef = r.id || r.reference || r.publicId || null;
                 return rPhone === localRec.msisdn || (rRef && rRef === localRec.datahouse_reference);
             });
@@ -249,8 +198,6 @@ const syncBeneficiaryApprovals = async () => {
             const remoteRef = match.id || match.reference || match.publicId || localRec.datahouse_reference || null;
 
             if (remoteStatus === 'approved' && localRec.status !== 'approved') {
-                console.log(`🎉 [MTN Sync] Beneficiary ${localRec.display_phone} APPROVED by MTN! Updating status to approved...`);
-                
                 await pool.execute(
                     `UPDATE mtn_beneficiary_approvals
                      SET status = 'approved',
@@ -264,10 +211,7 @@ const syncBeneficiaryApprovals = async () => {
                     [remoteRef, localRec.id]
                 );
                 totalUpdated++;
-
             } else if (remoteStatus === 'rejected' && localRec.status !== 'rejected') {
-                console.log(`❌ [MTN Sync] Beneficiary ${localRec.display_phone} REJECTED by MTN.`);
-
                 await pool.execute(
                     `UPDATE mtn_beneficiary_approvals
                      SET status = 'rejected',
@@ -281,39 +225,14 @@ const syncBeneficiaryApprovals = async () => {
                     [remoteRef, localRec.id]
                 );
                 totalUpdated++;
-
-            } else if (remoteStatus === 'submitted' && localRec.status === 'pending') {
-                await pool.execute(
-                    `UPDATE mtn_beneficiary_approvals 
-                     SET status = 'submitted',
-                         datahouse_status = 'submitted',
-                         datahouse_reference = COALESCE(?, datahouse_reference),
-                         datahouse_sync_status = 'synced',
-                         datahouse_last_sync_at = CURRENT_TIMESTAMP,
-                         submitted_at = CURRENT_TIMESTAMP 
-                     WHERE id = ?::uuid`,
-                    [remoteRef, localRec.id]
-                );
-                totalUpdated++;
-            } else {
-                // Keep datahouse metadata fresh
-                await pool.execute(
-                    `UPDATE mtn_beneficiary_approvals 
-                     SET datahouse_status = ?,
-                         datahouse_reference = COALESCE(?, datahouse_reference),
-                         datahouse_sync_status = 'synced',
-                         datahouse_last_sync_at = CURRENT_TIMESTAMP
-                     WHERE id = ?::uuid`,
-                    [remoteStatus, remoteRef, localRec.id]
-                );
             }
         }
 
-        if ((totalUpdated > 0 || totalRetried > 0) && global.io) {
+        if (totalUpdated > 0 && global.io) {
             global.io.emit('mtnApprovalUpdate');
         }
 
-        return { updated: totalUpdated, retried: totalRetried };
+        return { updated: totalUpdated };
     } catch (error) {
         console.error('❌ Error syncing MTN beneficiary approvals:', error);
         return { updated: 0, error: error.message };

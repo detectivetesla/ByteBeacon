@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { portal02Webhook } = require('../controllers/portal02.controller');
+const { datahouseWebhook } = require('../controllers/datahouse.controller');
 
-// Portal-02 webhook - no auth required (external callback)
-router.post('/portal02', portal02Webhook);
-router.get('/portal02', portal02Webhook); // Some providers use GET
+// DataHouse Webhook endpoint: /api/webhooks/datahouse
+router.post('/datahouse', datahouseWebhook);
+router.get('/datahouse', datahouseWebhook);
 
 module.exports = router;

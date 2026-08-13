@@ -102,17 +102,17 @@ const processWorker = async (req, res) => {
             return res.status(401).json({ success: false, error: 'Unauthorized worker access' });
         }
 
-        const { processOrderQueue } = require('../services/orderQueue.service');
+        const { syncPendingTransactions } = require('../jobs/statusSync');
         const io = req.app.get('io');
-        const result = await processOrderQueue(io);
-        res.json({ success: true, ...result });
+        await syncPendingTransactions(io);
+        res.json({ success: true, message: 'DataHouse reconciliation triggered' });
     } catch (error) {
         console.error('Worker processing error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
-// Vercel Cron endpoint — processes queue AND syncs statuses
+// Vercel Cron endpoint — reconciles statuses with DataHouse
 const cronSync = async (req, res) => {
     try {
         // SECURITY: Verify Vercel cron secret OR worker secret
@@ -130,21 +130,11 @@ const cronSync = async (req, res) => {
             return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
 
-        console.log('⏰ [CRON] Starting scheduled sync...');
+        console.log('⏰ [CRON] Starting scheduled DataHouse reconciliation sync...');
         const io = req.app.get('io');
-        const results = { queue: null, sync: null };
+        const results = { sync: null };
 
-        // 1. Process pending orders (place orders with Datahouse)
-        try {
-            const { processOrderQueue } = require('../services/orderQueue.service');
-            results.queue = await processOrderQueue(io);
-            console.log('✅ [CRON] Queue processed:', results.queue);
-        } catch (queueErr) {
-            console.error('❌ [CRON] Queue error:', queueErr.message);
-            results.queue = { error: queueErr.message };
-        }
-
-        // 2. Sync statuses for orders already sent to Datahouse
+        // Sync statuses for orders with Datahouse
         try {
             const { syncPendingTransactions } = require('../jobs/statusSync');
             await syncPendingTransactions(io);

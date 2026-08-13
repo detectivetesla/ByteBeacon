@@ -161,8 +161,9 @@ export default function OrdersPage() {
                 (order.sourceProvider && order.sourceProvider.toLowerCase().includes(searchTerm.toLowerCase()));
 
             const matchesStatus = statusFilter === 'all' ||
-                (statusFilter === 'processing' && (order.status === 'processing' || order.status === 'pending' || order.status === 'ongoing' || order.status === 'queued')) ||
-                (statusFilter === 'completed' && order.status === 'completed') ||
+                (statusFilter === 'processing' && ['processing', 'received', 'pending', 'ongoing', 'queued'].includes(order.status)) ||
+                (statusFilter === 'completed' && ['completed', 'approved', 'partially_approved'].includes(order.status)) ||
+                (statusFilter === 'failed' && ['failed', 'rejected'].includes(order.status)) ||
                 order.status === statusFilter;
 
             return matchesSearch && matchesStatus;
@@ -193,8 +194,12 @@ export default function OrdersPage() {
             case 'pending_mtn_approval':
             case 'awaiting_mtn_approval':
                 return <Clock className="w-4 h-4 text-amber-400 animate-pulse" />;
+            case 'approved':
             case 'completed':
                 return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
+            case 'partially_approved':
+                return <CheckCircle2 className="w-4 h-4 text-teal-400" />;
+            case 'received':
             case 'processing':
             case 'pending':
             case 'ongoing':
@@ -202,6 +207,7 @@ export default function OrdersPage() {
                 return <Clock className="w-4 h-4 text-amber-500 animate-pulse" />;
             case 'pending_payment':
                 return <Clock className="w-4 h-4 text-blue-500 animate-pulse" />;
+            case 'rejected':
             case 'failed':
             default:
                 return <XCircle className="w-4 h-4 text-red-500" />;
@@ -213,8 +219,12 @@ export default function OrdersPage() {
             case 'pending_mtn_approval':
             case 'awaiting_mtn_approval':
                 return 'bg-amber-500/15 text-amber-300 border border-amber-500/30';
+            case 'approved':
             case 'completed':
                 return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+            case 'partially_approved':
+                return 'bg-teal-500/10 text-teal-400 border border-teal-500/20';
+            case 'received':
             case 'processing':
             case 'pending':
             case 'ongoing':
@@ -222,6 +232,7 @@ export default function OrdersPage() {
                 return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
             case 'pending_payment':
                 return 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
+            case 'rejected':
             case 'failed':
             default:
                 return 'bg-red-500/10 text-red-400 border border-red-500/20';
