@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getMaintenanceStatus, processWorker, cronSync, getSystemConfig, getPortalStatus, beneficiaryPrecheck } = require('../controllers/system.controller');
+const { getMaintenanceStatus, processWorker, cronSync, getSystemConfig, getPortalStatus, beneficiaryPrecheck, getDataHouseDiagnostics } = require('../controllers/system.controller');
 
 // Public route to check maintenance status
 router.get('/maintenance', getMaintenanceStatus);
@@ -13,6 +13,9 @@ router.get('/config', getSystemConfig);
 
 // Public route for MTN beneficiary pre-check (Up2U rule)
 router.post('/beneficiary-precheck', beneficiaryPrecheck);
+
+// DataHouse Authoritative Diagnostics Route
+router.get('/datahouse-diagnostics', getDataHouseDiagnostics);
 
 // Worker route to trigger order queue processing
 // Secured with secret key in controller

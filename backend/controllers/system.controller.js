@@ -686,6 +686,74 @@ const beneficiaryPrecheck = async (req, res) => {
     }
 };
 
+// DataHouse Live Authoritative Diagnostics Endpoint
+const getDataHouseDiagnostics = async (req, res) => {
+    try {
+        const { getAgentProfile, getBundles } = require('../integrations/datahouse');
+        const startTime = Date.now();
+        const meRes = await getAgentProfile();
+        const latencyMs = Date.now() - startTime;
+
+        let connectivity = meRes.ok ? 'HEALTHY' : 'DEGRADED';
+        let authStatus = meRes.ok ? 'VALID' : 'INVALID';
+
+        // Test catalog retrieval
+        const bundleRes = await getBundles({ limit: 1 }).catch(() => ({ ok: false }));
+        let catalogRetrieval = bundleRes.ok ? 'HEALTHY' : 'FAILED';
+
+        // Check latest webhook
+        let lastWebhookInfo = null;
+        try {
+            const [webhookLogs] = await pool.execute(`
+                SELECT event_type, created_at, event_id as delivery_id 
+                FROM datahouse_webhook_logs 
+                ORDER BY created_at DESC LIMIT 1
+            `);
+            if (webhookLogs.length > 0) {
+                lastWebhookInfo = {
+                    eventType: webhookLogs[0].event_type,
+                    receivedAt: webhookLogs[0].created_at,
+                    deliveryId: webhookLogs[0].delivery_id
+                };
+            }
+        } catch (e) {}
+
+        // Check latest reconciliation
+        let lastReconciledAt = null;
+        try {
+            const [reconcileLogs] = await pool.execute(`
+                SELECT MAX(last_synced_at) as last_synced 
+                FROM transactions 
+                WHERE last_synced_at IS NOT NULL
+            `);
+            lastReconciledAt = reconcileLogs[0]?.last_synced || null;
+        } catch (e) {}
+
+        res.json({
+            success: true,
+            diagnostics: {
+                datahouseConnection: connectivity,
+                apiAuthentication: authStatus,
+                latencyMs,
+                agentProfile: meRes.ok ? {
+                    businessName: meRes.data?.businessName,
+                    status: meRes.data?.status,
+                    tier: meRes.data?.tier,
+                    apiAccessStatus: meRes.data?.apiAccessStatus
+                } : null,
+                catalogRetrieval,
+                webhookStatus: lastWebhookInfo ? 'ACTIVE' : 'IDLE',
+                lastWebhook: lastWebhookInfo,
+                lastReconciliation: lastReconciledAt,
+                timestamp: new Date().toISOString()
+            }
+        });
+    } catch (err) {
+        console.error('DataHouse diagnostics error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
 module.exports = {
     getMaintenanceStatus,
     updateMaintenanceStatus,
@@ -700,5 +768,6 @@ module.exports = {
     deleteSourcingProvider,
     activateSourcingProvider,
     testSourcingProvider,
-    beneficiaryPrecheck
+    beneficiaryPrecheck,
+    getDataHouseDiagnostics
 };

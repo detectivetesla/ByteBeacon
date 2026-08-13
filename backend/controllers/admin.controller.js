@@ -330,7 +330,7 @@ const getAllTransactions = async (req, res) => {
                     t.id::text as id, 
                     t.recipient_phone, 
                     t.amount_ghc, 
-                    COALESCE(t.current_datahouse_status, t.datahouse_status, t.status) as status, 
+                    COALESCE(t.current_datahouse_status, t.status) as status, 
                     t.created_at, 
                     t.updated_at,
                     t.serial_id, 
@@ -359,7 +359,7 @@ const getAllTransactions = async (req, res) => {
                     o.id::text as id,
                     o.customer_phone as recipient_phone,
                     o.selling_price_ghc as amount_ghc,
-                    o.fulfillment_status as status,
+                    COALESCE(o.current_datahouse_status, o.fulfillment_status) as status,
                     o.created_at,
                     o.updated_at,
                     NULL as serial_id,
@@ -370,9 +370,9 @@ const getAllTransactions = async (req, res) => {
                     COALESCE(b.provider_slug, 'datahouse') as source_provider,
                     o.datahouse_order_id,
                     o.reference_code,
-                    o.updated_at as last_synced_at,
-                    'synced' as sync_status,
-                    o.fulfillment_status as datahouse_status,
+                    o.last_synced_at,
+                    o.sync_status,
+                    o.current_datahouse_status as datahouse_status,
                     o.network,
                     o.data_amount,
                     CONCAT(s.store_name, ' (Storefront)') as user_name,
@@ -2954,7 +2954,7 @@ const exportAllTransactions = async (req, res) => {
                     t.id::text as id, 
                     t.recipient_phone, 
                     t.amount_ghc, 
-                    t.status, 
+                    COALESCE(t.current_datahouse_status, t.status) as status, 
                     t.created_at, 
                     t.updated_at,
                     t.serial_id, 
@@ -2963,6 +2963,10 @@ const exportAllTransactions = async (req, res) => {
                     COALESCE(t.source, 'BYTEBEACON') as source, 
                     t.paid, 
                     t.source_provider,
+                    t.datahouse_order_id,
+                    t.reference_code,
+                    t.last_synced_at,
+                    t.sync_status,
                     d.network, 
                     d.data_amount,
                     COALESCE(p.full_name, u.name, 'Customer') as user_name, 
@@ -2978,7 +2982,7 @@ const exportAllTransactions = async (req, res) => {
                     o.id::text as id,
                     o.customer_phone as recipient_phone,
                     o.selling_price_ghc as amount_ghc,
-                    o.fulfillment_status as status,
+                    COALESCE(o.current_datahouse_status, o.fulfillment_status) as status,
                     o.created_at,
                     o.updated_at,
                     NULL as serial_id,
@@ -2987,6 +2991,10 @@ const exportAllTransactions = async (req, res) => {
                     'AGENT_STORE' as source,
                     o.payment_status as paid,
                     COALESCE(b.provider_slug, 'datahouse') as source_provider,
+                    o.datahouse_order_id,
+                    o.reference_code,
+                    o.last_synced_at,
+                    o.sync_status,
                     o.network,
                     o.data_amount,
                     CONCAT(s.store_name, ' (Storefront)') as user_name,
@@ -3056,8 +3064,10 @@ const exportAllTransactions = async (req, res) => {
                 OR id LIKE ? 
                 OR (serial_id IS NOT NULL AND serial_id::text LIKE ?)
                 OR source_provider ILIKE ?
+                OR datahouse_order_id ILIKE ?
+                OR reference_code ILIKE ?
             )`;
-            params.push(term, term, term, term, term, term);
+            params.push(term, term, term, term, term, term, term, term);
         }
 
         query += ' ORDER BY created_at DESC LIMIT 50000';
@@ -3071,6 +3081,8 @@ const exportAllTransactions = async (req, res) => {
                 transform: (r) => r.serial_id ? `ORD-${r.serial_id}` : (r.id ? `ORD-${r.id.slice(0, 8).toUpperCase()}` : 'N/A')
             },
             { key: 'id', label: 'Full Reference ID' },
+            { key: 'datahouse_order_id', label: 'DataHouse Order ID' },
+            { key: 'reference_code', label: 'DataHouse Reference' },
             { key: 'user_name', label: 'Customer / Store' },
             { key: 'user_email', label: 'Email' },
             { key: 'recipient_phone', label: 'Recipient Phone' },
@@ -3082,6 +3094,7 @@ const exportAllTransactions = async (req, res) => {
                 transform: (r) => r.amount_ghc !== null && r.amount_ghc !== undefined ? parseFloat(r.amount_ghc) : 0
             },
             { key: 'status', label: 'Order Status' },
+            { key: 'sync_status', label: 'Sync Status' },
             { key: 'source', label: 'Source Channel' },
             { key: 'paid', label: 'Payment Status' },
             { key: 'source_provider', label: 'Fulfillment Provider' },
