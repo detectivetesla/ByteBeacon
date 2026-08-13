@@ -7,7 +7,7 @@ const { logActivity } = require('./activityLogger');
  * Ensures the wallet balance update and refund log insertion (in `refunds` or `partner_ledger`)
  * occur within a single database transaction. If the transaction rolls back, no refund entry is created.
  */
-const processAutomatedRefund = async ({ transactionId, userId = null, partnerId = null, amountGhc = null, reason = 'Automated refund for failed order' }) => {
+const processAutomatedRefund = async ({ transactionId, userId = null, partnerId = null, amountGhc = null, reason = 'Automated refund for failed order', isPartial = false }) => {
     if (!transactionId) {
         return { success: false, error: 'Transaction ID is required for automated refund' };
     }
@@ -41,8 +41,10 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
 
         const targetUserId = userId || tx.user_id;
         const targetPartnerId = partnerId || tx.partner_id;
-        // Always calculate refund amount strictly from the trusted database transaction record
-        const refundAmount = parseFloat(tx.amount_ghc || 0);
+        // Calculate refund amount: use custom amount for partial refunds, else full transaction amount
+        const refundAmount = (amountGhc !== null && parseFloat(amountGhc) > 0)
+            ? Math.min(parseFloat(amountGhc), parseFloat(tx.amount_ghc || 0))
+            : parseFloat(tx.amount_ghc || 0);
 
         if (refundAmount <= 0) {
             await connection.rollback();
@@ -50,10 +52,10 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
             return { success: false, error: 'Refund amount must be greater than zero' };
         }
 
-        // 2. Check if transaction has ALREADY been refunded
+        // 2. Check if transaction has ALREADY been fully refunded
         let alreadyRefunded = tx.status === 'refunded' || tx.paid === 'refunded';
 
-        if (!alreadyRefunded && targetUserId) {
+        if (!alreadyRefunded && targetUserId && !isPartial) {
             const [existingRefunds] = await connection.execute(
                 "SELECT id FROM refunds WHERE notes LIKE ?",
                 [`%${transactionId}%`]
@@ -61,7 +63,7 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
             if (existingRefunds.length > 0) alreadyRefunded = true;
         }
 
-        if (!alreadyRefunded && targetPartnerId) {
+        if (!alreadyRefunded && targetPartnerId && !isPartial) {
             const [existingLedger] = await connection.execute(
                 "SELECT id FROM partner_ledger WHERE reference = ?::uuid AND type = 'refund'",
                 [transactionId]
@@ -76,11 +78,18 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
             return { success: false, reason: 'Already refunded' };
         }
 
-        // 3. Mark transaction as REFUNDED (both status and paid status = 'refunded')
-        await connection.execute(
-            'UPDATE transactions SET status = \'refunded\', paid = \'refunded\', failure_reason = COALESCE(failure_reason, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
-            [reason, transactionId]
-        );
+        // 3. Mark transaction as REFUNDED or PARTIALLY_REFUNDED
+        if (isPartial) {
+            await connection.execute(
+                "UPDATE transactions SET paid = 'partially_refunded', failure_reason = COALESCE(failure_reason, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid",
+                [reason, transactionId]
+            );
+        } else {
+            await connection.execute(
+                "UPDATE transactions SET status = 'refunded', paid = 'refunded', failure_reason = COALESCE(failure_reason, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid",
+                [reason, transactionId]
+            );
+        }
 
         // Check matching agent_orders and update status & handle profit reversal if applicable
         const [agentOrders] = await connection.execute(

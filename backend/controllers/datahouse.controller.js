@@ -137,17 +137,32 @@ const datahouseWebhook = async (req, res) => {
 
             console.log(`✅ [DataHouse Webhook] Updated transaction ${tx.id} status from ${previousStatus} -> ${finalStatus}`);
 
-            // 4. Automated Refund on Failure / Rejection if not previously refunded
-            if (isFailureState && previousStatus !== 'failed' && previousStatus !== 'rejected') {
+            // 4. Automated Refund on Failure / Rejection / Partial Approval if not previously refunded
+            if (isFailureState && previousStatus !== 'failed' && previousStatus !== 'rejected' && previousStatus !== 'refunded') {
                 try {
                     await processAutomatedRefund({
                         transactionId: tx.id,
                         userId: tx.user_id,
                         amountGhc: tx.amount_ghc,
-                        reason: `DataHouse carrier order ${finalStatus}: ${eventType}`
+                        reason: `DataHouse telecom order ${finalStatus}: ${eventType}`
                     });
                 } catch (refundErr) {
                     console.error('❌ Automated refund error:', refundErr.message);
+                }
+            } else if (eventType === 'order.partially_approved' && previousStatus !== 'partially_approved') {
+                try {
+                    const partialRefundAmount = parseFloat(eventData.refunded_amount || eventData.refundAmount || 0);
+                    if (partialRefundAmount > 0) {
+                        await processAutomatedRefund({
+                            transactionId: tx.id,
+                            userId: tx.user_id,
+                            amountGhc: partialRefundAmount,
+                            reason: `DataHouse carrier partial fulfillment refund (${eventType})`,
+                            isPartial: true
+                        });
+                    }
+                } catch (partialRefundErr) {
+                    console.error('❌ Automated partial refund error:', partialRefundErr.message);
                 }
             }
 
