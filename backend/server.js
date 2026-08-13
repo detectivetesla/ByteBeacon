@@ -13,6 +13,7 @@ const paymentRoutes = require('./routes/payment.routes');
 const webhookRoutes = require('./routes/webhook.routes');
 const systemRoutes = require('./routes/system.routes');
 const partnerRoutes = require('./routes/partner.routes');
+const datahouseRoutes = require('./routes/datahouse.routes');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -167,8 +168,6 @@ app.use('/api/payment', paymentLimiter, paymentRoutes);
 app.use('/api/v1', partnerRoutes);
 
 // Webhook routes (external service callbacks)
-const webhookRoutes = require('./routes/webhook.routes');
-const datahouseRoutes = require('./routes/datahouse.routes');
 app.use('/api/webhooks', paymentLimiter, webhookRoutes);
 app.use('/api/datahouse', paymentLimiter, datahouseRoutes);
 

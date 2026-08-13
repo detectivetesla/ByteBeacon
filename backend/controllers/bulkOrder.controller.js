@@ -175,8 +175,21 @@ const getBulkSubmissionItems = async (req, res) => {
     }
 };
 
+// 4. Retry / Reconcile Bulk Submission (POST /api/bulk-orders/:id/retry)
+const retryBulkSubmission = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await reconcileBulkSubmission(id);
+        return res.json({ success: true, message: 'Bulk submission synchronized with DataHouse', data: result });
+    } catch (err) {
+        console.error('Error in retryBulkSubmission:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+};
+
 module.exports = {
     createBulkSubmission,
     getBulkSubmissionStatus,
-    getBulkSubmissionItems
+    getBulkSubmissionItems,
+    retryBulkSubmission
 };
