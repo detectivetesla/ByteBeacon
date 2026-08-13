@@ -181,6 +181,15 @@ const processAutomatedRefund = async ({ transactionId, userId = null, partnerId 
 
         console.log(`✅ [REFUND HELPER] Successfully refunded GH₵${refundAmount.toFixed(2)} for transaction ${transactionId} (Status set to REFUNDED)`);
 
+        // Real-time Socket.IO notification push
+        if (global.io && targetUserId) {
+            global.io.to(targetUserId).emit('balanceUpdate', { userId: targetUserId, amount: refundAmount });
+            global.io.to(targetUserId).emit('newRefund', { userId: targetUserId, amount: refundAmount, transactionId });
+            global.io.to(targetUserId).emit('userStatsUpdate', { userId: targetUserId });
+            global.io.emit('userStatsUpdate', { userId: targetUserId });
+            global.io.emit('transactionUpdate', { transactionId, status: 'refunded', userId: targetUserId });
+        }
+
         // Log activity (non-blocking)
         if (targetUserId) {
             logActivity(targetUserId, 'REFUND', `Automated refund of GH₵${refundAmount.toFixed(2)} for failed order ${transactionId.slice(0, 8)}`, { transactionId, amount: refundAmount, reason }, '127.0.0.1');

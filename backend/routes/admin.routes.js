@@ -1,11 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const { auth, adminOnly } = require('../middleware/auth');
+const { exportLimiter } = require('../middleware/security');
 const {
     createUser,
     getAllUsers,
+    exportAllUsers,
+    exportAllAgents,
     changeUserRole,
     getAllTransactions,
+    exportAllTransactions,
     getTransactionStats,
     updateTransactionStatus,
     createBundle,
@@ -30,6 +34,7 @@ const {
     deleteMessage,
     markMessageRead,
     getActivityLogs,
+    exportAllActivityLogs,
     getUserDetails,
     getAgentPricing,
     setAgentPricing,
@@ -85,6 +90,8 @@ router.post('/sourcing-providers/:id/test', testSourcingProvider);
 
 // Users
 router.post('/users', createUser);
+router.get('/users/export', exportLimiter, exportAllUsers);
+router.get('/agents/export', exportLimiter, exportAllAgents);
 router.get('/users', getAllUsers);
 router.get('/users/:id', getUserDetails);
 router.put('/users/:id', updateUser);
@@ -97,7 +104,9 @@ router.post('/users/:id/credit-wallet', creditUserWallet);
 router.get('/wallet-credit-requests', getWalletCreditRequests);
 router.put('/wallet-credit-requests/:id', updateWalletCreditRequest);
 
-// Transactions
+// Transactions & Orders
+router.get('/transactions/export', exportLimiter, exportAllTransactions);
+router.get('/orders/export', exportLimiter, exportAllTransactions);
 router.get('/transactions', getAllTransactions);
 router.get('/transactions/stats', getTransactionStats);
 router.put('/transactions/:id/status', updateTransactionStatus);
@@ -131,6 +140,7 @@ router.get('/agent-applications', getAgentApplications);
 router.put('/agent-applications/:id', updateAgentApplication);
 
 // Activity Logs
+router.get('/activity-logs/export', exportLimiter, exportAllActivityLogs);
 router.get('/activity-logs', getActivityLogs);
 
 // Agent Pricing
@@ -165,9 +175,9 @@ const {
     exportMtnApprovals
 } = require('../controllers/adminMtnApproval.controller');
 
+router.get('/mtn-approvals/export', exportLimiter, exportMtnApprovals);
 router.get('/mtn-approvals', getMtnApprovals);
 router.get('/mtn-approvals/count', getPendingCount);
-router.get('/mtn-approvals/export', exportMtnApprovals);
 router.get('/mtn-approvals/:id/orders', getMtnApprovalOrders);
 router.post('/mtn-approvals/sync', syncMtnApprovals);
 

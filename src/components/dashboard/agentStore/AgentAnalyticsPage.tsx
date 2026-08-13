@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { agentStoreService } from '@/services/agentStore.service';
+import { exportViaApi } from '@/lib/export';
 import { BarChart3, TrendingUp, RefreshCw, Award, Activity, Download, FileSpreadsheet } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -29,38 +30,13 @@ export const AgentAnalyticsPage: React.FC = () => {
         loadAnalytics();
     }, []);
 
-    const downloadCSV = (filename: string, rows: object[]) => {
-        if (!rows || rows.length === 0) {
-            toast({ title: 'No Data', description: 'No records available to export.', variant: 'destructive' });
-            return;
-        }
-
-        const headers = Object.keys(rows[0]).join(',');
-        const csvContent = [
-            headers,
-            ...rows.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
-        ].join('\n');
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.setAttribute('href', url);
-        link.setAttribute('download', `${filename}_${new Date().toISOString().slice(0, 10)}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
     const handleExportOrders = async () => {
         setExporting('orders');
         try {
-            const res = await agentStoreService.getOrders();
-            if (res.success && res.orders) {
-                downloadCSV('agent_store_orders', res.orders);
-                toast({ title: 'Export Complete', description: 'Orders CSV downloaded.' });
-            }
+            await exportViaApi('/agent-stores/orders/export', { format: 'csv' }, `agent_store_orders_${Date.now()}`);
+            toast({ title: 'Export Complete', description: 'Store orders CSV downloaded.' });
         } catch (err: any) {
-            toast({ title: 'Export Failed', description: err.message, variant: 'destructive' });
+            toast({ title: 'Export Failed', description: err.message || 'Failed to export orders', variant: 'destructive' });
         } finally {
             setExporting(null);
         }
@@ -69,13 +45,10 @@ export const AgentAnalyticsPage: React.FC = () => {
     const handleExportLedger = async () => {
         setExporting('ledger');
         try {
-            const res = await agentStoreService.getTransactions();
-            if (res.success && res.ledger) {
-                downloadCSV('agent_wallet_ledger', res.ledger);
-                toast({ title: 'Export Complete', description: 'Wallet Ledger CSV downloaded.' });
-            }
+            await exportViaApi('/agent-stores/transactions/export', { format: 'csv' }, `agent_wallet_ledger_${Date.now()}`);
+            toast({ title: 'Export Complete', description: 'Wallet Ledger CSV downloaded.' });
         } catch (err: any) {
-            toast({ title: 'Export Failed', description: err.message, variant: 'destructive' });
+            toast({ title: 'Export Failed', description: err.message || 'Failed to export ledger', variant: 'destructive' });
         } finally {
             setExporting(null);
         }
@@ -84,13 +57,10 @@ export const AgentAnalyticsPage: React.FC = () => {
     const handleExportWithdrawals = async () => {
         setExporting('withdrawals');
         try {
-            const res = await agentStoreService.getWithdrawalHistory();
-            if (res.success && res.withdrawals) {
-                downloadCSV('agent_withdrawals', res.withdrawals);
-                toast({ title: 'Export Complete', description: 'Withdrawals CSV downloaded.' });
-            }
+            await exportViaApi('/agent-stores/withdrawals/export', { format: 'csv' }, `agent_withdrawals_${Date.now()}`);
+            toast({ title: 'Export Complete', description: 'Withdrawals CSV downloaded.' });
         } catch (err: any) {
-            toast({ title: 'Export Failed', description: err.message, variant: 'destructive' });
+            toast({ title: 'Export Failed', description: err.message || 'Failed to export withdrawals', variant: 'destructive' });
         } finally {
             setExporting(null);
         }

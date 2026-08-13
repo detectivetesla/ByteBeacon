@@ -3,6 +3,7 @@ const pool = require('../config/database');
 const { placeDataOrder, checkOrderStatus, extractProviderId, getSourcingConfig } = require('../utils/sourcing');
 const { logActivity } = require('../utils/activityLogger');
 const { triggerTransactionWebhook } = require('../services/partnerWebhook.service');
+const { sendExportResponse } = require('../utils/exportHelper');
 
 // Purchase data bundle
 const purchaseBundle = async (req, res) => {
@@ -529,4 +530,151 @@ const syncTransactionStatus = async (req, res) => {
     }
 };
 
-module.exports = { purchaseBundle, getTransactions, getTransactionById, syncTransactionStatus };
+// Export user's transactions / orders matching filters
+const exportUserTransactions = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { status, network, timeframe, startDate, endDate, search, format = 'csv' } = req.query;
+
+        const safeFormat = ['csv', 'excel', 'xlsx', 'json'].includes(String(format).toLowerCase())
+            ? String(format).toLowerCase()
+            : 'csv';
+
+        let query = `
+            SELECT t.id, t.recipient_phone, t.amount_ghc, t.status, t.created_at, t.updated_at,
+                   t.serial_id, t.balance_before, t.balance_after, t.source, t.paid, t.source_provider,
+                   d.network, d.data_amount
+            FROM transactions t
+            LEFT JOIN data_bundles d ON t.bundle_id = d.id::uuid
+            WHERE t.user_id = ?::uuid AND t.status != 'pending_mtn_approval'
+        `;
+        const params = [userId];
+
+        if (status && status !== 'all') {
+            if (status === 'processing') {
+                query += " AND t.status IN ('processing', 'pending', 'ongoing', 'queued')";
+            } else {
+                query += ' AND t.status = ?';
+                params.push(status);
+            }
+        }
+
+        if (network && network !== 'all') {
+            const net = network.toLowerCase();
+            if (net === 'mtn') {
+                query += " AND LOWER(d.network) LIKE '%mtn%'";
+            } else if (net === 'telecel' || net === 'voda') {
+                query += " AND (LOWER(d.network) LIKE '%telecel%' OR LOWER(d.network) LIKE '%voda%')";
+            } else if (net === 'at' || net === 'airteltigo') {
+                query += " AND (LOWER(d.network) LIKE '%at%' OR LOWER(d.network) LIKE '%airtel%')";
+            } else {
+                query += ' AND LOWER(d.network) LIKE ?';
+                params.push(`%${net}%`);
+            }
+        }
+
+        if (timeframe && timeframe !== 'all') {
+            if (timeframe === 'today') {
+                query += ' AND t.created_at >= CURRENT_DATE';
+            } else {
+                let intervalDays = 0;
+                if (timeframe === '7d' || timeframe === 'week') intervalDays = 7;
+                else if (timeframe === '30d' || timeframe === 'month') intervalDays = 30;
+                else if (timeframe === '90d') intervalDays = 90;
+                else if (timeframe === '1y') intervalDays = 365;
+
+                if (intervalDays > 0) {
+                    query += ` AND t.created_at >= NOW() - (${intervalDays} * INTERVAL '1 day')`;
+                }
+            }
+        }
+
+        if (startDate) {
+            query += ' AND t.created_at >= ?::timestamp';
+            params.push(new Date(startDate).toISOString());
+        }
+
+        if (endDate) {
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            query += ' AND t.created_at <= ?::timestamp';
+            params.push(end.toISOString());
+        }
+
+        if (search && search.trim() !== '') {
+            const term = `%${search.trim()}%`;
+            query += ` AND (
+                t.recipient_phone LIKE ? 
+                OR t.id::text LIKE ? 
+                OR (t.serial_id IS NOT NULL AND t.serial_id::text LIKE ?)
+                OR d.network ILIKE ?
+                OR d.data_amount ILIKE ?
+            )`;
+            params.push(term, term, term, term, term);
+        }
+
+        query += ' ORDER BY t.created_at DESC LIMIT 50000';
+
+        const [rows] = await pool.execute(query, params);
+
+        const columns = [
+            {
+                key: 'serial_id',
+                label: 'Order ID',
+                transform: (r) => r.serial_id ? `ORD-${r.serial_id}` : (r.id ? `ORD-${r.id.slice(0, 8).toUpperCase()}` : 'N/A')
+            },
+            { key: 'id', label: 'Reference ID' },
+            { key: 'recipient_phone', label: 'Recipient Phone' },
+            { key: 'network', label: 'Network' },
+            { key: 'data_amount', label: 'Bundle Size' },
+            {
+                key: 'amount_ghc',
+                label: 'Amount (GH₵)',
+                transform: (r) => r.amount_ghc !== null && r.amount_ghc !== undefined ? parseFloat(r.amount_ghc) : 0
+            },
+            { key: 'status', label: 'Status' },
+            { key: 'paid', label: 'Paid' },
+            { key: 'source', label: 'Channel' },
+            {
+                key: 'balance_before',
+                label: 'Bal. Before (GH₵)',
+                transform: (r) => r.balance_before !== null && r.balance_before !== undefined ? parseFloat(r.balance_before) : ''
+            },
+            {
+                key: 'balance_after',
+                label: 'Bal. After (GH₵)',
+                transform: (r) => r.balance_after !== null && r.balance_after !== undefined ? parseFloat(r.balance_after) : ''
+            },
+            {
+                key: 'created_at',
+                label: 'Date Placed',
+                transform: (r) => r.created_at ? new Date(r.created_at).toISOString() : ''
+            },
+            {
+                key: 'updated_at',
+                label: 'Last Updated',
+                transform: (r) => r.updated_at ? new Date(r.updated_at).toISOString() : ''
+            }
+        ];
+
+        return sendExportResponse(res, {
+            data: rows,
+            columns,
+            filename: 'bytebeacon_my_orders',
+            format: safeFormat,
+            sheetName: 'My Orders'
+        });
+
+    } catch (error) {
+        console.error('Export user transactions error:', error);
+        return res.status(500).json({ error: 'Failed to export transactions' });
+    }
+};
+
+module.exports = {
+    purchaseBundle,
+    getTransactions,
+    getTransactionById,
+    syncTransactionStatus,
+    exportUserTransactions
+};

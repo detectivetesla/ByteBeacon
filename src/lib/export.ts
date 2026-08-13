@@ -1,6 +1,11 @@
 /**
- * Export utility functions for generating CSV, Excel (.xls/.xlsx), and JSON exports
+ * ByteBeacon Export System
+ * Centralized, hardened export library supporting direct backend API streaming
+ * and client-side data conversion (CSV with UTF-8 BOM, Excel SpreadsheetML, JSON)
+ * with robust spreadsheet formula injection protection.
  */
+
+import { getToken, API_BASE_URL } from '@/services/api';
 
 export interface ExportOptions {
     filename: string;
@@ -12,6 +17,7 @@ export interface ActivityLogExportRow {
     id?: string;
     userName?: string;
     userEmail?: string;
+    userRole?: string;
     action?: string;
     description?: string;
     ipAddress?: string;
@@ -30,6 +36,8 @@ export interface UserExportRow {
     createdAt?: string;
     walletBalance?: number;
     wallet_balance?: number;
+    store_name?: string;
+    store_status?: string;
 }
 
 export interface TransactionExportRow {
@@ -80,15 +88,67 @@ export interface AgentExportRow extends UserExportRow {
 }
 
 /**
+ * Neutralize dangerous spreadsheet formulas to prevent CSV/Formula Injection attacks.
+ * Prepends a single quote (') to strings starting with '=', '+', '-', '@', '\t', '\r'.
+ */
+export function sanitizeFormulaInjection(value: unknown): unknown {
+    if (typeof value !== 'string') {
+        return value;
+    }
+
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+        return value;
+    }
+
+    const dangerousPrefixes = ['=', '+', '-', '@', '\t', '\r'];
+    const firstChar = trimmed.charAt(0);
+
+    if (dangerousPrefixes.includes(firstChar)) {
+        // Allow pure numbers (e.g. -12.5 or +233)
+        if ((firstChar === '-' || firstChar === '+') && !isNaN(Number(trimmed))) {
+            return value;
+        }
+        return `'${value}`;
+    }
+
+    return value;
+}
+
+/**
  * Escape special XML characters for Excel Spreadsheet XML
  */
-function escapeXml(unsafe: string): string {
-    return unsafe
+function escapeXml(unsafe: unknown): string {
+    if (unsafe === null || unsafe === undefined) return '';
+    return String(unsafe)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&apos;');
+}
+
+/**
+ * Format a cell value cleanly
+ */
+function formatCellValue(value: unknown): string {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    if (value instanceof Date) {
+        return value.toISOString();
+    }
+    if (Array.isArray(value)) {
+        return value.map(v => (typeof v === 'object' ? JSON.stringify(v) : String(v))).join('; ');
+    }
+    if (typeof value === 'object') {
+        try {
+            return JSON.stringify(value);
+        } catch {
+            return String(value);
+        }
+    }
+    return String(value);
 }
 
 /**
@@ -114,28 +174,28 @@ function arrayToExcelXML(data: Record<string, unknown>[], sheetName = 'Export'):
  </DocumentProperties>
  <Styles>
   <Style ss:ID="Header">
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/>
-   <Interior ss:Color="#10B981" ss:Pattern="Solid"/>
+   <Font ss:FontName="Segoe UI" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#0F172A" ss:Pattern="Solid"/>
    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
    <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#059669"/>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#334155"/>
    </Borders>
   </Style>
   <Style ss:ID="Default">
-   <Font ss:FontName="Calibri" ss:Size="11"/>
+   <Font ss:FontName="Segoe UI" ss:Size="10"/>
    <Alignment ss:Vertical="Center"/>
   </Style>
   <Style ss:ID="Number">
-   <Font ss:FontName="Calibri" ss:Size="11"/>
+   <Font ss:FontName="Segoe UI" ss:Size="10"/>
    <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
    <NumberFormat ss:Format="#,##0.00"/>
   </Style>
   <Style ss:ID="Date">
-   <Font ss:FontName="Calibri" ss:Size="11"/>
+   <Font ss:FontName="Segoe UI" ss:Size="10"/>
    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
   </Style>
  </Styles>
- <Worksheet ss:Name="${escapeXml(sheetName)}">
+ <Worksheet ss:Name="${escapeXml(sheetName.slice(0, 31))}">
   <Table>
    <Row ss:Height="24">`;
 
@@ -147,15 +207,17 @@ function arrayToExcelXML(data: Record<string, unknown>[], sheetName = 'Export'):
     data.forEach(item => {
         xml += `\n   <Row ss:Height="20">`;
         headers.forEach(h => {
-            const value = item[h];
-            if (typeof value === 'number') {
-                xml += `\n    <Cell ss:StyleID="Number"><Data ss:Type="Number">${value}</Data></Cell>`;
-            } else if (value === null || value === undefined) {
+            const rawVal = item[h];
+            const sanitized = sanitizeFormulaInjection(rawVal);
+
+            if (typeof sanitized === 'number' && !isNaN(sanitized)) {
+                xml += `\n    <Cell ss:StyleID="Number"><Data ss:Type="Number">${sanitized}</Data></Cell>`;
+            } else if (sanitized === null || sanitized === undefined) {
                 xml += `\n    <Cell ss:StyleID="Default"><Data ss:Type="String"></Data></Cell>`;
             } else {
-                const strVal = String(value);
-                // Check if string looks like date
-                const style = /^\d{4}-\d{2}-\d{2}/.test(strVal) || strVal.includes(', 202') ? 'Date' : 'Default';
+                const strVal = formatCellValue(sanitized);
+                const isDate = /^\d{4}-\d{2}-\d{2}/.test(strVal) || strVal.includes(', 202');
+                const style = isDate ? 'Date' : 'Default';
                 xml += `\n    <Cell ss:StyleID="${style}"><Data ss:Type="String">${escapeXml(strVal)}</Data></Cell>`;
             }
         });
@@ -170,51 +232,117 @@ function arrayToExcelXML(data: Record<string, unknown>[], sheetName = 'Export'):
 }
 
 /**
- * Convert an array of objects to CSV format with UTF-8 BOM
+ * Convert an array of objects to CSV format with RFC 4180 escaping and UTF-8 BOM
  */
 function arrayToCSV(data: Record<string, unknown>[]): string {
     if (data.length === 0) return '\uFEFF';
 
     const headers = Object.keys(data[0]);
-    const headerRow = headers.map(h => `"${h.replace(/"/g, '""')}"`).join(',');
+    const headerRow = headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(',');
 
     const dataRows = data.map(item =>
         headers.map(header => {
-            const value = item[header];
-            if (typeof value === 'string') {
-                return `"${value.replace(/"/g, '""')}"`;
+            const rawValue = item[header];
+            const sanitized = sanitizeFormulaInjection(rawValue);
+            const text = formatCellValue(sanitized);
+
+            if (text.includes('"') || text.includes(',') || text.includes('\n') || text.includes('\r')) {
+                return `"${text.replace(/"/g, '""')}"`;
             }
-            if (value instanceof Date) {
-                return `"${value.toISOString()}"`;
-            }
-            if (value === null || value === undefined) {
-                return '""';
-            }
-            return String(value);
+            return `"${text}"`;
         }).join(',')
     );
 
-    // Add UTF-8 BOM (\uFEFF) so Excel opens CSV files with proper encoding
-    return '\uFEFF' + [headerRow, ...dataRows].join('\n');
+    // UTF-8 BOM (\uFEFF) for Excel unicode compatibility
+    return '\uFEFF' + [headerRow, ...dataRows].join('\r\n');
 }
 
 /**
- * Download content as a file
+ * Download text/blob content as a file with automatic URL revocation
  */
-function downloadFile(content: string, filename: string, mimeType: string): void {
-    const blob = new Blob([content], { type: mimeType });
+export function downloadFile(content: string | Blob, filename: string, mimeType: string): void {
+    const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = filename;
     document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    try {
+        link.click();
+    } finally {
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 500);
+    }
 }
 
 /**
- * Helper to execute download based on requested format
+ * Download export directly from a backend API endpoint with auth and error extraction
+ */
+export async function exportViaApi(
+    endpoint: string,
+    params: Record<string, any> = {},
+    defaultFilename: string = 'export'
+): Promise<{ success: boolean; filename: string }> {
+    const token = getToken();
+    const queryParams = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, val]) => {
+        if (val !== undefined && val !== null && val !== '') {
+            queryParams.append(key, String(val));
+        }
+    });
+
+    const queryString = queryParams.toString();
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `${API_BASE_URL}${cleanEndpoint}${queryString ? `?${queryString}` : ''}`;
+
+    const headers: HeadersInit = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+    };
+
+    const response = await fetch(url, { headers });
+
+    if (!response.ok) {
+        let errorMessage = `Server returned HTTP ${response.status} (${response.statusText})`;
+        try {
+            const errJson = await response.json();
+            if (errJson && (errJson.error || errJson.message)) {
+                errorMessage = errJson.error || errJson.message;
+            }
+        } catch {
+            // Non-JSON error body (e.g. HTML proxy error)
+        }
+
+        if (response.status === 401) {
+            errorMessage = 'Your session has expired. Please sign in again to export.';
+        } else if (response.status === 403) {
+            errorMessage = 'You do not have permission to export this dataset.';
+        } else if (response.status === 429) {
+            errorMessage = 'Export rate limit reached. Please wait a few moments before trying again.';
+        }
+
+        throw new Error(errorMessage);
+    }
+
+    // Determine filename from Content-Disposition header if available
+    let resolvedFilename = defaultFilename;
+    const contentDisposition = response.headers.get('Content-Disposition') || response.headers.get('content-disposition');
+    if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^";]+)"?/i);
+        if (match && match[1]) {
+            resolvedFilename = match[1].trim();
+        }
+    }
+
+    const contentType = response.headers.get('Content-Type') || response.headers.get('content-type') || 'application/octet-stream';
+    const blob = await response.blob();
+
+    downloadFile(blob, resolvedFilename, contentType);
+    return { success: true, filename: resolvedFilename };
+}
+
+/**
+ * Execute client-side download based on requested format
  */
 function processDownload(formattedData: Record<string, unknown>[], options: ExportOptions): void {
     const timestamp = new Date().toISOString().split('T')[0];
@@ -223,18 +351,18 @@ function processDownload(formattedData: Record<string, unknown>[], options: Expo
 
     if (isExcel) {
         const xmlContent = arrayToExcelXML(formattedData, options.sheetName || options.filename);
-        downloadFile(xmlContent, `${fullFilename}.xls`, 'application/vnd.ms-excel');
+        downloadFile(xmlContent, `${fullFilename}.xls`, 'application/vnd.ms-excel;charset=utf-8;');
     } else if (options.format === 'csv') {
         const csvContent = arrayToCSV(formattedData);
         downloadFile(csvContent, `${fullFilename}.csv`, 'text/csv;charset=utf-8;');
     } else {
         const jsonContent = JSON.stringify(formattedData, null, 2);
-        downloadFile(jsonContent, `${fullFilename}.json`, 'application/json');
+        downloadFile(jsonContent, `${fullFilename}.json`, 'application/json;charset=utf-8;');
     }
 }
 
 /**
- * Export Activity Logs data
+ * Export Activity Logs data (Client-side fallback)
  */
 export function exportActivityLogs(
     logs: unknown[],
@@ -246,10 +374,11 @@ export function exportActivityLogs(
             'Log ID': log.id || 'N/A',
             'User Name': log.userName || 'N/A',
             'User Email': log.userEmail || 'N/A',
+            'User Role': log.userRole || 'N/A',
             'Action': log.action || 'N/A',
             'Description': log.description || 'N/A',
             'IP Address': log.ipAddress || 'N/A',
-            'Timestamp': log.createdAt ? new Date(log.createdAt).toLocaleString() : 'N/A'
+            'Timestamp': log.createdAt ? new Date(log.createdAt).toISOString() : 'N/A'
         };
     });
 
@@ -257,7 +386,7 @@ export function exportActivityLogs(
 }
 
 /**
- * Export Users data
+ * Export Users data (Client-side fallback)
  */
 export function exportUsers(
     users: unknown[],
@@ -273,7 +402,9 @@ export function exportUsers(
             'Role': u.role || 'customer',
             'Status': u.isActive !== false ? 'Active' : 'Suspended',
             'Wallet Balance (GH₵)': u.walletBalance ?? u.wallet_balance ?? 0,
-            'Joined Date': (u.created_at || u.createdAt) ? new Date((u.created_at || u.createdAt)!).toLocaleString() : 'N/A'
+            'Store Name': u.store_name || 'N/A',
+            'Store Status': u.store_status || 'N/A',
+            'Joined Date': (u.created_at || u.createdAt) ? new Date((u.created_at || u.createdAt)!).toISOString() : 'N/A'
         };
     });
 
@@ -281,7 +412,7 @@ export function exportUsers(
 }
 
 /**
- * Export Agents / Resellers data
+ * Export Agents data (Client-side fallback)
  */
 export function exportAgents(
     agents: unknown[],
@@ -295,10 +426,11 @@ export function exportAgents(
             'Email': a.email || 'N/A',
             'Phone': a.phone || 'N/A',
             'Role': a.role || 'agent',
+            'Store Name': a.store_name || 'N/A',
             'Wallet Balance (GH₵)': a.wallet_balance ?? a.walletBalance ?? 0,
             'Total Orders': a.total_orders || 0,
             'Total Revenue (GH₵)': a.total_revenue || 0,
-            'Created At': (a.created_at || a.createdAt) ? new Date((a.created_at || a.createdAt)!).toLocaleString() : 'N/A'
+            'Created At': (a.created_at || a.createdAt) ? new Date((a.created_at || a.createdAt)!).toISOString() : 'N/A'
         };
     });
 
@@ -306,7 +438,7 @@ export function exportAgents(
 }
 
 /**
- * Export Transactions data
+ * Export Transactions data (Client-side fallback)
  */
 export function exportTransactions(
     transactions: unknown[],
@@ -314,7 +446,7 @@ export function exportTransactions(
 ): void {
     const formattedData = transactions.map(txRow => {
         const tx = txRow as TransactionExportRow;
-        const displayId = tx.serialId ? `ORD-${tx.serialId}` : (tx.id ? tx.id.slice(0, 12) : 'N/A');
+        const displayId = tx.serialId ? `ORD-${tx.serialId}` : (tx.id ? `ORD-${tx.id.slice(0, 8).toUpperCase()}` : 'N/A');
         return {
             'Order ID': displayId,
             'Full ID': tx.id || 'N/A',
@@ -330,8 +462,8 @@ export function exportTransactions(
             'Sourcing Provider': tx.sourceProvider || 'N/A',
             'Bal. Before (GH₵)': tx.balanceBefore ?? '—',
             'Bal. After (GH₵)': tx.balanceAfter ?? '—',
-            'Date Placed': (tx.created_at || tx.createdAt) ? new Date((tx.created_at || tx.createdAt)!).toLocaleString() : 'N/A',
-            'Last Updated': tx.updatedAt ? new Date(tx.updatedAt).toLocaleString() : '—'
+            'Date Placed': (tx.created_at || tx.createdAt) ? new Date((tx.created_at || tx.createdAt)!).toISOString() : 'N/A',
+            'Last Updated': tx.updatedAt ? new Date(tx.updatedAt).toISOString() : '—'
         };
     });
 
@@ -339,7 +471,7 @@ export function exportTransactions(
 }
 
 /**
- * Export Deposits data
+ * Export Deposits data (Client-side fallback)
  */
 export function exportDeposits(
     deposits: unknown[],
@@ -353,7 +485,7 @@ export function exportDeposits(
             'Amount (GH₵)': dep.amount || 0,
             'Method': dep.method || 'Paystack',
             'Status': dep.status || 'N/A',
-            'Date': (dep.created_at || dep.createdAt) ? new Date((dep.created_at || dep.createdAt)!).toLocaleString() : 'N/A'
+            'Date': (dep.created_at || dep.createdAt) ? new Date((dep.created_at || dep.createdAt)!).toISOString() : 'N/A'
         };
     });
 

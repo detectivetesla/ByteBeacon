@@ -32,9 +32,10 @@ import {
     Download,
     FileSpreadsheet,
     FileText,
-    FileCode
+    FileCode,
+    Loader2
 } from 'lucide-react';
-import { exportUsers } from '@/lib/export';
+import { exportUsers, exportViaApi } from '@/lib/export';
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -49,7 +50,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogFooter,
+    DialogFooter
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 
@@ -71,6 +72,7 @@ export default function AdminUsersPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState<'all' | 'customer' | 'agent' | 'superagent' | 'admin'>('all');
+    const [exporting, setExporting] = useState(false);
 
     const [showEditModal, setShowEditModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -341,14 +343,26 @@ export default function AdminUsersPage() {
         return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
     };
 
-    const handleExport = (format: 'excel' | 'csv' | 'json' = 'csv') => {
-        if (filteredUsers.length === 0) {
-            toast({ title: 'No Data', description: 'No users available to export.', variant: 'destructive' });
-            return;
+    const handleExport = async (format: 'excel' | 'csv' | 'json' = 'csv') => {
+        setExporting(true);
+        try {
+            const params: Record<string, string> = { format };
+            if (roleFilter !== 'all') params.role = roleFilter;
+            if (searchTerm.trim()) params.search = searchTerm.trim();
+
+            await exportViaApi('/admin/users/export', params, `bytebeacon_users_${Date.now()}`);
+            const formatLabels: Record<string, string> = { excel: 'Excel (.xlsx)', csv: 'CSV', json: 'JSON' };
+            toast({ title: 'Export Complete', description: `Full users list exported to ${formatLabels[format]}.` });
+        } catch (err: any) {
+            if (filteredUsers.length > 0) {
+                exportUsers(filteredUsers, { filename: 'users_list', format, sheetName: 'Users' });
+                toast({ title: 'Export Downloaded', description: `Exported ${filteredUsers.length} displayed user(s).` });
+            } else {
+                toast({ title: 'Export Failed', description: err.message || 'Could not export users.', variant: 'destructive' });
+            }
+        } finally {
+            setExporting(false);
         }
-        exportUsers(filteredUsers, { filename: 'users_list', format, sheetName: 'Users' });
-        const formatLabels: Record<string, string> = { excel: 'Excel (.xls)', csv: 'CSV', json: 'JSON' };
-        toast({ title: 'Export Successful', description: `Exported ${filteredUsers.length} user(s) to ${formatLabels[format]}.` });
     };
 
     return (
@@ -365,9 +379,13 @@ export default function AdminUsersPage() {
                 <div className="flex items-center gap-3">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="rounded-xl border-border/50 hover:bg-primary/10 hover:text-primary transition-all font-bold">
-                                <Download className="w-4 h-4 mr-2" />
-                                Export Users
+                            <Button
+                                variant="outline"
+                                disabled={exporting}
+                                className="rounded-xl border-border/50 hover:bg-primary/10 hover:text-primary transition-all font-bold"
+                            >
+                                {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                                {exporting ? 'Exporting...' : 'Export Users'}
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="bg-card border-border">
@@ -375,15 +393,15 @@ export default function AdminUsersPage() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => handleExport('excel')} className="cursor-pointer">
                                 <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-500" />
-                                Export to Excel (.xlsx / .xls)
+                                Export to Excel (.xlsx)
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleExport('csv')} className="cursor-pointer">
                                 <FileText className="w-4 h-4 mr-2 text-blue-500" />
-                                Export to CSV
+                                Export to CSV (.csv)
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleExport('json')} className="cursor-pointer">
                                 <FileCode className="w-4 h-4 mr-2 text-purple-500" />
-                                Export to JSON
+                                Export to JSON (.json)
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>

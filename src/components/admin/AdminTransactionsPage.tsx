@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { exportTransactions } from '@/lib/export';
+import { exportTransactions, exportViaApi } from '@/lib/export';
 import { useSocket } from '@/contexts/SocketContext';
 import {
     DropdownMenu,
@@ -79,6 +79,7 @@ export default function AdminTransactionsPage() {
     const [reprocessingId, setReprocessingId] = useState<string | null>(null);
     const [massReprocessing, setMassReprocessing] = useState(false);
     const [showMassReprocessConfirm, setShowMassReprocessConfirm] = useState(false);
+    const [exporting, setExporting] = useState(false);
 
     const [stats, setStats] = useState({
         totalTransactions: 0,
@@ -267,14 +268,31 @@ export default function AdminTransactionsPage() {
         return result;
     }, [transactions, searchTerm, statusFilter, dateFilter, startDate, endDate, sortConfig]);
 
-    const handleExport = (format: 'excel' | 'csv' | 'json' = 'csv') => {
-        if (processedTransactions.length === 0) {
-            toast({ title: 'No Data', description: 'No transactions available to export', variant: 'destructive' });
-            return;
+    const handleExport = async (format: 'excel' | 'csv' | 'json' = 'csv') => {
+        setExporting(true);
+        try {
+            const params: Record<string, string> = { format };
+            if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
+            if (dateFilter && dateFilter !== 'all') params.timeframe = dateFilter;
+            if (startDate) params.startDate = startDate;
+            if (endDate) params.endDate = endDate;
+            if (searchTerm.trim()) params.search = searchTerm.trim();
+
+            await exportViaApi('/admin/transactions/export', params, `bytebeacon_transactions_${Date.now()}`);
+            const formatLabels: Record<string, string> = { excel: 'Excel (.xlsx)', csv: 'CSV', json: 'JSON' };
+            toast({ title: 'Export Complete', description: `Full dataset exported to ${formatLabels[format]}` });
+        } catch (err: any) {
+            // Fallback to client-side export
+            if (processedTransactions.length > 0) {
+                exportTransactions(processedTransactions, { filename: 'transactions', format, sheetName: 'Transactions' });
+                const formatLabels: Record<string, string> = { excel: 'Excel (.xls)', csv: 'CSV', json: 'JSON' };
+                toast({ title: 'Export Downloaded', description: `Exported ${processedTransactions.length} displayed transaction(s) to ${formatLabels[format]}` });
+            } else {
+                toast({ title: 'Export Failed', description: err.message || 'Could not export transactions.', variant: 'destructive' });
+            }
+        } finally {
+            setExporting(false);
         }
-        exportTransactions(processedTransactions, { filename: 'transactions', format, sheetName: 'Transactions' });
-        const formatLabels: Record<string, string> = { excel: 'Excel (.xls)', csv: 'CSV', json: 'JSON' };
-        toast({ title: 'Export Complete', description: `Exported ${processedTransactions.length} transaction(s) to ${formatLabels[format]}` });
     };
 
     const handleReprocess = async (id: string) => {
@@ -441,10 +459,11 @@ export default function AdminTransactionsPage() {
                             <Button 
                                 variant="outline" 
                                 size="sm"
+                                disabled={exporting}
                                 className="rounded-xl border-border/50 hover:bg-primary/10 hover:text-primary transition-all font-bold h-9"
                             >
-                                <Download className="w-4 h-4 mr-2" />
-                                Export
+                                {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                                {exporting ? 'Exporting...' : 'Export'}
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="bg-card border-border">
@@ -452,15 +471,15 @@ export default function AdminTransactionsPage() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => handleExport('excel')} className="cursor-pointer">
                                 <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-500" />
-                                Export to Excel (.xlsx / .xls)
+                                Export to Excel (.xlsx)
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleExport('csv')} className="cursor-pointer">
                                 <FileText className="w-4 h-4 mr-2 text-blue-500" />
-                                Export to CSV
+                                Export to CSV (.csv)
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleExport('json')} className="cursor-pointer">
                                 <FileCode className="w-4 h-4 mr-2 text-purple-500" />
-                                Export to JSON
+                                Export to JSON (.json)
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>

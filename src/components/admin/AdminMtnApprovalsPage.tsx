@@ -2,12 +2,21 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '@/services';
 import { useToast } from '@/hooks/use-toast';
 import { useSocket } from '@/contexts/SocketContext';
+import { exportViaApi } from '@/lib/export';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
-    Loader2, Search, Download, RefreshCw, AlertCircle, CheckCircle2, XCircle, Clock, ExternalLink, ShieldAlert, ChevronLeft, ChevronRight
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator
+} from '@/components/ui/dropdown-menu';
+import {
+    Loader2, Search, Download, RefreshCw, AlertCircle, CheckCircle2, XCircle, Clock, ExternalLink, ShieldAlert, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, FileCode
 } from 'lucide-react';
 
 interface MtnApproval {
@@ -158,36 +167,26 @@ export const AdminMtnApprovalsPage: React.FC = () => {
         }
     };
 
-    const handleExport = async () => {
+    const handleExport = async (format: 'csv' | 'excel' | 'json' = 'csv') => {
         setExporting(true);
         try {
-            const params = new URLSearchParams();
-            if (statusFilter !== 'all') params.append('status', statusFilter);
-            if (timeframeFilter !== 'all') params.append('timeframe', timeframeFilter);
-            if (searchQuery.trim()) params.append('search', searchQuery.trim());
+            const params: Record<string, string> = { format };
+            if (statusFilter !== 'all') params.status = statusFilter;
+            if (timeframeFilter !== 'all') params.timeframe = timeframeFilter;
+            if (searchQuery.trim()) params.search = searchQuery.trim();
 
-            // Open export download URL
-            const token = localStorage.getItem('token');
-            const url = `/api/admin/mtn-approvals/export?${params.toString()}`;
-            
-            const response = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${token}` }
+            await exportViaApi('/admin/mtn-approvals/export', params, `MTN_Pending_Approvals_${Date.now()}`);
+
+            toast({
+                title: 'Export Ready',
+                description: `MTN beneficiary approvals downloaded successfully (${format.toUpperCase()}).`
             });
-
-            if (!response.ok) throw new Error('Export download failed');
-
-            const blob = await response.blob();
-            const downloadUrl = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = `MTN_Pending_Beneficiaries_${Date.now()}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-
-            toast({ title: 'Export Ready', description: 'MTN beneficiary CSV file downloaded successfully.' });
         } catch (err: any) {
-            toast({ title: 'Export Failed', description: err.message || 'Could not export file', variant: 'destructive' });
+            toast({
+                title: 'Export Failed',
+                description: err.message || 'Could not export pending MTN numbers.',
+                variant: 'destructive'
+            });
         } finally {
             setExporting(false);
         }
@@ -278,14 +277,42 @@ export const AdminMtnApprovalsPage: React.FC = () => {
                         {syncing ? 'Syncing...' : 'Sync Status'}
                     </Button>
 
-                    <Button
-                        onClick={handleExport}
-                        disabled={exporting}
-                        className="bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs gap-2"
-                    >
-                        {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                        Export (MTN format)
-                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                disabled={exporting}
+                                className="bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs gap-2"
+                            >
+                                {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                                {exporting ? 'Exporting...' : 'Export Approvals'}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48 bg-card border-border">
+                            <DropdownMenuLabel className="text-xs text-muted-foreground font-semibold">Export Format</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                onClick={() => handleExport('excel')}
+                                className="text-xs cursor-pointer gap-2 focus:bg-accent"
+                            >
+                                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" />
+                                Export to Excel (.xlsx)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => handleExport('csv')}
+                                className="text-xs cursor-pointer gap-2 focus:bg-accent"
+                            >
+                                <FileText className="w-3.5 h-3.5 text-blue-500" />
+                                Export to CSV (.csv)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => handleExport('json')}
+                                className="text-xs cursor-pointer gap-2 focus:bg-accent"
+                            >
+                                <FileCode className="w-3.5 h-3.5 text-purple-500" />
+                                Export to JSON (.json)
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
 

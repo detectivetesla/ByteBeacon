@@ -2,6 +2,7 @@ const pool = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 const { placeDataOrder } = require('../utils/sourcing');
 const { logActivity } = require('../utils/activityLogger');
+const { sendExportResponse } = require('../utils/exportHelper');
 
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 
@@ -1567,5 +1568,222 @@ exports.getAgentBeneficiaries = async (req, res) => {
     } catch (error) {
         console.error('Error fetching agent beneficiaries:', error);
         res.status(500).json({ success: false, error: 'Failed to fetch beneficiaries' });
+    }
+};
+
+// 20. EXPORT AGENT STORE ORDERS
+exports.exportAgentOrders = async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const userId = req.user.id;
+        const { status, network, search, format = 'csv' } = req.query;
+
+        const safeFormat = ['csv', 'excel', 'xlsx', 'json'].includes(String(format).toLowerCase())
+            ? String(format).toLowerCase()
+            : 'csv';
+
+        const [stores] = await connection.execute('SELECT id, store_name FROM agent_stores WHERE user_id = ?::uuid', [userId]);
+        if (stores.length === 0) return res.status(404).json({ success: false, error: 'Store not found' });
+        const storeId = stores[0].id;
+        const storeName = stores[0].store_name;
+
+        let query = `
+            SELECT id, customer_phone, network, data_amount, base_price_ghc, selling_price_ghc, profit_ghc,
+                   paystack_reference, payment_status, fulfillment_status, created_at
+            FROM agent_orders
+            WHERE store_id = ?::uuid AND fulfillment_status != 'pending_mtn_approval'
+        `;
+        const params = [storeId];
+
+        if (status && status !== 'all') {
+            query += ` AND fulfillment_status = ?`;
+            params.push(status);
+        }
+        if (network && network !== 'all') {
+            query += ` AND network = ?`;
+            params.push(network);
+        }
+        if (search) {
+            query += ` AND (customer_phone LIKE ? OR id::text LIKE ? OR paystack_reference LIKE ?)`;
+            const searchPattern = `%${search}%`;
+            params.push(searchPattern, searchPattern, searchPattern);
+        }
+
+        query += ` ORDER BY created_at DESC LIMIT 50000`;
+
+        const [orders] = await connection.execute(query, params);
+
+        const columns = [
+            { key: 'id', label: 'Order ID' },
+            { key: 'customer_phone', label: 'Customer Phone' },
+            { key: 'network', label: 'Network' },
+            { key: 'data_amount', label: 'Data Plan' },
+            {
+                key: 'base_price_ghc',
+                label: 'Base Cost (GH₵)',
+                transform: (r) => r.base_price_ghc !== null && r.base_price_ghc !== undefined ? parseFloat(r.base_price_ghc) : 0
+            },
+            {
+                key: 'selling_price_ghc',
+                label: 'Selling Price (GH₵)',
+                transform: (r) => r.selling_price_ghc !== null && r.selling_price_ghc !== undefined ? parseFloat(r.selling_price_ghc) : 0
+            },
+            {
+                key: 'profit_ghc',
+                label: 'Profit Earned (GH₵)',
+                transform: (r) => r.profit_ghc !== null && r.profit_ghc !== undefined ? parseFloat(r.profit_ghc) : 0
+            },
+            { key: 'payment_status', label: 'Payment Status' },
+            { key: 'fulfillment_status', label: 'Fulfillment Status' },
+            { key: 'paystack_reference', label: 'Payment Ref' },
+            {
+                key: 'created_at',
+                label: 'Date Created',
+                transform: (r) => r.created_at ? new Date(r.created_at).toISOString() : ''
+            }
+        ];
+
+        return sendExportResponse(res, {
+            data: orders,
+            columns,
+            filename: `agent_store_${storeName}_orders`,
+            format: safeFormat,
+            sheetName: 'Store Orders'
+        });
+
+    } catch (error) {
+        console.error('Error exporting agent orders:', error);
+        return res.status(500).json({ success: false, error: 'Failed to export store orders' });
+    } finally {
+        if (connection) connection.release();
+    }
+};
+
+// 21. EXPORT AGENT WALLET LEDGER
+exports.exportAgentLedger = async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const userId = req.user.id;
+        const { format = 'csv' } = req.query;
+
+        const safeFormat = ['csv', 'excel', 'xlsx', 'json'].includes(String(format).toLowerCase())
+            ? String(format).toLowerCase()
+            : 'csv';
+
+        const [ledger] = await connection.execute(
+            `SELECT id, type, amount_ghc, balance_after, description, reference, created_at
+             FROM agent_wallet_ledger
+             WHERE agent_id = ?::uuid
+             ORDER BY created_at DESC
+             LIMIT 50000`,
+            [userId]
+        );
+
+        const columns = [
+            { key: 'id', label: 'Transaction ID' },
+            { key: 'type', label: 'Transaction Type' },
+            {
+                key: 'amount_ghc',
+                label: 'Amount (GH₵)',
+                transform: (r) => r.amount_ghc !== null && r.amount_ghc !== undefined ? parseFloat(r.amount_ghc) : 0
+            },
+            {
+                key: 'balance_after',
+                label: 'Balance After (GH₵)',
+                transform: (r) => r.balance_after !== null && r.balance_after !== undefined ? parseFloat(r.balance_after) : 0
+            },
+            { key: 'description', label: 'Description' },
+            { key: 'reference', label: 'Reference' },
+            {
+                key: 'created_at',
+                label: 'Date',
+                transform: (r) => r.created_at ? new Date(r.created_at).toISOString() : ''
+            }
+        ];
+
+        return sendExportResponse(res, {
+            data: ledger,
+            columns,
+            filename: 'agent_wallet_ledger',
+            format: safeFormat,
+            sheetName: 'Wallet Ledger'
+        });
+
+    } catch (error) {
+        console.error('Error exporting agent ledger:', error);
+        return res.status(500).json({ success: false, error: 'Failed to export wallet ledger' });
+    } finally {
+        if (connection) connection.release();
+    }
+};
+
+// 22. EXPORT AGENT WITHDRAWALS
+exports.exportAgentWithdrawals = async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const userId = req.user.id;
+        const { format = 'csv' } = req.query;
+
+        const safeFormat = ['csv', 'excel', 'xlsx', 'json'].includes(String(format).toLowerCase())
+            ? String(format).toLowerCase()
+            : 'csv';
+
+        const [withdrawals] = await connection.execute(
+            `SELECT id, amount_ghc, fee_ghc, net_amount_ghc, momo_number, momo_network, account_holder_name,
+                    status, rejection_reason, created_at, processed_at
+             FROM agent_withdrawals
+             WHERE agent_id = ?::uuid
+             ORDER BY created_at DESC
+             LIMIT 50000`,
+            [userId]
+        );
+
+        const columns = [
+            { key: 'id', label: 'Withdrawal ID' },
+            {
+                key: 'amount_ghc',
+                label: 'Requested Amount (GH₵)',
+                transform: (r) => r.amount_ghc !== null && r.amount_ghc !== undefined ? parseFloat(r.amount_ghc) : 0
+            },
+            {
+                key: 'fee_ghc',
+                label: 'Fee (GH₵)',
+                transform: (r) => r.fee_ghc !== null && r.fee_ghc !== undefined ? parseFloat(r.fee_ghc) : 0
+            },
+            {
+                key: 'net_amount_ghc',
+                label: 'Net Payout (GH₵)',
+                transform: (r) => r.net_amount_ghc !== null && r.net_amount_ghc !== undefined ? parseFloat(r.net_amount_ghc) : 0
+            },
+            { key: 'momo_network', label: 'MoMo Network' },
+            { key: 'momo_number', label: 'MoMo Number' },
+            { key: 'account_holder_name', label: 'Account Name' },
+            { key: 'status', label: 'Payout Status' },
+            { key: 'rejection_reason', label: 'Rejection Reason' },
+            {
+                key: 'created_at',
+                label: 'Requested Date',
+                transform: (r) => r.created_at ? new Date(r.created_at).toISOString() : ''
+            },
+            {
+                key: 'processed_at',
+                label: 'Processed Date',
+                transform: (r) => r.processed_at ? new Date(r.processed_at).toISOString() : ''
+            }
+        ];
+
+        return sendExportResponse(res, {
+            data: withdrawals,
+            columns,
+            filename: 'agent_payouts_history',
+            format: safeFormat,
+            sheetName: 'Payout History'
+        });
+
+    } catch (error) {
+        console.error('Error exporting agent withdrawals:', error);
+        return res.status(500).json({ success: false, error: 'Failed to export withdrawals history' });
+    } finally {
+        if (connection) connection.release();
     }
 };

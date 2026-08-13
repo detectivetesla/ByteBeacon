@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
-import { exportOrders } from '@/lib/export';
+import { useToast } from '@/hooks/use-toast';
+import { exportOrders, exportViaApi } from '@/lib/export';
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -32,7 +33,11 @@ import {
     Phone,
     Coins,
     ChevronDown,
-    Eye
+    Eye,
+    FileSpreadsheet,
+    FileText,
+    FileCode,
+    Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PremiumIcon } from '@/components/ui/PremiumIcon';
@@ -57,17 +62,41 @@ interface OrderTransaction {
 export default function OrdersPage() {
     const { status: statusParam } = useParams<{ status?: string }>();
     const { user } = useAuth();
+    const { toast } = useToast();
     const [orders, setOrders] = useState<OrderTransaction[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>(statusParam || 'all');
     const [selectedOrder, setSelectedOrder] = useState<OrderTransaction | null>(null);
+    const [exporting, setExporting] = useState(false);
     
     // Sorting state
     const [sortConfig, setSortConfig] = useState<{ key: keyof OrderTransaction; direction: 'ascending' | 'descending' } | null>({
         key: 'createdAt',
         direction: 'descending'
     });
+
+    const handleExport = async (format: 'excel' | 'csv' | 'json' = 'csv') => {
+        setExporting(true);
+        try {
+            const params: Record<string, string> = { format };
+            if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
+            if (searchTerm.trim()) params.search = searchTerm.trim();
+
+            await exportViaApi('/transactions/export', params, `my_orders_${Date.now()}`);
+            const formatLabels: Record<string, string> = { excel: 'Excel (.xlsx)', csv: 'CSV', json: 'JSON' };
+            toast({ title: 'Export Ready', description: `Full orders history exported to ${formatLabels[format]}.` });
+        } catch (err: any) {
+            if (processedOrders.length > 0) {
+                exportOrders(processedOrders, { filename: 'my_orders', format, sheetName: 'My Orders' });
+                toast({ title: 'Export Downloaded', description: `Exported ${processedOrders.length} displayed orders.` });
+            } else {
+                toast({ title: 'Export Failed', description: err.message || 'Could not export orders.', variant: 'destructive' });
+            }
+        } finally {
+            setExporting(false);
+        }
+    };
 
     // Column visibility state
     const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
@@ -276,16 +305,35 @@ export default function OrdersPage() {
                         <RefreshCw className="w-4 h-4 mr-2" />
                         Refresh
                     </Button>
-                    <Button
-                        variant="outline"
-                        size="default"
-                        onClick={() => exportOrders(processedOrders, { filename: 'orders', format: 'csv' })}
-                        disabled={processedOrders.length === 0}
-                        className="rounded-xl border-border/50 hover:bg-primary/10 hover:text-primary transition-all font-bold"
-                    >
-                        <Download className="w-4 h-4 mr-2" />
-                        Export CSV
-                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="outline"
+                                size="default"
+                                disabled={exporting}
+                                className="rounded-xl border-border/50 hover:bg-primary/10 hover:text-primary transition-all font-bold"
+                            >
+                                {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                                {exporting ? 'Exporting...' : 'Export'}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="bg-card border-border">
+                            <DropdownMenuLabel>Export Format</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleExport('excel')} className="cursor-pointer">
+                                <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-500" />
+                                Export to Excel (.xlsx)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleExport('csv')} className="cursor-pointer">
+                                <FileText className="w-4 h-4 mr-2 text-blue-500" />
+                                Export to CSV (.csv)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleExport('json')} className="cursor-pointer">
+                                <FileCode className="w-4 h-4 mr-2 text-purple-500" />
+                                Export to JSON (.json)
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
 

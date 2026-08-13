@@ -42,7 +42,7 @@ import {
     FileCode,
     RotateCcw
 } from 'lucide-react';
-import { exportOrders } from '@/lib/export';
+import { exportOrders, exportViaApi } from '@/lib/export';
 import { cn } from '@/lib/utils';
 
 interface Order {
@@ -80,6 +80,7 @@ export default function AdminOrdersPage() {
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+    const [exporting, setExporting] = useState(false);
 
     // Parse route-based active filters synchronously from location.pathname
     const activeNetworkFilter = useMemo(() => {
@@ -405,14 +406,32 @@ export default function AdminOrdersPage() {
     };
 
 
-    const handleExport = (format: 'excel' | 'csv' | 'json' = 'csv') => {
-        if (processedOrders.length === 0) {
-            toast({ title: 'No Data', description: 'No orders available to export.', variant: 'destructive' });
-            return;
+    const handleExport = async (format: 'excel' | 'csv' | 'json' = 'csv') => {
+        setExporting(true);
+        try {
+            const params: Record<string, string> = { format };
+            if (activeStatusFilter && activeStatusFilter !== 'all') params.status = activeStatusFilter;
+            if (activeNetworkFilter && activeNetworkFilter !== 'all') params.network = activeNetworkFilter;
+            if (timeframeFilter && timeframeFilter !== 'all') params.timeframe = timeframeFilter;
+            if (startDate) params.startDate = startDate;
+            if (endDate) params.endDate = endDate;
+            if (searchTerm.trim()) params.search = searchTerm.trim();
+
+            await exportViaApi('/admin/orders/export', params, `admin_orders_${Date.now()}`);
+            const formatLabels: Record<string, string> = { excel: 'Excel (.xlsx)', csv: 'CSV', json: 'JSON' };
+            toast({ title: 'Export Ready', description: `Full orders dataset exported to ${formatLabels[format]}.` });
+        } catch (err: any) {
+            // Fallback to client-side export if backend unavailable
+            if (processedOrders.length > 0) {
+                exportOrders(processedOrders, { filename: 'admin_orders', format, sheetName: 'Orders' });
+                const formatLabels: Record<string, string> = { excel: 'Excel (.xls)', csv: 'CSV', json: 'JSON' };
+                toast({ title: 'Export Downloaded', description: `Exported ${processedOrders.length} order(s) to ${formatLabels[format]}.` });
+            } else {
+                toast({ title: 'Export Failed', description: err.message || 'Could not export orders.', variant: 'destructive' });
+            }
+        } finally {
+            setExporting(false);
         }
-        exportOrders(processedOrders, { filename: 'admin_orders', format, sheetName: 'Orders' });
-        const formatLabels: Record<string, string> = { excel: 'Excel (.xls)', csv: 'CSV', json: 'JSON' };
-        toast({ title: 'Export Successful', description: `Exported ${processedOrders.length} order(s) to ${formatLabels[format]}.` });
     };
 
     return (
@@ -433,10 +452,11 @@ export default function AdminOrdersPage() {
                             <Button
                                 variant="outline"
                                 size="sm"
+                                disabled={exporting}
                                 className="rounded-xl border-border/50 hover:bg-primary/10 hover:text-primary transition-all font-bold h-9"
                             >
-                                <Download className="w-4 h-4 mr-2" />
-                                Export Orders
+                                {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                                {exporting ? 'Exporting...' : 'Export Orders'}
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="bg-card border-border">
@@ -444,15 +464,15 @@ export default function AdminOrdersPage() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => handleExport('excel')} className="cursor-pointer">
                                 <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-500" />
-                                Export to Excel (.xlsx / .xls)
+                                Export to Excel (.xlsx)
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleExport('csv')} className="cursor-pointer">
                                 <FileText className="w-4 h-4 mr-2 text-blue-500" />
-                                Export to CSV
+                                Export to CSV (.csv)
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleExport('json')} className="cursor-pointer">
                                 <FileCode className="w-4 h-4 mr-2 text-purple-500" />
-                                Export to JSON
+                                Export to JSON (.json)
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>

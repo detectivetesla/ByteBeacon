@@ -114,9 +114,22 @@ const syncPendingTransactions = async (io) => {
                             portalStatus: result.portalStatus
                         };
 
+                        const dhOrderId = mergedResponse?.data?.id || mergedResponse?.data?.publicId || mergedResponse?.orderId || null;
+                        const dhRefCode = mergedResponse?.data?.referenceCode || mergedResponse?.providerReferenceCode || null;
+
                         await pool.execute(
-                            'UPDATE transactions SET status = ?, api_response = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?::uuid',
-                            [newStatus, JSON.stringify(mergedResponse), transaction.id]
+                            `UPDATE transactions 
+                             SET status = ?, 
+                                 api_response = ?,
+                                 datahouse_order_id = COALESCE(?, datahouse_order_id),
+                                 reference_code = COALESCE(?, reference_code),
+                                 current_datahouse_status = ?,
+                                 mapped_bytebeacon_status = ?,
+                                 last_synced_at = CURRENT_TIMESTAMP,
+                                 sync_status = 'synced',
+                                 updated_at = CURRENT_TIMESTAMP 
+                             WHERE id = ?::uuid`,
+                            [newStatus, JSON.stringify(mergedResponse), dhOrderId, dhRefCode, result.portalStatus || newStatus, newStatus, transaction.id]
                         );
 
                         let isRefunded = false;
@@ -182,9 +195,25 @@ const syncPendingTransactions = async (io) => {
                             const newStatus = result.status === 'completed' ? 'completed' : 'refunded';
                             console.log(`[ORDER_SYNC] Agent Order: ${ao.id} | Provider Ref: ${providerIdentifier} | Previous: ${ao.fulfillment_status} | DataHouse Status: ${result.portalStatus} | New Status: ${newStatus} | Result: synchronized`);
 
+                            let aoApiData = {};
+                            try {
+                                aoApiData = typeof ao.api_response === 'string' ? JSON.parse(ao.api_response || '{}') : (ao.api_response || {});
+                            } catch (e) {}
+                            const aoDhOrderId = aoApiData?.data?.id || aoApiData?.data?.publicId || aoApiData?.orderId || null;
+                            const aoDhRefCode = aoApiData?.data?.referenceCode || aoApiData?.providerReferenceCode || null;
+
                             await pool.execute(
-                                `UPDATE agent_orders SET fulfillment_status = ?, updated_at = NOW() WHERE id = ?::uuid`,
-                                [newStatus, ao.id]
+                                `UPDATE agent_orders 
+                                 SET fulfillment_status = ?,
+                                     datahouse_order_id = COALESCE(?, datahouse_order_id),
+                                     reference_code = COALESCE(?, reference_code),
+                                     current_datahouse_status = ?,
+                                     mapped_bytebeacon_status = ?,
+                                     last_synced_at = CURRENT_TIMESTAMP,
+                                     sync_status = 'synced',
+                                     updated_at = NOW() 
+                                 WHERE id = ?::uuid`,
+                                [newStatus, aoDhOrderId, aoDhRefCode, result.portalStatus || newStatus, newStatus, ao.id]
                             );
 
                             // Credit agent profit on completed storefront order if not previously completed

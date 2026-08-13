@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const { normalizeGhanaPhone } = require('../utils/datahouse');
+const { sendExportResponse } = require('../utils/exportHelper');
 
 /**
  * Get MTN beneficiary approval records filtered by authenticated user's role.
@@ -228,5 +229,154 @@ exports.getMyApprovalOrders = async (req, res) => {
     } catch (error) {
         console.error('Error fetching user beneficiary approval orders:', error);
         res.status(500).json({ success: false, error: 'Failed to fetch linked orders' });
+    }
+};
+
+/**
+ * Export user/agent pending MTN approvals matching active filters
+ */
+exports.exportMyMtnApprovals = async (req, res) => {
+    try {
+        const { status = 'all', timeframe = 'all', search = '', format = 'csv' } = req.query;
+        const userId = req.user.id;
+        const userRole = req.user.role;
+
+        const safeFormat = ['csv', 'excel', 'xlsx', 'json'].includes(String(format).toLowerCase())
+            ? String(format).toLowerCase()
+            : 'csv';
+
+        let whereClause = ' WHERE 1=1';
+        const params = [];
+
+        // Role-based ownership filter
+        if (userRole === 'admin') {
+            // Admin sees everything
+        } else if (userRole === 'agent' || userRole === 'superagent') {
+            whereClause += ` AND (
+                a.user_id = ?::uuid
+                OR a.agent_id = ?::uuid
+                OR EXISTS (
+                    SELECT 1 FROM mtn_beneficiary_approval_orders o
+                    WHERE o.approval_id = a.id AND (o.user_id = ?::uuid OR o.agent_id = ?::uuid)
+                )
+                OR EXISTS (
+                    SELECT 1 FROM mtn_beneficiary_approval_orders o
+                    JOIN agent_stores s ON o.agent_store_id = s.id
+                    WHERE o.approval_id = a.id AND s.user_id = ?::uuid
+                )
+            )`;
+            params.push(userId, userId, userId, userId, userId);
+        } else {
+            whereClause += ` AND (
+                a.user_id = ?::uuid
+                OR EXISTS (
+                    SELECT 1 FROM mtn_beneficiary_approval_orders o
+                    WHERE o.approval_id = a.id AND o.user_id = ?::uuid
+                )
+            )`;
+            params.push(userId, userId);
+        }
+
+        // Status filter
+        if (status && status !== 'all') {
+            whereClause += ' AND LOWER(a.status) = LOWER(?)';
+            params.push(status);
+        }
+
+        // Timeframe filter
+        if (timeframe && timeframe !== 'all') {
+            if (timeframe === 'today') {
+                whereClause += ' AND a.first_detected_at >= CURRENT_DATE';
+            } else {
+                let intervalDays = 0;
+                if (timeframe === '7d') intervalDays = 7;
+                else if (timeframe === '30d') intervalDays = 30;
+                else if (timeframe === '90d') intervalDays = 90;
+                else if (timeframe === '1y') intervalDays = 365;
+
+                if (intervalDays > 0) {
+                    whereClause += ` AND a.first_detected_at >= NOW() - (${intervalDays} * INTERVAL '1 day')`;
+                }
+            }
+        }
+
+        // Search filter
+        if (search && search.trim() !== '') {
+            const trimmed = search.trim();
+            const normSearch = normalizeGhanaPhone(trimmed);
+            whereClause += ' AND (a.msisdn LIKE ? OR a.display_phone LIKE ? OR a.msisdn LIKE ?)';
+            const term = `%${trimmed}%`;
+            params.push(term, term, `%${normSearch}%`);
+        }
+
+        const dataQuery = `
+            SELECT a.id, a.msisdn, a.display_phone, a.network, a.status, a.occurrences, a.bundle_sizes, a.sources,
+                   a.primary_source, a.datahouse_reference, a.datahouse_status, a.datahouse_sync_status,
+                   a.first_detected_at, a.last_detected_at, a.submitted_at, a.approved_at, a.rejected_at, a.resolved_at
+            FROM mtn_beneficiary_approvals a
+            ${whereClause}
+            ORDER BY a.last_detected_at DESC, a.id DESC
+        `;
+
+        const [rows] = await pool.execute(dataQuery, params);
+
+        const columns = [
+            { key: 'display_phone', label: 'Phone Number' },
+            { key: 'msisdn', label: 'MSISDN' },
+            { key: 'network', label: 'Network' },
+            {
+                key: 'bundle_sizes',
+                label: 'Bundle Sizes',
+                transform: (r) => {
+                    if (!r.bundle_sizes) return '';
+                    try {
+                        const parsed = typeof r.bundle_sizes === 'string' ? JSON.parse(r.bundle_sizes) : r.bundle_sizes;
+                        return Array.isArray(parsed) ? parsed.join('; ') : String(parsed);
+                    } catch {
+                        return String(r.bundle_sizes);
+                    }
+                }
+            },
+            {
+                key: 'sources',
+                label: 'Source',
+                transform: (r) => {
+                    if (!r.sources) return r.primary_source || 'DASHBOARD';
+                    try {
+                        const parsed = typeof r.sources === 'string' ? JSON.parse(r.sources) : r.sources;
+                        return Array.isArray(parsed) ? parsed.join('; ') : String(parsed);
+                    } catch {
+                        return String(r.sources);
+                    }
+                }
+            },
+            { key: 'occurrences', label: 'Attempts' },
+            { key: 'status', label: 'Status' },
+            {
+                key: 'first_detected_at',
+                label: 'Submitted Date',
+                transform: (r) => r.first_detected_at ? new Date(r.first_detected_at).toISOString() : ''
+            },
+            {
+                key: 'last_detected_at',
+                label: 'Last Update',
+                transform: (r) => r.last_detected_at ? new Date(r.last_detected_at).toISOString() : ''
+            }
+        ];
+
+        return sendExportResponse(res, {
+            data: rows,
+            columns,
+            filename: 'bytebeacon_my_pending_mtn',
+            format: safeFormat,
+            sheetName: 'My Pending MTN Numbers'
+        });
+
+    } catch (error) {
+        console.error('Error in exportMyMtnApprovals:', error);
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to export MTN approvals. The server encountered an unexpected error.'
+        });
     }
 };

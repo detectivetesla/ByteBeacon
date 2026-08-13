@@ -5,6 +5,7 @@ const { logActivity } = require('../utils/activityLogger');
 const { encryptSecret } = require('../utils/encryption');
 const { triggerTransactionWebhook, validateWebhookUrl } = require('../services/partnerWebhook.service');
 const { sendGenericEmail } = require('../services/email.service');
+const { sendExportResponse } = require('../utils/exportHelper');
 
 // Create a new user (admin only)
 const createUser = async (req, res) => {
@@ -2922,11 +2923,421 @@ const updateAgentPricingRules = async (req, res) => {
     }
 };
 
+// Export all transactions / orders with active filters (admin)
+const exportAllTransactions = async (req, res) => {
+    try {
+        const { status, network, timeframe, startDate, endDate, search, format = 'csv' } = req.query;
+
+        const safeFormat = ['csv', 'excel', 'xlsx', 'json'].includes(String(format).toLowerCase())
+            ? String(format).toLowerCase()
+            : 'csv';
+
+        let query = `
+            SELECT * FROM (
+                SELECT 
+                    t.id::text as id, 
+                    t.recipient_phone, 
+                    t.amount_ghc, 
+                    t.status, 
+                    t.created_at, 
+                    t.updated_at,
+                    t.serial_id, 
+                    t.balance_before, 
+                    t.balance_after, 
+                    COALESCE(t.source, 'BYTEBEACON') as source, 
+                    t.paid, 
+                    t.source_provider,
+                    d.network, 
+                    d.data_amount,
+                    COALESCE(p.full_name, u.name, 'Customer') as user_name, 
+                    COALESCE(p.email, u.email, 'N/A') as user_email
+                FROM transactions t
+                LEFT JOIN data_bundles d ON t.bundle_id::text = d.id::text
+                LEFT JOIN users u ON t.user_id::text = u.uuid::text
+                LEFT JOIN profiles p ON t.user_id::text = p.id::text
+
+                UNION ALL
+
+                SELECT 
+                    o.id::text as id,
+                    o.customer_phone as recipient_phone,
+                    o.selling_price_ghc as amount_ghc,
+                    o.fulfillment_status as status,
+                    o.created_at,
+                    o.updated_at,
+                    NULL as serial_id,
+                    NULL as balance_before,
+                    NULL as balance_after,
+                    'AGENT_STORE' as source,
+                    o.payment_status as paid,
+                    COALESCE(b.provider_slug, 'datahouse') as source_provider,
+                    o.network,
+                    o.data_amount,
+                    CONCAT(s.store_name, ' (Storefront)') as user_name,
+                    COALESCE(u.email, 'storefront@bytebeacon.online') as user_email
+                FROM agent_orders o
+                LEFT JOIN agent_stores s ON o.store_id = s.id
+                LEFT JOIN users u ON o.agent_id = u.uuid
+                LEFT JOIN data_bundles b ON o.bundle_id = b.id::uuid
+            ) combined_orders
+            WHERE status != 'pending_mtn_approval'
+        `;
+        const params = [];
+
+        if (status && status !== 'all') {
+            query += ' AND LOWER(status) = LOWER(?)';
+            params.push(status);
+        }
+
+        if (network && network !== 'all') {
+            const net = network.toLowerCase();
+            if (net === 'mtn') {
+                query += " AND LOWER(network) LIKE '%mtn%'";
+            } else if (net === 'telecel' || net === 'voda') {
+                query += " AND (LOWER(network) LIKE '%telecel%' OR LOWER(network) LIKE '%voda%')";
+            } else if (net === 'at' || net === 'airteltigo') {
+                query += " AND (LOWER(network) LIKE '%at%' OR LOWER(network) LIKE '%airtel%')";
+            } else {
+                query += ' AND LOWER(network) LIKE ?';
+                params.push(`%${net}%`);
+            }
+        }
+
+        if (timeframe && timeframe !== 'all') {
+            if (timeframe === 'today') {
+                query += ' AND created_at >= CURRENT_DATE';
+            } else {
+                let intervalDays = 0;
+                if (timeframe === '7d' || timeframe === 'week') intervalDays = 7;
+                else if (timeframe === '30d' || timeframe === 'month') intervalDays = 30;
+                else if (timeframe === '90d') intervalDays = 90;
+                else if (timeframe === '1y') intervalDays = 365;
+
+                if (intervalDays > 0) {
+                    query += ` AND created_at >= NOW() - (${intervalDays} * INTERVAL '1 day')`;
+                }
+            }
+        }
+
+        if (startDate) {
+            query += ' AND created_at >= ?::timestamp';
+            params.push(new Date(startDate).toISOString());
+        }
+
+        if (endDate) {
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            query += ' AND created_at <= ?::timestamp';
+            params.push(end.toISOString());
+        }
+
+        if (search && search.trim() !== '') {
+            const term = `%${search.trim()}%`;
+            query += ` AND (
+                recipient_phone LIKE ? 
+                OR user_name ILIKE ? 
+                OR user_email ILIKE ? 
+                OR id LIKE ? 
+                OR (serial_id IS NOT NULL AND serial_id::text LIKE ?)
+                OR source_provider ILIKE ?
+            )`;
+            params.push(term, term, term, term, term, term);
+        }
+
+        query += ' ORDER BY created_at DESC LIMIT 50000';
+
+        const [rows] = await pool.execute(query, params);
+
+        const columns = [
+            {
+                key: 'serial_id',
+                label: 'Order ID',
+                transform: (r) => r.serial_id ? `ORD-${r.serial_id}` : (r.id ? `ORD-${r.id.slice(0, 8).toUpperCase()}` : 'N/A')
+            },
+            { key: 'id', label: 'Full Reference ID' },
+            { key: 'user_name', label: 'Customer / Store' },
+            { key: 'user_email', label: 'Email' },
+            { key: 'recipient_phone', label: 'Recipient Phone' },
+            { key: 'network', label: 'Network' },
+            { key: 'data_amount', label: 'Bundle Size' },
+            {
+                key: 'amount_ghc',
+                label: 'Amount (GH₵)',
+                transform: (r) => r.amount_ghc !== null && r.amount_ghc !== undefined ? parseFloat(r.amount_ghc) : 0
+            },
+            { key: 'status', label: 'Order Status' },
+            { key: 'source', label: 'Source Channel' },
+            { key: 'paid', label: 'Payment Status' },
+            { key: 'source_provider', label: 'Fulfillment Provider' },
+            {
+                key: 'balance_before',
+                label: 'Bal. Before (GH₵)',
+                transform: (r) => r.balance_before !== null && r.balance_before !== undefined ? parseFloat(r.balance_before) : ''
+            },
+            {
+                key: 'balance_after',
+                label: 'Bal. After (GH₵)',
+                transform: (r) => r.balance_after !== null && r.balance_after !== undefined ? parseFloat(r.balance_after) : ''
+            },
+            {
+                key: 'created_at',
+                label: 'Date Placed',
+                transform: (r) => r.created_at ? new Date(r.created_at).toISOString() : ''
+            },
+            {
+                key: 'updated_at',
+                label: 'Last Updated',
+                transform: (r) => r.updated_at ? new Date(r.updated_at).toISOString() : ''
+            }
+        ];
+
+        return sendExportResponse(res, {
+            data: rows,
+            columns,
+            filename: 'bytebeacon_admin_orders',
+            format: safeFormat,
+            sheetName: 'All Orders'
+        });
+
+    } catch (error) {
+        console.error('Export all transactions error:', error);
+        return res.status(500).json({ error: 'Failed to export transactions' });
+    }
+};
+
+// Export all users (admin)
+const exportAllUsers = async (req, res) => {
+    try {
+        const { role, search, format = 'csv' } = req.query;
+
+        const safeFormat = ['csv', 'excel', 'xlsx', 'json'].includes(String(format).toLowerCase())
+            ? String(format).toLowerCase()
+            : 'csv';
+
+        let query = `
+            SELECT p.id, p.full_name, p.email, p.phone, p.wallet_balance, p.created_at,
+                   COALESCE(ur.role, 'customer') as role,
+                   s.store_name, s.activation_status as store_status
+            FROM profiles p
+            LEFT JOIN user_roles ur ON p.id = ur.user_id::uuid
+            LEFT JOIN agent_stores s ON p.id = s.user_id::uuid
+            WHERE 1=1
+        `;
+        const params = [];
+
+        if (role && role !== 'all') {
+            query += ' AND ur.role = ?::user_role';
+            params.push(role);
+        }
+
+        if (search) {
+            query += ' AND (p.full_name ILIKE ? OR p.email ILIKE ? OR p.phone LIKE ?)';
+            const searchPattern = `%${search}%`;
+            params.push(searchPattern, searchPattern, searchPattern);
+        }
+
+        query += ' ORDER BY p.created_at DESC LIMIT 50000';
+
+        const [rows] = await pool.execute(query, params);
+
+        const columns = [
+            { key: 'id', label: 'User ID' },
+            { key: 'full_name', label: 'Full Name' },
+            { key: 'email', label: 'Email Address' },
+            { key: 'phone', label: 'Phone Number' },
+            { key: 'role', label: 'Role' },
+            {
+                key: 'wallet_balance',
+                label: 'Wallet Balance (GH₵)',
+                transform: (r) => r.wallet_balance !== null && r.wallet_balance !== undefined ? parseFloat(r.wallet_balance) : 0
+            },
+            { key: 'store_name', label: 'Storefront Name' },
+            { key: 'store_status', label: 'Storefront Status' },
+            {
+                key: 'created_at',
+                label: 'Joined Date',
+                transform: (r) => r.created_at ? new Date(r.created_at).toISOString() : ''
+            }
+        ];
+
+        return sendExportResponse(res, {
+            data: rows,
+            columns,
+            filename: 'bytebeacon_users_list',
+            format: safeFormat,
+            sheetName: 'Users'
+        });
+    } catch (error) {
+        console.error('Export all users error:', error);
+        return res.status(500).json({ error: 'Failed to export users' });
+    }
+};
+
+// Export all agents (admin)
+const exportAllAgents = async (req, res) => {
+    try {
+        const { search, format = 'csv' } = req.query;
+
+        const safeFormat = ['csv', 'excel', 'xlsx', 'json'].includes(String(format).toLowerCase())
+            ? String(format).toLowerCase()
+            : 'csv';
+
+        let query = `
+            SELECT p.id, p.full_name, p.email, p.phone, p.wallet_balance, p.created_at,
+                   COALESCE(ur.role, 'agent') as role,
+                   s.store_name, s.slug, s.activation_status,
+                   COALESCE(stats.total_orders, 0) as total_orders,
+                   COALESCE(stats.total_revenue, 0) as total_revenue
+            FROM profiles p
+            JOIN user_roles ur ON p.id = ur.user_id::uuid AND ur.role IN ('agent', 'superagent')
+            LEFT JOIN agent_stores s ON p.id = s.user_id::uuid
+            LEFT JOIN (
+                SELECT agent_id, COUNT(*) as total_orders, SUM(selling_price_ghc) as total_revenue
+                FROM agent_orders
+                WHERE payment_status = 'paid'
+                GROUP BY agent_id
+            ) stats ON p.id = stats.agent_id
+            WHERE 1=1
+        `;
+        const params = [];
+
+        if (search) {
+            query += ' AND (p.full_name ILIKE ? OR p.email ILIKE ? OR p.phone LIKE ? OR s.store_name ILIKE ?)';
+            const searchPattern = `%${search}%`;
+            params.push(searchPattern, searchPattern, searchPattern, searchPattern);
+        }
+
+        query += ' ORDER BY p.created_at DESC LIMIT 50000';
+
+        const [rows] = await pool.execute(query, params);
+
+        const columns = [
+            { key: 'id', label: 'Agent ID' },
+            { key: 'full_name', label: 'Full Name' },
+            { key: 'email', label: 'Email' },
+            { key: 'phone', label: 'Phone' },
+            { key: 'role', label: 'Role' },
+            { key: 'store_name', label: 'Store Name' },
+            { key: 'activation_status', label: 'Store Status' },
+            {
+                key: 'wallet_balance',
+                label: 'Wallet Balance (GH₵)',
+                transform: (r) => r.wallet_balance !== null && r.wallet_balance !== undefined ? parseFloat(r.wallet_balance) : 0
+            },
+            { key: 'total_orders', label: 'Total Paid Orders' },
+            {
+                key: 'total_revenue',
+                label: 'Total Revenue (GH₵)',
+                transform: (r) => r.total_revenue !== null && r.total_revenue !== undefined ? parseFloat(r.total_revenue) : 0
+            },
+            {
+                key: 'created_at',
+                label: 'Registered Date',
+                transform: (r) => r.created_at ? new Date(r.created_at).toISOString() : ''
+            }
+        ];
+
+        return sendExportResponse(res, {
+            data: rows,
+            columns,
+            filename: 'bytebeacon_agents_list',
+            format: safeFormat,
+            sheetName: 'Agents'
+        });
+    } catch (error) {
+        console.error('Export all agents error:', error);
+        return res.status(500).json({ error: 'Failed to export agents' });
+    }
+};
+
+// Export activity logs (admin)
+const exportAllActivityLogs = async (req, res) => {
+    try {
+        const { userId, action, search, startDate, endDate, format = 'csv' } = req.query;
+
+        const safeFormat = ['csv', 'excel', 'xlsx', 'json'].includes(String(format).toLowerCase())
+            ? String(format).toLowerCase()
+            : 'csv';
+
+        let query = `
+            SELECT al.id, al.user_id, al.action, al.description, al.ip_address, al.created_at,
+                   COALESCE(p.full_name, u.name, 'System') as full_name,
+                   COALESCE(p.email, u.email, '') as email,
+                   ur.role
+            FROM activity_logs al
+            LEFT JOIN profiles p ON al.user_id = p.id
+            LEFT JOIN users u ON al.user_id = u.uuid
+            LEFT JOIN user_roles ur ON al.user_id = ur.user_id
+            WHERE 1=1
+        `;
+        const params = [];
+
+        if (userId) {
+            query += ' AND al.user_id = ?::uuid';
+            params.push(userId);
+        }
+
+        if (action && action !== 'all') {
+            query += ' AND al.action = ?';
+            params.push(action);
+        }
+
+        if (search) {
+            query += ' AND (p.full_name ILIKE ? OR u.name ILIKE ? OR p.email ILIKE ? OR u.email ILIKE ? OR al.description ILIKE ? OR al.action ILIKE ?)';
+            const searchPattern = `%${search}%`;
+            params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+        }
+
+        if (startDate) {
+            query += ' AND al.created_at::date >= ?::date';
+            params.push(startDate);
+        }
+
+        if (endDate) {
+            query += ' AND al.created_at::date <= ?::date';
+            params.push(endDate);
+        }
+
+        query += ' ORDER BY al.created_at DESC LIMIT 50000';
+
+        const [rows] = await pool.execute(query, params);
+
+        const columns = [
+            { key: 'id', label: 'Log ID' },
+            { key: 'full_name', label: 'User Name' },
+            { key: 'email', label: 'User Email' },
+            { key: 'role', label: 'User Role' },
+            { key: 'action', label: 'Action' },
+            { key: 'description', label: 'Description' },
+            { key: 'ip_address', label: 'IP Address' },
+            {
+                key: 'created_at',
+                label: 'Timestamp',
+                transform: (r) => r.created_at ? new Date(r.created_at).toISOString() : ''
+            }
+        ];
+
+        return sendExportResponse(res, {
+            data: rows,
+            columns,
+            filename: 'bytebeacon_activity_logs',
+            format: safeFormat,
+            sheetName: 'Activity Logs'
+        });
+    } catch (error) {
+        console.error('Export activity logs error:', error);
+        return res.status(500).json({ error: 'Failed to export activity logs' });
+    }
+};
+
 module.exports = {
     createUser,
     getAllUsers,
+    exportAllUsers,
+    exportAllAgents,
     changeUserRole,
     getAllTransactions,
+    exportAllTransactions,
     getTransactionStats,
     updateTransactionStatus,
     createBundle,
@@ -2951,6 +3362,7 @@ module.exports = {
     deleteMessage,
     markMessageRead,
     getActivityLogs,
+    exportAllActivityLogs,
     getUserDetails,
     getAgentPricing,
     setAgentPricing,

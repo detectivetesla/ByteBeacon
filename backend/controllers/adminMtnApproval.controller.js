@@ -1,6 +1,7 @@
 const pool = require('../config/database');
 const { syncBeneficiaryApprovals } = require('../services/mtnApproval.service');
 const { normalizeGhanaPhone } = require('../utils/datahouse');
+const { sendExportResponse } = require('../utils/exportHelper');
 
 /**
  * Get paginated list of MTN beneficiary approval records with filters
@@ -170,44 +171,67 @@ exports.syncMtnApprovals = async (req, res) => {
 };
 
 /**
- * Export filtered MTN beneficiary numbers in CSV format
+ * Export filtered MTN beneficiary numbers in CSV, Excel, or JSON format
  */
 exports.exportMtnApprovals = async (req, res) => {
     try {
-        const { status = 'pending', timeframe = 'all', search = '' } = req.query;
+        const { status = 'all', timeframe = 'all', search = '', format = 'csv' } = req.query;
+
+        // Allowlist format validation
+        const safeFormat = ['csv', 'excel', 'xlsx', 'json'].includes(String(format).toLowerCase())
+            ? String(format).toLowerCase()
+            : 'csv';
 
         let query = `
-            SELECT display_phone, msisdn, bundle_sizes, sources, occurrences, status, datahouse_reference, datahouse_sync_status, datahouse_last_sync_at, datahouse_sync_error, first_detected_at, last_detected_at
+            SELECT 
+                display_phone, 
+                msisdn, 
+                network, 
+                bundle_sizes, 
+                sources, 
+                primary_source, 
+                occurrences, 
+                status, 
+                datahouse_reference, 
+                datahouse_sync_status, 
+                datahouse_last_sync_at, 
+                datahouse_sync_error, 
+                first_detected_at, 
+                last_detected_at
             FROM mtn_beneficiary_approvals
             WHERE 1=1
         `;
         const params = [];
 
+        // Status filter
         if (status && status !== 'all') {
             query += ' AND LOWER(status) = LOWER(?)';
             params.push(status);
         }
 
+        // Timeframe filter
         if (timeframe && timeframe !== 'all') {
-            let intervalDays = 0;
             if (timeframe === 'today') {
                 query += ' AND first_detected_at >= CURRENT_DATE';
             } else {
+                let intervalDays = 0;
                 if (timeframe === '7d') intervalDays = 7;
                 else if (timeframe === '30d') intervalDays = 30;
                 else if (timeframe === '90d') intervalDays = 90;
                 else if (timeframe === '1y') intervalDays = 365;
 
                 if (intervalDays > 0) {
-                    query += ` AND first_detected_at >= NOW() - INTERVAL '${intervalDays} days'`;
+                    query += ` AND first_detected_at >= NOW() - (${intervalDays} * INTERVAL '1 day')`;
                 }
             }
         }
 
+        // Search filter
         if (search && search.trim() !== '') {
-            const normSearch = normalizeGhanaPhone(search.trim());
+            const trimmed = search.trim();
+            const normSearch = normalizeGhanaPhone(trimmed);
             query += ' AND (msisdn LIKE ? OR display_phone LIKE ? OR msisdn LIKE ? OR datahouse_reference LIKE ?)';
-            const term = `%${search.trim()}%`;
+            const term = `%${trimmed}%`;
             params.push(term, term, `%${normSearch}%`, term);
         }
 
@@ -215,24 +239,72 @@ exports.exportMtnApprovals = async (req, res) => {
 
         const [rows] = await pool.execute(query, params);
 
-        // Generate CSV content
-        let csv = 'Phone Number,MSISDN,Bundle Sizes,Sources,Occurrences,Status,DataHouse Ref,DH Sync Status,Last Sync,Sync Error,First Detected,Last Detected\n';
-        rows.forEach(r => {
-            let bSizes = '';
-            try { bSizes = (typeof r.bundle_sizes === 'string' ? JSON.parse(r.bundle_sizes) : r.bundle_sizes).join('; '); } catch (e) {}
+        const columns = [
+            { key: 'display_phone', label: 'Phone Number' },
+            { key: 'msisdn', label: 'MSISDN' },
+            { key: 'network', label: 'Network' },
+            {
+                key: 'bundle_sizes',
+                label: 'Bundle Sizes',
+                transform: (r) => {
+                    if (!r.bundle_sizes) return '';
+                    try {
+                        const parsed = typeof r.bundle_sizes === 'string' ? JSON.parse(r.bundle_sizes) : r.bundle_sizes;
+                        return Array.isArray(parsed) ? parsed.join('; ') : String(parsed);
+                    } catch {
+                        return String(r.bundle_sizes);
+                    }
+                }
+            },
+            {
+                key: 'sources',
+                label: 'Sources',
+                transform: (r) => {
+                    if (!r.sources) return r.primary_source || '';
+                    try {
+                        const parsed = typeof r.sources === 'string' ? JSON.parse(r.sources) : r.sources;
+                        return Array.isArray(parsed) ? parsed.join('; ') : String(parsed);
+                    } catch {
+                        return String(r.sources);
+                    }
+                }
+            },
+            { key: 'primary_source', label: 'Primary Source' },
+            { key: 'occurrences', label: 'Occurrences' },
+            { key: 'status', label: 'Status' },
+            { key: 'datahouse_reference', label: 'DataHouse Reference' },
+            { key: 'datahouse_sync_status', label: 'DH Sync Status' },
+            {
+                key: 'datahouse_last_sync_at',
+                label: 'Last Sync Date',
+                transform: (r) => r.datahouse_last_sync_at ? new Date(r.datahouse_last_sync_at).toISOString() : ''
+            },
+            { key: 'datahouse_sync_error', label: 'Sync Error' },
+            {
+                key: 'first_detected_at',
+                label: 'First Detected',
+                transform: (r) => r.first_detected_at ? new Date(r.first_detected_at).toISOString() : ''
+            },
+            {
+                key: 'last_detected_at',
+                label: 'Last Detected',
+                transform: (r) => r.last_detected_at ? new Date(r.last_detected_at).toISOString() : ''
+            }
+        ];
 
-            let src = '';
-            try { src = (typeof r.sources === 'string' ? JSON.parse(r.sources) : r.sources).join('; '); } catch (e) {}
-
-            csv += `"${r.display_phone}","${r.msisdn}","${bSizes}","${src}",${r.occurrences},"${r.status}","${r.datahouse_reference || ''}","${r.datahouse_sync_status || ''}","${r.datahouse_last_sync_at || ''}","${r.datahouse_sync_error || ''}","${r.first_detected_at}","${r.last_detected_at}"\n`;
+        return sendExportResponse(res, {
+            data: rows,
+            columns,
+            filename: 'bytebeacon_admin_mtn_approvals',
+            format: safeFormat,
+            sheetName: 'MTN Pending Approvals'
         });
-
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename="MTN_Pending_Beneficiaries_${Date.now()}.csv"`);
-        res.status(200).send(csv);
 
     } catch (error) {
         console.error('Error exporting MTN approvals:', error);
-        res.status(500).json({ success: false, error: 'Export failed' });
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to export MTN approvals. The server encountered an unexpected error.'
+        });
     }
 };

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth, superAgentOrAdmin } = require('../middleware/auth');
+const { exportLimiter } = require('../middleware/security');
 const {
     getProfile,
     updateProfile,
@@ -30,7 +31,8 @@ const {
 const {
     getMyMtnApprovals,
     getMyPendingCount,
-    getMyApprovalOrders
+    getMyApprovalOrders,
+    exportMyMtnApprovals
 } = require('../controllers/userMtnApproval.controller');
 
 // All routes require authentication
@@ -70,6 +72,7 @@ router.put('/partner-profile', auth, updatePartnerSettings);
 router.get('/partner-logs', auth, getPartnerLogs);
 
 // Pending MTN Approvals (role-based, all authenticated users)
+router.get('/mtn-approvals/export', auth, exportLimiter, exportMyMtnApprovals);
 router.get('/mtn-approvals', auth, getMyMtnApprovals);
 router.get('/mtn-approvals/count', auth, getMyPendingCount);
 router.get('/mtn-approvals/:id/orders', auth, getMyApprovalOrders);

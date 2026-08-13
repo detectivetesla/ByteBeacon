@@ -33,9 +33,10 @@ import {
     FileText,
     FileCode,
     Code,
-    Store
+    Store,
+    Loader2
 } from 'lucide-react';
-import { exportAgents } from '@/lib/export';
+import { exportAgents, exportViaApi } from '@/lib/export';
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -94,6 +95,7 @@ export default function AdminAgentsPage() {
     const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
     const [editForm, setEditForm] = useState({ full_name: '', email: '', phone: '', role: 'agent' });
     const [actionLoading, setActionLoading] = useState(false);
+    const [exporting, setExporting] = useState(false);
 
     // Pending applications state
     interface Application {
@@ -439,14 +441,25 @@ export default function AdminAgentsPage() {
         }
     };
 
-    const handleExport = (format: 'excel' | 'csv' | 'json' = 'csv') => {
-        if (filteredAgents.length === 0) {
-            toast({ title: 'No Data', description: 'No agents available to export.', variant: 'destructive' });
-            return;
+    const handleExport = async (format: 'excel' | 'csv' | 'json' = 'csv') => {
+        setExporting(true);
+        try {
+            const params: Record<string, string> = { format };
+            if (searchTerm.trim()) params.search = searchTerm.trim();
+
+            await exportViaApi('/admin/agents/export', params, `bytebeacon_agents_${Date.now()}`);
+            const formatLabels: Record<string, string> = { excel: 'Excel (.xlsx)', csv: 'CSV', json: 'JSON' };
+            toast({ title: 'Export Complete', description: `Full agents list exported to ${formatLabels[format]}.` });
+        } catch (err: any) {
+            if (filteredAgents.length > 0) {
+                exportAgents(filteredAgents, { filename: 'agents_list', format, sheetName: 'Agents' });
+                toast({ title: 'Export Downloaded', description: `Exported ${filteredAgents.length} displayed agent(s).` });
+            } else {
+                toast({ title: 'Export Failed', description: err.message || 'Could not export agents.', variant: 'destructive' });
+            }
+        } finally {
+            setExporting(false);
         }
-        exportAgents(filteredAgents, { filename: 'agents_list', format, sheetName: 'Agents' });
-        const formatLabels: Record<string, string> = { excel: 'Excel (.xls)', csv: 'CSV', json: 'JSON' };
-        toast({ title: 'Export Successful', description: `Exported ${filteredAgents.length} agent(s) to ${formatLabels[format]}.` });
     };
 
     return (
@@ -462,9 +475,13 @@ export default function AdminAgentsPage() {
                 </div>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="rounded-xl border-border/50 hover:bg-primary/10 hover:text-primary transition-all font-bold">
-                            <Download className="w-4 h-4 mr-2" />
-                            Export Agents
+                        <Button
+                            variant="outline"
+                            disabled={exporting}
+                            className="rounded-xl border-border/50 hover:bg-primary/10 hover:text-primary transition-all font-bold"
+                        >
+                            {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                            {exporting ? 'Exporting...' : 'Export Agents'}
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-card border-border">
@@ -472,15 +489,15 @@ export default function AdminAgentsPage() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleExport('excel')} className="cursor-pointer">
                             <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-500" />
-                            Export to Excel (.xlsx / .xls)
+                            Export to Excel (.xlsx)
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleExport('csv')} className="cursor-pointer">
                             <FileText className="w-4 h-4 mr-2 text-blue-500" />
-                            Export to CSV
+                            Export to CSV (.csv)
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleExport('json')} className="cursor-pointer">
                             <FileCode className="w-4 h-4 mr-2 text-purple-500" />
-                            Export to JSON
+                            Export to JSON (.json)
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

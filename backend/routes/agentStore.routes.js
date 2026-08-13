@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth, agentOrAdmin } = require('../middleware/auth');
-const { withdrawalLimiter, storeCreationLimiter, paymentLimiter } = require('../middleware/security');
+const { withdrawalLimiter, storeCreationLimiter, paymentLimiter, exportLimiter } = require('../middleware/security');
 const {
     createStore,
     getMyStore,
@@ -14,11 +14,14 @@ const {
     addStoreProduct,
     getDashboardStats,
     getAgentOrders,
+    exportAgentOrders,
     getAgentTransactions,
+    exportAgentLedger,
     getAgentCustomers,
     getAgentAnalytics,
     requestWithdrawal,
     getWithdrawalHistory,
+    exportAgentWithdrawals,
     getPublicStorefront,
     initializeCustomerPurchase,
     verifyCustomerPurchase,
@@ -53,7 +56,9 @@ router.delete('/products/:bundleId', auth, agentOrAdmin, deleteStoreProduct);
 
 // Dashboard & Stats
 router.get('/dashboard', auth, getDashboardStats);
+router.get('/orders/export', auth, exportLimiter, exportAgentOrders);
 router.get('/orders', auth, getAgentOrders);
+router.get('/transactions/export', auth, exportLimiter, exportAgentLedger);
 router.get('/transactions', auth, getAgentTransactions);
 router.get('/customers', auth, getAgentCustomers);
 router.get('/analytics', auth, getAgentAnalytics);
@@ -61,6 +66,7 @@ router.get('/beneficiaries', auth, getAgentBeneficiaries);
 
 // Financial Ledger & Withdrawals
 router.post('/withdrawals', auth, agentOrAdmin, withdrawalLimiter, requestWithdrawal);
+router.get('/withdrawals/export', auth, exportLimiter, exportAgentWithdrawals);
 router.get('/withdrawals', auth, getWithdrawalHistory);
 
 module.exports = router;

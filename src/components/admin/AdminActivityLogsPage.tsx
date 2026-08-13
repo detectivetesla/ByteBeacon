@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { exportActivityLogs } from '@/lib/export';
+import { exportActivityLogs, exportViaApi } from '@/lib/export';
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -21,7 +21,7 @@ import {
     DialogTitle,
     DialogDescription
 } from '@/components/ui/dialog';
-import { Activity, Search, RefreshCcw, User, Clock, Globe, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, FileCode, Info, ShieldCheck, ShieldAlert, Sparkles, UserCheck } from 'lucide-react';
+import { Activity, Search, RefreshCcw, User, Clock, Globe, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, FileCode, Info, ShieldCheck, ShieldAlert, Sparkles, UserCheck, Loader2 } from 'lucide-react';
 
 const ACTION_TYPES = [
     { value: 'all', label: 'All Actions' },
@@ -85,6 +85,7 @@ export default function AdminActivityLogsPage() {
     const [endDate, setEndDate] = useState<string>('');
     const [page, setPage] = useState(1);
     const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
+    const [exporting, setExporting] = useState(false);
     const logsPerPage = 25;
 
     const fetchLogs = useCallback(async () => {
@@ -114,54 +115,56 @@ export default function AdminActivityLogsPage() {
         fetchLogs();
     }, [fetchLogs]);
 
-    const handleExport = (format: 'excel' | 'csv' | 'json') => {
-        if (logs.length === 0) {
-            toast({
-                title: 'No Data',
-                description: 'There are no activity logs to export.',
-                variant: 'destructive'
-            });
-            return;
+    const handleExport = async (format: 'excel' | 'csv' | 'json') => {
+        setExporting(true);
+        try {
+            const params: Record<string, string> = { format };
+            if (actionFilter && actionFilter !== 'all') params.action = actionFilter;
+            if (startDate) params.startDate = startDate;
+            if (endDate) params.endDate = endDate;
+            if (searchTerm.trim()) params.search = searchTerm.trim();
+
+            await exportViaApi('/admin/activity-logs/export', params, `bytebeacon_activity_logs_${Date.now()}`);
+            const formatLabels: Record<string, string> = { excel: 'Excel (.xlsx)', csv: 'CSV', json: 'JSON' };
+            toast({ title: 'Export Complete', description: `Full activity logs exported to ${formatLabels[format]}.` });
+        } catch (err: any) {
+            if (logs.length > 0) {
+                exportActivityLogs(logs, { filename: `activity_logs_${actionFilter}`, format, sheetName: 'Activity Logs' });
+                toast({ title: 'Export Downloaded', description: `Exported ${logs.length} displayed log(s).` });
+            } else {
+                toast({ title: 'Export Failed', description: err.message || 'Could not export activity logs.', variant: 'destructive' });
+            }
+        } finally {
+            setExporting(false);
         }
-
-        exportActivityLogs(logs, {
-            filename: `activity_logs_${actionFilter}`,
-            format,
-            sheetName: 'Activity Logs'
-        });
-
-        const formatLabels: Record<string, string> = {
-            excel: 'Excel (.xls)',
-            csv: 'CSV',
-            json: 'JSON'
-        };
-
-        toast({
-            title: 'Export Successful',
-            description: `Exported ${logs.length} activity log(s) to ${formatLabels[format]}.`
-        });
     };
 
     const paginatedLogs = logs.slice((page - 1) * logsPerPage, page * logsPerPage);
-    const totalPages = Math.max(1, Math.ceil(logs.length / logsPerPage));
+    const totalPages = Math.ceil(logs.length / logsPerPage);
 
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold flex items-center gap-2 text-white">
-                        <Activity className="w-6 h-6 text-[#a3e635]" />
+                    <h1 className="text-3xl font-display font-black tracking-tight text-white flex items-center gap-3">
+                        <Activity className="w-8 h-8 text-[#a3e635]" />
                         Activity Logs
                     </h1>
-                    <p className="text-slate-400 text-xs mt-1">Audit real-time administrative and system user operations across ByteBeacon.</p>
+                    <p className="text-slate-400 font-medium text-sm">
+                        Track and audit all platform administrative events, role changes, and balance updates
+                    </p>
                 </div>
                 <div className="flex items-center gap-3">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="rounded-xl border-white/10 hover:bg-[#a3e635]/10 hover:text-[#a3e635] transition-all font-bold text-xs">
-                                <Download className="w-4 h-4 mr-2" />
-                                Export Logs
+                            <Button
+                                variant="outline"
+                                disabled={exporting}
+                                className="rounded-xl border-white/10 hover:bg-[#a3e635]/10 hover:text-[#a3e635] transition-all font-bold text-xs"
+                            >
+                                {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                                {exporting ? 'Exporting...' : 'Export Logs'}
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="bg-[#202227] border-white/10 text-white">
@@ -169,15 +172,15 @@ export default function AdminActivityLogsPage() {
                             <DropdownMenuSeparator className="bg-white/10" />
                             <DropdownMenuItem onClick={() => handleExport('excel')} className="cursor-pointer hover:bg-white/5">
                                 <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-400" />
-                                Export to Excel (.xlsx / .xls)
+                                Export to Excel (.xlsx)
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleExport('csv')} className="cursor-pointer hover:bg-white/5">
                                 <FileText className="w-4 h-4 mr-2 text-blue-400" />
-                                Export to CSV
+                                Export to CSV (.csv)
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleExport('json')} className="cursor-pointer hover:bg-white/5">
                                 <FileCode className="w-4 h-4 mr-2 text-purple-400" />
-                                Export to JSON
+                                Export to JSON (.json)
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>

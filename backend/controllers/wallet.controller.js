@@ -142,8 +142,17 @@ const fundWallet = async (req, res) => {
             const io = req.app.get('io');
             if (io) {
                 io.to(userId).emit('balanceUpdate', {
+                    userId,
                     newBalance: parseFloat(profiles[0].wallet_balance)
                 });
+                io.to(userId).emit('newDeposit', {
+                    userId,
+                    depositId,
+                    amount: amountToCredit
+                });
+                io.to(userId).emit('userStatsUpdate', { userId });
+                // Broadcast globally so admin pages also refresh
+                io.emit('userStatsUpdate', { userId });
             }
 
             res.json({

@@ -2,12 +2,21 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '@/services';
 import { useToast } from '@/hooks/use-toast';
 import { useSocket } from '@/contexts/SocketContext';
+import { exportViaApi } from '@/lib/export';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
-    Loader2, Search, Clock, CheckCircle2, XCircle, AlertCircle, Phone, ShieldAlert, RefreshCw, ChevronLeft, ChevronRight
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator
+} from '@/components/ui/dropdown-menu';
+import {
+    Loader2, Search, Clock, CheckCircle2, XCircle, AlertCircle, Phone, ShieldAlert, RefreshCw, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, FileCode
 } from 'lucide-react';
 
 interface MtnApproval {
@@ -85,10 +94,37 @@ export const PendingMtnApprovalsPage: React.FC = () => {
     // Badge count
     const [pendingCount, setPendingCount] = useState(0);
 
+    // Exporting state
+    const [exporting, setExporting] = useState(false);
+
     // Reset to page 1 when filters change
     useEffect(() => {
         setPage(1);
     }, [statusFilter, searchQuery]);
+
+    const handleExport = async (format: 'csv' | 'excel' | 'json' = 'csv') => {
+        setExporting(true);
+        try {
+            const params: Record<string, string> = { format };
+            if (statusFilter !== 'all') params.status = statusFilter;
+            if (searchQuery.trim()) params.search = searchQuery.trim();
+
+            await exportViaApi('/users/mtn-approvals/export', params, `My_Pending_MTN_${Date.now()}`);
+
+            toast({
+                title: 'Export Ready',
+                description: `Pending MTN approval records downloaded (${format.toUpperCase()}).`
+            });
+        } catch (err: any) {
+            toast({
+                title: 'Export Failed',
+                description: err.message || 'Failed to export records.',
+                variant: 'destructive'
+            });
+        } finally {
+            setExporting(false);
+        }
+    };
 
     const loadApprovals = useCallback(async (showRefreshing = false) => {
         if (showRefreshing) setRefreshing(true);
@@ -234,16 +270,55 @@ export const PendingMtnApprovalsPage: React.FC = () => {
                     </p>
                 </div>
 
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => loadApprovals(true)}
-                    disabled={refreshing}
-                    className="bg-card border-border hover:bg-accent text-xs font-semibold gap-2"
-                >
-                    <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-                    {refreshing ? 'Refreshing...' : 'Refresh'}
-                </Button>
+                <div className="flex items-center gap-3">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => loadApprovals(true)}
+                        disabled={refreshing}
+                        className="bg-card border-border hover:bg-accent text-xs font-semibold gap-2"
+                    >
+                        <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                        {refreshing ? 'Refreshing...' : 'Refresh'}
+                    </Button>
+
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                disabled={exporting}
+                                className="bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs gap-2"
+                            >
+                                {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                                {exporting ? 'Exporting...' : 'Export'}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48 bg-card border-border">
+                            <DropdownMenuLabel className="text-xs text-muted-foreground font-semibold">Export Format</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                onClick={() => handleExport('excel')}
+                                className="text-xs cursor-pointer gap-2 focus:bg-accent"
+                            >
+                                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" />
+                                Export to Excel (.xlsx)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => handleExport('csv')}
+                                className="text-xs cursor-pointer gap-2 focus:bg-accent"
+                            >
+                                <FileText className="w-3.5 h-3.5 text-blue-500" />
+                                Export to CSV (.csv)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => handleExport('json')}
+                                className="text-xs cursor-pointer gap-2 focus:bg-accent"
+                            >
+                                <FileCode className="w-3.5 h-3.5 text-purple-500" />
+                                Export to JSON (.json)
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             </div>
 
             {/* Info Banner — reassuring, NOT alarming */}
