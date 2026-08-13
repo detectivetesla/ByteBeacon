@@ -15,12 +15,47 @@ function getBaseUrl() {
     return process.env.DATAHOUSE_API_BASE_URL || DEFAULT_BASE_URL;
 }
 
+let cachedDbApiKey = null;
+let lastDbKeyFetch = 0;
+
+async function resolveApiKey() {
+    if (process.env.DATAHOUSE_API_KEY && process.env.DATAHOUSE_API_KEY.trim() !== '') {
+        return process.env.DATAHOUSE_API_KEY.trim();
+    }
+    const now = Date.now();
+    if (cachedDbApiKey && (now - lastDbKeyFetch < 60000)) {
+        return cachedDbApiKey;
+    }
+    try {
+        const pool = require('../../config/database');
+        const [rows] = await pool.execute(
+            "SELECT api_key FROM sourcing_providers WHERE slug = 'datahouse' AND is_active = true LIMIT 1"
+        );
+        if (rows.length > 0 && rows[0].api_key && rows[0].api_key.trim() !== '') {
+            cachedDbApiKey = rows[0].api_key.trim();
+            lastDbKeyFetch = now;
+            return cachedDbApiKey;
+        }
+        const [settingRows] = await pool.execute(
+            "SELECT setting_value FROM system_settings WHERE setting_key = 'datahouse_api_key' LIMIT 1"
+        );
+        if (settingRows.length > 0 && settingRows[0].setting_value && settingRows[0].setting_value.trim() !== '') {
+            cachedDbApiKey = settingRows[0].setting_value.trim();
+            lastDbKeyFetch = now;
+            return cachedDbApiKey;
+        }
+    } catch (e) {
+        // Fallback gracefully
+    }
+    return null;
+}
+
 function getApiKey() {
     const key = process.env.DATAHOUSE_API_KEY;
-    if (!key || typeof key !== 'string' || key.trim() === '') {
-        return null;
+    if (key && typeof key === 'string' && key.trim() !== '') {
+        return key.trim();
     }
-    return key.trim();
+    return cachedDbApiKey;
 }
 
 /**
@@ -36,9 +71,9 @@ function getApiKey() {
  * @returns {Promise<{ ok: boolean, status: number, data: any, error: any, correlationId: string|null }>}
  */
 async function request({ method, path, body = null, headers = {}, timeout = 15000, maxRetries = 2 }) {
-    const apiKey = getApiKey();
+    const apiKey = await resolveApiKey();
     if (!apiKey) {
-        const errorMsg = 'DATAHOUSE_API_KEY is not configured in server environment.';
+        const errorMsg = 'DATAHOUSE_API_KEY is not configured in server environment or database.';
         console.error(`❌ [DataHouse Client] ${errorMsg}`);
         return {
             ok: false,

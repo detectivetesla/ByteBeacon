@@ -176,30 +176,30 @@ const getSystemConfig = async (req, res) => {
 
 const getPortalStatus = async (req, res) => {
     try {
-        // 1. Get last completed transaction
+        // 1. Get last completed / approved transaction
         const [lastCompletedRows] = await pool.execute(`
             SELECT id, created_at, updated_at 
             FROM transactions 
-            WHERE status = 'completed' 
+            WHERE status IN ('completed', 'approved', 'partially_approved') 
             ORDER BY updated_at DESC LIMIT 1
         `);
 
-        // 2. Get oldest processing transaction (post-migration only)
+        // 2. Get oldest active processing transaction (recent window)
         const [checkingNowRows] = await pool.execute(`
             SELECT id, created_at 
             FROM transactions 
-            WHERE status = 'processing'
-            AND created_at >= ?
+            WHERE status IN ('processing', 'received', 'pending', 'queued', 'ongoing')
+            AND created_at >= NOW() - INTERVAL '2 hours'
             ORDER BY created_at ASC LIMIT 1
-        `, [DATAHOUSE_MIGRATION_DATE]);
+        `);
 
-        // 3. Count how many are processing (post-migration only)
+        // 3. Count how many are actively processing
         const [processingRows] = await pool.execute(`
             SELECT COUNT(*)::integer as count 
             FROM transactions 
-            WHERE status = 'processing'
-            AND created_at >= ?
-        `, [DATAHOUSE_MIGRATION_DATE]);
+            WHERE status IN ('processing', 'received', 'pending', 'queued', 'ongoing')
+            AND created_at >= NOW() - INTERVAL '2 hours'
+        `);
         const processingCount = processingRows[0]?.count || 0;
 
         // Get delay notice setting if any, or compute it
@@ -214,19 +214,19 @@ const getPortalStatus = async (req, res) => {
 
         if (customNotice) {
             delayNotice = customNotice;
-            systemStatus = processingCount > 5 ? 'critical' : (processingCount > 0 ? 'warning' : 'healthy');
+            systemStatus = processingCount > 10 ? 'critical' : (processingCount > 0 ? 'warning' : 'healthy');
         } else {
-            if (processingCount === 0) {
+            if (processingCount === 0 || checkingNowRows.length === 0) {
                 delayNotice = 'All systems operational. Transactions are being delivered instantly.';
                 systemStatus = 'healthy';
             } else {
                 const oldestAgeMinutes = Math.floor((Date.now() - new Date(checkingNowRows[0].created_at).getTime()) / 60000);
                 if (oldestAgeMinutes >= 15) {
-                    delayNotice = `MTN/Telecel data delivery portal is experiencing slight delays. Oldest order in queue is ${oldestAgeMinutes} mins old. Currently ${processingCount} order(s) in queue.`;
-                    systemStatus = 'critical';
+                    delayNotice = `MTN/Telecel data delivery portal is experiencing slight delays. Oldest active order in queue is ${oldestAgeMinutes} mins old. Currently ${processingCount} order(s) in queue.`;
+                    systemStatus = 'warning';
                 } else {
                     delayNotice = `Portal is healthy. Currently processing ${processingCount} order(s) in the queue. Estimated delivery: 1-3 minutes.`;
-                    systemStatus = 'warning';
+                    systemStatus = 'healthy';
                 }
             }
         }
