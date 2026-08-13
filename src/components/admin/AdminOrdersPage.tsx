@@ -264,27 +264,32 @@ export default function AdminOrdersPage() {
     };
 
 
-    const updateOrderStatus = async (orderId: string, newStatus: 'processing' | 'completed' | 'failed') => {
+    const handleSyncOrder = async (orderId: string) => {
         setUpdating(orderId);
         try {
-            await adminService.updateTransactionStatus(orderId, newStatus);
-
-            setOrders(prev => prev.map(order =>
-                order.id === orderId ? { ...order, status: newStatus, updatedAt: new Date().toISOString() } : order
-            ));
-
-            toast({
-                title: 'Order Updated',
-                description: `Order status changed to ${newStatus}`,
-            });
-            if (selectedOrder && selectedOrder.id === orderId) {
-                setSelectedOrder(prev => prev ? { ...prev, status: newStatus, updatedAt: new Date().toISOString() } : null);
+            const res = await adminService.syncTransactionStatus(orderId);
+            if (res.synced && res.newStatus) {
+                setOrders(prev => prev.map(order =>
+                    order.id === orderId ? { ...order, status: res.newStatus!, updatedAt: new Date().toISOString() } : order
+                ));
+                if (selectedOrder && selectedOrder.id === orderId) {
+                    setSelectedOrder(prev => prev ? { ...prev, status: res.newStatus!, updatedAt: new Date().toISOString() } : null);
+                }
+                toast({
+                    title: 'Reconciled with DataHouse',
+                    description: `Authoritative status: ${res.newStatus}`
+                });
+            } else {
+                toast({
+                    title: 'Sync Result',
+                    description: res.message || 'Order checked against DataHouse.'
+                });
             }
-        } catch (err) {
+        } catch (err: any) {
             toast({
-                title: 'Error',
-                description: 'Failed to update order status.',
-                variant: 'destructive',
+                title: 'Sync Notice',
+                description: err?.response?.data?.error || 'Could not reconcile with DataHouse at this moment.',
+                variant: 'destructive'
             });
         } finally {
             setUpdating(null);
@@ -854,30 +859,25 @@ export default function AdminOrdersPage() {
                                                         {order.updatedAt ? formatDate(order.updatedAt) : '—'}
                                                     </td>
                                                 )}
-                                                {visibleColumns.actions && (
+                                                 {visibleColumns.actions && (
                                                     <td className="p-4 text-sm text-right">
                                                         <div className="flex items-center justify-end gap-1.5">
-                                                            {order.status === 'processing' && (
-                                                                <div className="flex gap-1 mr-2 shrink-0">
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        onClick={() => updateOrderStatus(order.id, 'completed')}
-                                                                        disabled={updating === order.id}
-                                                                        className="h-7 text-xs border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10"
-                                                                    >
-                                                                        {updating === order.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Complete'}
-                                                                    </Button>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        onClick={() => updateOrderStatus(order.id, 'failed')}
-                                                                        disabled={updating === order.id}
-                                                                        className="h-7 text-xs border-red-500/50 text-red-400 hover:bg-red-500/10"
-                                                                    >
-                                                                        Fail
-                                                                    </Button>
-                                                                </div>
+                                                            {['processing', 'received', 'pending'].includes(order.status) && (
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => handleSyncOrder(order.id)}
+                                                                    disabled={updating === order.id}
+                                                                    className="h-7 text-xs border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 gap-1 shrink-0"
+                                                                    title="Reconcile authoritative status from DataHouse"
+                                                                >
+                                                                    {updating === order.id ? (
+                                                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                                                    ) : (
+                                                                        <RefreshCw className="w-3 h-3" />
+                                                                    )}
+                                                                    Sync
+                                                                </Button>
                                                             )}
                                                             {order.status === 'failed' && (
                                                                 <Button
@@ -886,7 +886,7 @@ export default function AdminOrdersPage() {
                                                                     onClick={() => handleReprocessOrder(order.id)}
                                                                     disabled={reprocessingId === order.id}
                                                                     className="h-7 text-xs border-amber-500/50 text-amber-400 hover:bg-amber-500/10 gap-1 mr-1"
-                                                                    title="Reprocess failed order"
+                                                                    title="Reprocess failed order with DataHouse"
                                                                 >
                                                                     {reprocessingId === order.id ? (
                                                                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -909,6 +909,14 @@ export default function AdminOrdersPage() {
                                                                     >
                                                                         <Eye className="w-3.5 h-3.5" />
                                                                         View Details
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem 
+                                                                        onClick={() => handleSyncOrder(order.id)}
+                                                                        disabled={updating === order.id}
+                                                                        className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer text-cyan-400 focus:text-cyan-400"
+                                                                    >
+                                                                        <RefreshCw className="w-3.5 h-3.5" />
+                                                                        Sync with DataHouse
                                                                     </DropdownMenuItem>
                                                                     {order.status === 'failed' && (
                                                                         <DropdownMenuItem 
@@ -1051,29 +1059,22 @@ export default function AdminOrdersPage() {
                             </div>
                         </div>
 
-                        {/* Modal Footer with Status Overrides */}
+                        {/* Modal Footer with Authoritative DataHouse Reconciliation */}
                         <div className="p-4 border-t border-border/50 flex flex-col sm:flex-row gap-3 items-center justify-between bg-accent/20">
                             <div className="flex gap-2">
-                                {selectedOrder.status === 'processing' && (
-                                    <>
-                                        <Button 
-                                            size="sm"
-                                            onClick={() => updateOrderStatus(selectedOrder.id, 'completed')}
-                                            disabled={updating === selectedOrder.id}
-                                            className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold"
-                                        >
-                                            Mark Completed
-                                        </Button>
-                                        <Button 
-                                            size="sm"
-                                            onClick={() => updateOrderStatus(selectedOrder.id, 'failed')}
-                                            disabled={updating === selectedOrder.id}
-                                            className="bg-red-500 hover:bg-red-600 text-white font-bold"
-                                        >
-                                            Mark Failed
-                                        </Button>
-                                    </>
-                                )}
+                                <Button 
+                                    size="sm"
+                                    onClick={() => handleSyncOrder(selectedOrder.id)}
+                                    disabled={updating === selectedOrder.id}
+                                    className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold flex items-center gap-1.5"
+                                >
+                                    {updating === selectedOrder.id ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <RefreshCw className="w-4 h-4" />
+                                    )}
+                                    Sync with DataHouse
+                                </Button>
                                 {selectedOrder.status === 'failed' && (
                                     <Button
                                         size="sm"
