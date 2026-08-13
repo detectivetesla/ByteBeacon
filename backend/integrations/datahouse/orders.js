@@ -203,8 +203,8 @@ async function fetchAllOrdersForExport(filters = {}) {
 
         allOrders.push(...items);
 
-        const total = res.data?.meta?.total || (res.meta?.total ?? 0);
-        if (allOrders.length >= total || items.length < limit) {
+        const total = res.data?.meta?.total ?? res.meta?.total ?? items.length;
+        if (allOrders.length >= total || items.length === 0) {
             hasMore = false;
         } else {
             page++;
