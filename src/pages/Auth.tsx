@@ -13,8 +13,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Eye, EyeOff, Loader2, ArrowLeft, ExternalLink, DollarSign, Check, Wifi, Store, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ArrowLeft, ExternalLink, DollarSign, Check, Wifi, Store, ShieldCheck, ArrowRight, Wrench } from 'lucide-react';
 import { z } from 'zod';
+import { useMaintenance } from '@/contexts/MaintenanceContext';
 import { agentStoreService } from '@/services/agentStore.service';
 import {
   Dialog,
@@ -41,6 +42,8 @@ export default function Auth() {
   const location = useLocation();
   const urlParams = new URLSearchParams(window.location.search);
   const isAgentRoute = location.pathname.includes('/agent') || urlParams.get('type') === 'agent' || urlParams.get('agent') === 'true';
+
+  const { isMaintenance, title: maintenanceTitle, message: maintenanceMessage, estimatedEnd: maintenanceEstimatedEnd } = useMaintenance();
 
   const [isAgentPortal, setIsAgentPortal] = useState(isAgentRoute);
   const [isSignUp, setIsSignUp] = useState(false);
@@ -683,6 +686,26 @@ export default function Auth() {
               </Link>
             </div>
           </div>
+
+          {/* Maintenance Notice Box */}
+          {isMaintenance && (
+            <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3 animate-fade-in">
+              <Wrench className="w-5 h-5 text-amber-500 shrink-0 mt-0.5 animate-pulse" />
+              <div className="space-y-1">
+                <div className="font-semibold text-foreground">
+                  {maintenanceTitle || "We're upgrading ByteBeacon"}
+                </div>
+                <p className="text-muted-foreground leading-relaxed">
+                  {maintenanceMessage || "A little maintenance is underway. You can still explore ByteBeacon, but account access and transactions are temporarily paused."}
+                </p>
+                {maintenanceEstimatedEnd && (
+                  <p className="text-primary font-medium pt-1">
+                    Estimated return: {maintenanceEstimatedEnd}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">

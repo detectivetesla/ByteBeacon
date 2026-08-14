@@ -37,7 +37,10 @@ export default function AdminSettingsPage() {
         setFetchingSystem(true);
         try {
             const data = await adminService.getMaintenanceStatus();
-            setMaintenanceMode(data.maintenanceMode);
+            setMaintenanceMode(Boolean(data.maintenanceMode));
+            setMaintenanceTitle(data.title || "We're upgrading ByteBeacon");
+            setMaintenanceMessage(data.message || "A little maintenance is underway. You can still explore ByteBeacon, but account access and transactions are temporarily paused.");
+            setMaintenanceEstimatedEnd(data.estimatedEnd || "");
         } catch (err) {
             console.error('Failed to fetch system status:', err);
         } finally {
@@ -184,51 +187,42 @@ export default function AdminSettingsPage() {
         setShowApiKeys(prev => ({ ...prev, [slug]: !prev[slug] }));
     };
 
-    const toggleMaintenance = async (checked: boolean) => {
+    const [maintenanceMode, setMaintenanceMode] = useState(false);
+    const [maintenanceTitle, setMaintenanceTitle] = useState("We're upgrading ByteBeacon");
+    const [maintenanceMessage, setMaintenanceMessage] = useState("A little maintenance is underway. You can still explore ByteBeacon, but account access and transactions are temporarily paused.");
+    const [maintenanceEstimatedEnd, setMaintenanceEstimatedEnd] = useState("");
+    const [savingMaintenance, setSavingMaintenance] = useState(false);
+    const [fetchingSystem, setFetchingSystem] = useState(false);
+
+    const saveMaintenanceConfig = async (activeState = maintenanceMode) => {
+        setSavingMaintenance(true);
         try {
-            await adminService.updateMaintenanceStatus(checked);
-            setMaintenanceMode(checked);
+            await adminService.updateMaintenanceStatus({
+                isActive: activeState,
+                title: maintenanceTitle,
+                message: maintenanceMessage,
+                estimatedEnd: maintenanceEstimatedEnd.trim() || null
+            });
+            setMaintenanceMode(activeState);
             toast({
-                title: checked ? 'Maintenance Mode Enabled' : 'Maintenance Mode Disabled',
-                description: `The system is now ${checked ? 'in maintenance mode' : 'live'}.`,
+                title: activeState ? 'Maintenance Mode Active' : 'Maintenance Mode Disabled',
+                description: `Settings updated. System is now ${activeState ? 'in maintenance mode' : 'live'}.`,
             });
         } catch (err) {
-            console.error('Failed to toggle maintenance:', err);
+            console.error('Failed to update maintenance settings:', err);
             toast({
                 title: 'Error',
-                description: 'Failed to update maintenance status.',
+                description: 'Failed to update maintenance configuration.',
                 variant: 'destructive',
             });
+        } finally {
+            setSavingMaintenance(false);
         }
     };
 
-    // Appearance settings
-    const [appearanceSettings, setAppearanceSettings] = useState({
-        theme: 'auto',
-        primaryColor: '#22c55e',
-        sidebarPosition: 'left',
-        compactSidebar: false,
-    });
-
-    // Notification settings
-    const [notificationSettings, setNotificationSettings] = useState({
-        emailNotifications: true,
-        orderAlerts: true,
-        userRegistrations: true,
-        systemAlerts: true,
-        dailyReports: false,
-    });
-
-    // Security settings
-    const [securitySettings, setSecuritySettings] = useState({
-        twoFactorAuth: false,
-        sessionTimeout: '30',
-        ipWhitelist: '',
-    });
-
-    // System settings
-    const [maintenanceMode, setMaintenanceMode] = useState(false);
-    const [fetchingSystem, setFetchingSystem] = useState(false);
+    const toggleMaintenance = async (checked: boolean) => {
+        await saveMaintenanceConfig(checked);
+    };
 
     // Sourcing settings
     const [sourcingApi, setSourcingApi] = useState('datahouse');
@@ -820,22 +814,67 @@ export default function AdminSettingsPage() {
                             </div>
 
                             <div className="pt-4 space-y-4">
-                                <div className="flex items-center justify-between p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-                                    <div>
-                                        <Label className="text-red-400 font-bold">Maintenance Mode</Label>
-                                        <p className="text-sm text-red-400/70">Enable to block all non-admin access</p>
+                                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <Label className="text-amber-500 dark:text-amber-400 font-bold text-base">Maintenance Mode</Label>
+                                            <p className="text-xs text-muted-foreground">Pause customer transactions & account access while keeping public catalog and landing page visible</p>
+                                        </div>
+                                        <Switch
+                                            disabled={fetchingSystem || savingMaintenance}
+                                            checked={maintenanceMode}
+                                            onCheckedChange={toggleMaintenance}
+                                            className="data-[state=checked]:bg-amber-500"
+                                        />
                                     </div>
-                                    <Switch
-                                        disabled={fetchingSystem}
-                                        checked={maintenanceMode}
-                                        onCheckedChange={toggleMaintenance}
-                                        className="data-[state=checked]:bg-red-500"
-                                    />
-                                </div>
 
-                                <Button variant="outline" className="border-red-500 text-red-400 hover:bg-red-500/10">
-                                    Clear Cache
-                                </Button>
+                                    {maintenanceMode && (
+                                        <div className="space-y-3 pt-2 border-t border-amber-500/20 animate-fade-in">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs font-semibold text-foreground">Notice Headline</Label>
+                                                <Input
+                                                    value={maintenanceTitle}
+                                                    onChange={(e) => setMaintenanceTitle(e.target.value)}
+                                                    placeholder="We're upgrading ByteBeacon"
+                                                    className="bg-card border-border text-xs"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs font-semibold text-foreground">Customer Message</Label>
+                                                <Input
+                                                    value={maintenanceMessage}
+                                                    onChange={(e) => setMaintenanceMessage(e.target.value)}
+                                                    placeholder="A little maintenance is underway. You can still explore ByteBeacon..."
+                                                    className="bg-card border-border text-xs"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs font-semibold text-foreground">Estimated Return Time (Optional)</Label>
+                                                <Input
+                                                    value={maintenanceEstimatedEnd}
+                                                    onChange={(e) => setMaintenanceEstimatedEnd(e.target.value)}
+                                                    placeholder="e.g. 02:30 AM or Within 45 minutes"
+                                                    className="bg-card border-border text-xs"
+                                                />
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                onClick={() => saveMaintenanceConfig(true)}
+                                                disabled={savingMaintenance}
+                                                className="bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs h-8"
+                                            >
+                                                {savingMaintenance ? (
+                                                    <>
+                                                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                                                        Saving...
+                                                    </>
+                                                ) : (
+                                                    'Save Maintenance Notice'
+                                                )}
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </>
                     )}

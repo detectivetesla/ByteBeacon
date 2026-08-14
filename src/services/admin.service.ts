@@ -307,12 +307,23 @@ export const adminService = {
     },
 
     // System Settings
-    getMaintenanceStatus: async (): Promise<{ maintenanceMode: boolean }> => {
+    getMaintenanceStatus: async (): Promise<{ 
+        maintenanceMode: boolean; 
+        title?: string; 
+        message?: string; 
+        estimatedEnd?: string | null;
+    }> => {
         return api.get('/system/maintenance');
     },
 
-    updateMaintenanceStatus: async (isActive: boolean): Promise<{ message: string; maintenanceMode: boolean }> => {
-        return api.put('/admin/maintenance', { isActive });
+    updateMaintenanceStatus: async (data: { 
+        isActive: boolean; 
+        title?: string; 
+        message?: string; 
+        estimatedEnd?: string | null;
+    } | boolean): Promise<{ message: string; maintenanceMode: boolean }> => {
+        const payload = typeof data === 'boolean' ? { isActive: data } : data;
+        return api.put('/admin/maintenance', payload);
     },
 
     // Agent Pricing

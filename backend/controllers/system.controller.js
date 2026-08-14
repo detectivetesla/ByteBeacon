@@ -54,9 +54,14 @@ const initSettings = async () => {
 
 const getMaintenanceStatus = async (req, res) => {
     try {
-        const [rows] = await pool.execute("SELECT setting_value FROM system_settings WHERE setting_key = 'maintenance_mode'");
-        const isActive = rows.length > 0 && rows[0].setting_value === 'true';
-        res.json({ maintenanceMode: isActive });
+        const { getCachedMaintenanceState } = require('../middleware/maintenance.middleware');
+        const state = await getCachedMaintenanceState();
+        res.json({ 
+            maintenanceMode: state.enabled,
+            title: state.title,
+            message: state.message,
+            estimatedEnd: state.estimatedEnd
+        });
     } catch (error) {
         console.error('Get maintenance status error:', error);
         res.status(500).json({
@@ -69,21 +74,38 @@ const getMaintenanceStatus = async (req, res) => {
 
 const updateMaintenanceStatus = async (req, res) => {
     try {
-        const { isActive } = req.body;
+        const { invalidateMaintenanceCache } = require('../middleware/maintenance.middleware');
+        const { isActive, title, message, estimatedEnd } = req.body;
 
         if (typeof isActive !== 'boolean') {
             return res.status(400).json({ error: 'isActive must be a boolean' });
         }
 
+        const configPayload = {
+            enabled: isActive,
+            title: title || (isActive ? "We're upgrading ByteBeacon" : ""),
+            message: message || (isActive ? "A little maintenance is underway. You can still explore ByteBeacon, but account access and transactions are temporarily paused." : ""),
+            estimatedEnd: estimatedEnd || null,
+            updatedAt: new Date().toISOString(),
+            updatedBy: req.user?.email || req.user?.id || 'admin'
+        };
+
         await pool.execute(
             "UPDATE system_settings SET setting_value = ?, updated_at = NOW() WHERE setting_key = 'maintenance_mode'",
-            [isActive ? 'true' : 'false']
+            [JSON.stringify(configPayload)]
         );
 
-        console.log(`🛠️ Maintenance mode ${isActive ? 'ENABLED' : 'DISABLED'} by admin`);
-        logActivity(req.user?.id, 'MAINTENANCE_TOGGLED', `Maintenance mode ${isActive ? 'enabled' : 'disabled'}`, { maintenanceMode: isActive }, req.ip);
+        invalidateMaintenanceCache();
 
-        res.json({ success: true, maintenanceMode: isActive, message: `Maintenance mode ${isActive ? 'enabled' : 'disabled'}` });
+        console.log(`🛠️ Maintenance mode ${isActive ? 'ENABLED' : 'DISABLED'} by admin`);
+        logActivity(req.user?.id, 'MAINTENANCE_TOGGLED', `Maintenance mode ${isActive ? 'enabled' : 'disabled'}`, configPayload, req.ip);
+
+        res.json({ 
+            success: true, 
+            maintenanceMode: isActive, 
+            config: configPayload,
+            message: `Maintenance mode ${isActive ? 'enabled' : 'disabled'}` 
+        });
     } catch (error) {
         console.error('Update maintenance status error:', error);
         res.status(500).json({ error: 'Failed to update system status' });

@@ -1,5 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useMaintenance } from '@/contexts/MaintenanceContext';
+import { MaintenanceFeedbackCard } from '@/components/common/MaintenanceFeedback';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import DashboardHome from '@/components/dashboard/DashboardHome';
 import WalletPage from '@/components/dashboard/WalletPage';
@@ -28,6 +30,17 @@ function SuperAgentGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function Dashboard() {
+  const { role } = useAuth();
+  const { isMaintenance, loading } = useMaintenance();
+
+  if (!loading && isMaintenance && role !== 'admin') {
+    return (
+      <DashboardLayout>
+        <MaintenanceFeedbackCard />
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <Routes>

@@ -5,13 +5,15 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { MaintenanceProvider } from "@/contexts/MaintenanceContext";
+import { MaintenanceBanner } from "@/components/common/MaintenanceFeedback";
+import { SocketProvider } from "@/contexts/SocketContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
 import AdminLoginPage from "@/components/admin/AdminLoginPage";
 import PaymentCallback from "./pages/PaymentCallback";
-import MaintenancePage from "./pages/MaintenancePage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
@@ -20,16 +22,12 @@ import DeveloperPortal from "./pages/DeveloperPortal";
 import PublicStorefront from "./pages/PublicStorefront";
 import AgentStoreLayout from "@/components/dashboard/agentStore/AgentStoreLayout";
 import { useState, useEffect } from "react";
-import { adminService } from "./services/admin.service";
 import { useAuth } from "./contexts/AuthContext";
-
 
 const queryClient = new QueryClient();
 
 const AppWithMaintenance = () => {
   const { role } = useAuth();
-  const [isMaintenance, setIsMaintenance] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   // Admin Security: Check for secret access code (persisted per session)
   const [hasSecretAccess, setHasSecretAccess] = useState(() => {
@@ -54,7 +52,6 @@ const AppWithMaintenance = () => {
     return hasSecret;
   });
 
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const secretFromUrl = params.get('secret');
@@ -66,29 +63,6 @@ const AppWithMaintenance = () => {
     }
   }, []);
 
-  useEffect(() => {
-    const checkMaintenance = async () => {
-      try {
-        const { maintenanceMode } = await adminService.getMaintenanceStatus();
-        setIsMaintenance(maintenanceMode);
-      } catch (err) {
-        console.error('Maintenance check failed:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    checkMaintenance();
-  }, []);
-
-
-  // If maintenance is active AND user is not admin AND we're not on the admin login page
-  const isAdminPath = window.location.pathname.startsWith('/admin');
-  const showMaintenance = isMaintenance && role !== 'admin' && !isAdminPath;
-
-  if (showMaintenance) {
-    return <MaintenancePage />;
-  }
-
   // Check domain context
   const hostname = window.location.hostname.toLowerCase();
   const isDeveloperSubdomain = hostname.startsWith('developers.');
@@ -97,6 +71,7 @@ const AppWithMaintenance = () => {
   if (isDeveloperSubdomain) {
     return (
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <MaintenanceBanner />
         <Routes>
           <Route path="*" element={<DeveloperPortal />} />
         </Routes>
@@ -108,6 +83,7 @@ const AppWithMaintenance = () => {
   if (isStorefrontDomainAccess) {
     return (
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <MaintenanceBanner />
         <Routes>
           <Route path="/store/:slug" element={<PublicStorefront />} />
           <Route path="/" element={<PublicStorefront />} />
@@ -119,6 +95,7 @@ const AppWithMaintenance = () => {
 
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MaintenanceBanner />
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/auth" element={<Auth />} />
@@ -170,18 +147,18 @@ const StorefrontRedirect = () => {
   );
 };
 
-import { SocketProvider } from "@/contexts/SocketContext";
-
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <ThemeProvider>
         <AuthProvider>
-          <SocketProvider>
-            <Toaster />
-            <Sonner />
-            <AppWithMaintenance />
-          </SocketProvider>
+          <MaintenanceProvider>
+            <SocketProvider>
+              <Toaster />
+              <Sonner />
+              <AppWithMaintenance />
+            </SocketProvider>
+          </MaintenanceProvider>
         </AuthProvider>
       </ThemeProvider>
     </TooltipProvider>
