@@ -53,21 +53,23 @@ export const apiFetch = async <T>(
 
 // API Methods
 export const api = {
-    get: <T>(endpoint: string) => apiFetch<T>(endpoint, { method: 'GET' }),
+    get: <T>(endpoint: string, options?: RequestInit) => apiFetch<T>(endpoint, { method: 'GET', ...options }),
 
-    post: <T>(endpoint: string, body?: unknown) =>
+    post: <T>(endpoint: string, body?: unknown, options?: RequestInit) =>
         apiFetch<T>(endpoint, {
             method: 'POST',
-            body: body ? JSON.stringify(body) : undefined
+            body: body ? JSON.stringify(body) : undefined,
+            ...options,
         }),
 
-    put: <T>(endpoint: string, body?: unknown) =>
+    put: <T>(endpoint: string, body?: unknown, options?: RequestInit) =>
         apiFetch<T>(endpoint, {
             method: 'PUT',
-            body: body ? JSON.stringify(body) : undefined
+            body: body ? JSON.stringify(body) : undefined,
+            ...options,
         }),
 
-    delete: <T>(endpoint: string) => apiFetch<T>(endpoint, { method: 'DELETE' }),
+    delete: <T>(endpoint: string, options?: RequestInit) => apiFetch<T>(endpoint, { method: 'DELETE', ...options }),
 };
 
 export { getToken, setToken, removeToken, API_BASE_URL };

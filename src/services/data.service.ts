@@ -96,6 +96,7 @@ export const transactionService = {
         offset?: number;
         sortBy?: string;
         sortOrder?: string;
+        signal?: AbortSignal;
     }): Promise<{ data: Transaction[]; pagination: any } | Transaction[]> => {
         const queryParams = new URLSearchParams();
         if (params?.status) queryParams.append('status', params.status);
@@ -108,7 +109,7 @@ export const transactionService = {
         if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
         const query = queryParams.toString();
-        return api.get(`/transactions${query ? `?${query}` : ''}`);
+        return api.get(`/transactions${query ? `?${query}` : ''}`, { signal: params?.signal });
     },
 
     // Get single transaction

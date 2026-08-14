@@ -148,6 +148,7 @@ export const adminService = {
         offset?: number;
         sortBy?: string;
         sortOrder?: string;
+        signal?: AbortSignal;
     }): Promise<PaginatedResponse<AdminTransaction> | AdminTransaction[]> => {
         const queryParams = new URLSearchParams();
         if (params?.status) queryParams.append('status', params.status);
@@ -160,7 +161,7 @@ export const adminService = {
         if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
         const query = queryParams.toString();
-        return api.get(`/admin/transactions${query ? `?${query}` : ''}`);
+        return api.get(`/admin/transactions${query ? `?${query}` : ''}`, { signal: params?.signal });
     },
 
     updateTransactionStatus: async (id: string, status: string): Promise<{ message: string }> => {

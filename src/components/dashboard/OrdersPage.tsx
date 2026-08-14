@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSocket } from '@/contexts/SocketContext';
@@ -135,7 +135,9 @@ export default function OrdersPage() {
         }
     }, [statusParam]);
 
-    const fetchOrders = useCallback(async () => {
+    const activeRequestRef = useRef<AbortController | null>(null);
+
+    const fetchOrders = useCallback(async (signal?: AbortSignal) => {
         if (!user) return;
 
         setLoading(true);
@@ -144,8 +146,11 @@ export default function OrdersPage() {
                 page,
                 limit,
                 status: statusFilter !== 'all' ? statusFilter : undefined,
-                search: searchTerm.trim() !== '' ? searchTerm.trim() : undefined
+                search: searchTerm.trim() !== '' ? searchTerm.trim() : undefined,
+                signal
             });
+
+            if (signal?.aborted) return;
 
             const rawItems = Array.isArray(res) ? res : (res?.data || []);
             const meta: PaginationMeta = !Array.isArray(res) && res?.pagination ? res.pagination : {
@@ -165,6 +170,22 @@ export default function OrdersPage() {
             setLoading(false);
         }
     }, [user, page, limit, statusFilter, searchTerm]);
+
+    useEffect(() => {
+        if (!user) return;
+
+        if (activeRequestRef.current) {
+            activeRequestRef.current.abort();
+        }
+        const controller = new AbortController();
+        activeRequestRef.current = controller;
+
+        fetchOrders(controller.signal);
+
+        return () => {
+            controller.abort();
+        };
+    }, [user, fetchOrders]);
 
     const { socket } = useSocket();
 

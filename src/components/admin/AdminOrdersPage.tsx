@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { adminService } from '@/services';
 import { Card, CardContent } from '@/components/ui/card';
@@ -231,12 +231,23 @@ export default function AdminOrdersPage() {
         hasNextPage: false,
         hasPreviousPage: false
     });
+    const activeRequestRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
-        fetchOrders();
+        if (activeRequestRef.current) {
+            activeRequestRef.current.abort();
+        }
+        const controller = new AbortController();
+        activeRequestRef.current = controller;
+
+        fetchOrders(controller.signal);
+
+        return () => {
+            controller.abort();
+        };
     }, [page, limit, activeStatusFilter, activeNetworkFilter, searchTerm]);
 
-    const fetchOrders = async () => {
+    const fetchOrders = async (signal?: AbortSignal) => {
         setLoading(true);
         try {
             const res = await adminService.getTransactions({ 
@@ -244,8 +255,11 @@ export default function AdminOrdersPage() {
                 limit,
                 status: activeStatusFilter !== 'all' ? activeStatusFilter : undefined,
                 network: activeNetworkFilter !== 'all' ? activeNetworkFilter : undefined,
-                search: searchTerm.trim() !== '' ? searchTerm.trim() : undefined
+                search: searchTerm.trim() !== '' ? searchTerm.trim() : undefined,
+                signal
             });
+
+            if (signal?.aborted) return;
 
             const rawItems = Array.isArray(res) ? res : (res?.data || []);
             const meta: PaginationMeta = !Array.isArray(res) && res?.pagination ? res.pagination : {
