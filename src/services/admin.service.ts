@@ -292,18 +292,19 @@ export const adminService = {
     },
 
     // Activity Logs
-    getActivityLogs: async (params?: { userId?: string; action?: string; search?: string; startDate?: string; endDate?: string; limit?: number; offset?: number }): Promise<ActivityLog[]> => {
+    getActivityLogs: async (params?: { page?: number; limit?: number; userId?: string; action?: string; search?: string; startDate?: string; endDate?: string; offset?: number }): Promise<any> => {
         const queryParams = new URLSearchParams();
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
         if (params?.userId) queryParams.append('userId', params.userId);
         if (params?.action) queryParams.append('action', params.action);
         if (params?.search) queryParams.append('search', params.search);
         if (params?.startDate) queryParams.append('startDate', params.startDate);
         if (params?.endDate) queryParams.append('endDate', params.endDate);
-        if (params?.limit) queryParams.append('limit', params.limit.toString());
         if (params?.offset) queryParams.append('offset', params.offset.toString());
 
         const query = queryParams.toString();
-        return api.get<ActivityLog[]>(`/admin/activity-logs${query ? `?${query}` : ''}`);
+        return api.get<any>(`/admin/activity-logs${query ? `?${query}` : ''}`);
     },
 
     // System Settings

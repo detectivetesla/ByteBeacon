@@ -32,7 +32,8 @@ const {
     getMyMtnApprovals,
     getMyPendingCount,
     getMyApprovalOrders,
-    exportMyMtnApprovals
+    exportMyMtnApprovals,
+    markMySeen
 } = require('../controllers/userMtnApproval.controller');
 
 // All routes require authentication
@@ -75,6 +76,7 @@ router.get('/partner-logs', auth, getPartnerLogs);
 router.get('/mtn-approvals/export', auth, exportLimiter, exportMyMtnApprovals);
 router.get('/mtn-approvals', auth, getMyMtnApprovals);
 router.get('/mtn-approvals/count', auth, getMyPendingCount);
+router.post('/mtn-approvals/mark-seen', auth, markMySeen);
 router.get('/mtn-approvals/:id/orders', auth, getMyApprovalOrders);
 
 module.exports = router;

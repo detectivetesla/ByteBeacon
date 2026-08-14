@@ -132,6 +132,13 @@ export default function AdminSidebar({ isCollapsed, adminName, onClose, isMobile
         return () => clearInterval(interval);
     }, []);
 
+    // Instantly zero out badge when admin is viewing the page
+    useEffect(() => {
+        if (location.pathname === '/admin/mtn-approvals') {
+            setPendingMtnCount(0);
+        }
+    }, [location.pathname]);
+
     const handleSignOut = async () => {
         await signOut();
         navigate('/');

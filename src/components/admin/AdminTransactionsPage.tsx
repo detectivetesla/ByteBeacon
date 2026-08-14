@@ -35,13 +35,13 @@ import {
     ShieldCheck,
     ChevronDown,
     Eye,
-    RotateCcw,
     AlertTriangle,
     Loader2,
     FileSpreadsheet,
     FileText,
     FileCode
 } from 'lucide-react';
+import { PaginationControl, PaginationMeta } from '@/components/common/PaginationControl';
 import { cn } from '@/lib/utils';
 
 interface Transaction {
@@ -81,6 +81,13 @@ export default function AdminTransactionsPage() {
     const [showMassReprocessConfirm, setShowMassReprocessConfirm] = useState(false);
     const [exporting, setExporting] = useState(false);
 
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(25);
+    const [total, setTotal] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
+    const [hasNextPage, setHasNextPage] = useState(false);
+    const [hasPreviousPage, setHasPreviousPage] = useState(false);
+
     const [stats, setStats] = useState({
         totalTransactions: 0,
         completedCount: 0,
@@ -113,34 +120,80 @@ export default function AdminTransactionsPage() {
         actions: true
     });
 
+    // Reset to page 1 when search, filters, or limit change
+    useEffect(() => {
+        setPage(1);
+    }, [searchTerm, statusFilter, dateFilter, startDate, endDate, limit]);
+
     const fetchTransactions = useCallback(async () => {
         setLoading(true);
         try {
-            const [data, statsData] = await Promise.all([
-                adminService.getTransactions({}),
+            let effectiveStartDate = startDate || undefined;
+            let effectiveEndDate = endDate || undefined;
+
+            if (dateFilter !== 'all' && !startDate && !endDate) {
+                const now = new Date();
+                if (dateFilter === 'today') {
+                    effectiveStartDate = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+                } else if (dateFilter === 'week') {
+                    effectiveStartDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+                } else if (dateFilter === 'month') {
+                    effectiveStartDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+                }
+            }
+
+            const [res, statsData] = await Promise.all([
+                adminService.getTransactions({
+                    page,
+                    limit,
+                    search: searchTerm.trim() || undefined,
+                    status: statusFilter !== 'all' ? statusFilter : undefined,
+                    startDate: effectiveStartDate,
+                    endDate: effectiveEndDate,
+                    sortBy: sortConfig?.key,
+                    sortOrder: sortConfig?.direction === 'ascending' ? 'asc' : 'desc'
+                }),
                 adminService.getTransactionStats()
             ]);
 
             setStats(statsData);
-            const txFormatted = data.map(tx => ({
+
+            let rawList: any[] = [];
+            if (Array.isArray(res)) {
+                rawList = res;
+                setTotal(res.length);
+                setTotalPages(Math.ceil(res.length / limit) || 1);
+                setHasNextPage(false);
+                setHasPreviousPage(page > 1);
+            } else if (res && res.data) {
+                rawList = res.data;
+                if (res.pagination) {
+                    setTotal(res.pagination.total);
+                    setTotalPages(res.pagination.totalPages);
+                    setHasNextPage(res.pagination.hasNextPage);
+                    setHasPreviousPage(res.pagination.hasPreviousPage);
+                }
+            }
+
+            const txFormatted = rawList.map(tx => ({
                 id: tx.id,
                 user_id: '',
-                user_name: tx.userName || 'Unknown',
-                user_email: tx.userEmail || '',
-                recipient_phone: tx.recipientPhone,
+                user_name: tx.userName || tx.user_name || 'Unknown',
+                user_email: tx.userEmail || tx.user_email || '',
+                recipient_phone: tx.recipientPhone || tx.recipient_phone || '',
                 network: tx.network || 'N/A',
-                data_amount: tx.dataAmount || 'N/A',
-                amount_ghc: tx.amount,
+                data_amount: tx.dataAmount || tx.data_amount || 'N/A',
+                amount_ghc: tx.amount || tx.amount_ghc || 0,
                 status: tx.status,
-                created_at: tx.createdAt,
-                paystack_reference: tx.id.slice(0, 12),
-                serialId: tx.serialId,
+                created_at: tx.createdAt || tx.created_at || '',
+                paystack_reference: (tx.id || '').slice(0, 12),
+                serialId: tx.serialId || tx.serial_id,
                 balanceBefore: tx.balanceBefore,
                 balanceAfter: tx.balanceAfter,
                 source: tx.source,
                 paid: tx.paid,
                 sourceProvider: tx.sourceProvider,
-                updatedAt: tx.updatedAt
+                updatedAt: tx.updatedAt || tx.updated_at
             }));
             setTransactions(txFormatted);
         } catch (err) {
@@ -149,7 +202,7 @@ export default function AdminTransactionsPage() {
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [page, limit, searchTerm, statusFilter, dateFilter, startDate, endDate, sortConfig, toast]);
 
     useEffect(() => {
         fetchTransactions();
@@ -195,9 +248,7 @@ export default function AdminTransactionsPage() {
         } finally {
             setSyncingId(null);
         }
-    };
-
-    // Sorting handler
+    };    // Sorting handler
     const requestSort = (key: keyof Transaction) => {
         let direction: 'ascending' | 'descending' = 'ascending';
         if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
@@ -206,67 +257,8 @@ export default function AdminTransactionsPage() {
         setSortConfig({ key, direction });
     };
 
-    // Filtered & Sorted transactions
-    const processedTransactions = useMemo(() => {
-        let result = transactions.filter(tx => {
-            const displayId = `ORD-${tx.serialId || tx.id.slice(0, 7).toUpperCase()}`;
-            const matchesSearch =
-                tx.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                tx.user_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                tx.recipient_phone.includes(searchTerm) ||
-                displayId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (tx.sourceProvider && tx.sourceProvider.toLowerCase().includes(searchTerm.toLowerCase()));
-
-            const matchesStatus = statusFilter === 'all' || tx.status === statusFilter;
-
-            let matchesDate = true;
-            const txDate = new Date(tx.created_at);
-            if (dateFilter !== 'all') {
-                const now = new Date();
-                if (dateFilter === 'today') {
-                    matchesDate = txDate.toDateString() === now.toDateString();
-                } else if (dateFilter === 'week') {
-                    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-                    matchesDate = txDate >= weekAgo;
-                } else if (dateFilter === 'month') {
-                    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-                    matchesDate = txDate >= monthAgo;
-                }
-            }
-
-            if (startDate) {
-                const start = new Date(startDate);
-                start.setHours(0, 0, 0, 0);
-                if (txDate < start) matchesDate = false;
-            }
-            if (endDate) {
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
-                if (txDate > end) matchesDate = false;
-            }
-
-            return matchesSearch && matchesStatus && matchesDate;
-        });
-
-        if (sortConfig !== null) {
-            result.sort((a, b) => {
-                const aVal = a[sortConfig.key];
-                const bVal = b[sortConfig.key];
-
-                if (aVal === undefined || aVal === null) return 1;
-                if (bVal === undefined || bVal === null) return -1;
-
-                if (aVal < bVal) {
-                    return sortConfig.direction === 'ascending' ? -1 : 1;
-                }
-                if (aVal > bVal) {
-                    return sortConfig.direction === 'ascending' ? 1 : -1;
-                }
-                return 0;
-            });
-        }
-        return result;
-    }, [transactions, searchTerm, statusFilter, dateFilter, startDate, endDate, sortConfig]);
+    // Server-paginated & filtered transactions
+    const processedTransactions = transactions;
 
     const handleExport = async (format: 'excel' | 'csv' | 'json' = 'csv') => {
         setExporting(true);
@@ -874,6 +866,26 @@ export default function AdminTransactionsPage() {
                                 )}
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* Server-Side Pagination Controls */}
+                    <div className="border-t border-border/50 px-2 pt-2">
+                        <PaginationControl
+                            meta={{
+                                page,
+                                limit,
+                                total,
+                                totalPages,
+                                hasNextPage,
+                                hasPreviousPage
+                            }}
+                            onPageChange={setPage}
+                            onLimitChange={(newLimit) => {
+                                setLimit(newLimit);
+                                setPage(1);
+                            }}
+                            loading={loading}
+                        />
                     </div>
                 </CardContent>
             </Card>

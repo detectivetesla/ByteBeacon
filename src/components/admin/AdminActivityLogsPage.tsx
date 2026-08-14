@@ -21,7 +21,8 @@ import {
     DialogTitle,
     DialogDescription
 } from '@/components/ui/dialog';
-import { Activity, Search, RefreshCcw, User, Clock, Globe, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, FileCode, Info, ShieldCheck, ShieldAlert, Sparkles, UserCheck, Loader2 } from 'lucide-react';
+import { Activity, Search, RefreshCcw, User, Clock, Globe, Download, FileSpreadsheet, FileText, FileCode, Info, ShieldCheck, ShieldAlert, Sparkles, UserCheck, Loader2 } from 'lucide-react';
+import { PaginationControl, PaginationMeta } from '@/components/common/PaginationControl';
 
 const ACTION_TYPES = [
     { value: 'all', label: 'All Actions' },
@@ -84,21 +85,49 @@ export default function AdminActivityLogsPage() {
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
     const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(25);
+    const [total, setTotal] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
+    const [hasNextPage, setHasNextPage] = useState(false);
+    const [hasPreviousPage, setHasPreviousPage] = useState(false);
     const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
     const [exporting, setExporting] = useState(false);
-    const logsPerPage = 25;
+
+    // Reset to page 1 when search or filters change
+    useEffect(() => {
+        setPage(1);
+    }, [actionFilter, searchTerm, startDate, endDate, limit]);
 
     const fetchLogs = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await adminService.getActivityLogs({
+            const res = await adminService.getActivityLogs({
+                page,
+                limit,
                 action: actionFilter !== 'all' ? actionFilter : undefined,
-                search: searchTerm || undefined,
+                search: searchTerm.trim() || undefined,
                 startDate: startDate || undefined,
                 endDate: endDate || undefined,
-                limit: 500,
             });
-            setLogs(data);
+
+            let rawList: ActivityLog[] = [];
+            if (Array.isArray(res)) {
+                rawList = res;
+                setTotal(res.length);
+                setTotalPages(Math.ceil(res.length / limit) || 1);
+                setHasNextPage(false);
+                setHasPreviousPage(page > 1);
+            } else if (res && res.data) {
+                rawList = res.data;
+                if (res.pagination) {
+                    setTotal(res.pagination.total);
+                    setTotalPages(res.pagination.totalPages);
+                    setHasNextPage(res.pagination.hasNextPage);
+                    setHasPreviousPage(res.pagination.hasPreviousPage);
+                }
+            }
+
+            setLogs(rawList);
         } catch (error) {
             console.error('Error fetching activity logs:', error);
             toast({
@@ -109,7 +138,7 @@ export default function AdminActivityLogsPage() {
         } finally {
             setLoading(false);
         }
-    }, [actionFilter, searchTerm, startDate, endDate, toast]);
+    }, [page, limit, actionFilter, searchTerm, startDate, endDate, toast]);
 
     useEffect(() => {
         fetchLogs();
@@ -139,8 +168,8 @@ export default function AdminActivityLogsPage() {
         }
     };
 
-    const paginatedLogs = logs.slice((page - 1) * logsPerPage, page * logsPerPage);
-    const totalPages = Math.ceil(logs.length / logsPerPage);
+    // Server paginated logs
+    const paginatedLogs = logs;
 
     return (
         <div className="space-y-6">
@@ -323,22 +352,25 @@ export default function AdminActivityLogsPage() {
                         </div>
                     )}
 
-                    {/* Pagination */}
-                    {totalPages > 1 && (
-                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/5 text-xs text-slate-400">
-                            <p>
-                                Showing {((page - 1) * logsPerPage) + 1} to {Math.min(page * logsPerPage, logs.length)} of {logs.length} logs
-                            </p>
-                            <div className="flex gap-2">
-                                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="h-8 border-white/10 text-white">
-                                    <ChevronLeft className="w-4 h-4" />
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="h-8 border-white/10 text-white">
-                                    <ChevronRight className="w-4 h-4" />
-                                </Button>
-                            </div>
-                        </div>
-                    )}
+                    {/* Unified Server-Side Pagination */}
+                    <div className="mt-4 pt-4 border-t border-white/5">
+                        <PaginationControl
+                            meta={{
+                                page,
+                                limit,
+                                total,
+                                totalPages,
+                                hasNextPage,
+                                hasPreviousPage
+                            }}
+                            onPageChange={setPage}
+                            onLimitChange={(newLimit) => {
+                                setLimit(newLimit);
+                                setPage(1);
+                            }}
+                            loading={loading}
+                        />
+                    </div>
                 </CardContent>
             </Card>
 

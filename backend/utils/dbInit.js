@@ -83,6 +83,9 @@ const initializeTables = async () => {
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'is_active') THEN
                         ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
                     END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'last_seen_mtn_at') THEN
+                        ALTER TABLE profiles ADD COLUMN last_seen_mtn_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
+                    END IF;
                 END $$;
             `).catch(() => { });
 

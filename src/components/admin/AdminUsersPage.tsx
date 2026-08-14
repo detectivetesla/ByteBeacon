@@ -32,9 +32,9 @@ import {
     Download,
     FileSpreadsheet,
     FileText,
-    FileCode,
-    Loader2
+    FileCode
 } from 'lucide-react';
+import { PaginationControl, PaginationMeta } from '@/components/common/PaginationControl';
 import { exportUsers, exportViaApi } from '@/lib/export';
 import {
     DropdownMenu,
@@ -74,6 +74,13 @@ export default function AdminUsersPage() {
     const [roleFilter, setRoleFilter] = useState<'all' | 'customer' | 'agent' | 'superagent' | 'admin'>('all');
     const [exporting, setExporting] = useState(false);
 
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(25);
+    const [total, setTotal] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
+    const [hasNextPage, setHasNextPage] = useState(false);
+    const [hasPreviousPage, setHasPreviousPage] = useState(false);
+
     const [showEditModal, setShowEditModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [showStatusModal, setShowStatusModal] = useState(false);
@@ -87,20 +94,47 @@ export default function AdminUsersPage() {
     const [notificationForm, setNotificationForm] = useState({ title: '', message: '', type: 'info' });
     const [actionLoading, setActionLoading] = useState(false);
 
+    // Reset to page 1 when search, filter, or limit changes
+    useEffect(() => {
+        setPage(1);
+    }, [searchTerm, roleFilter, limit]);
+
     const fetchUsers = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await adminService.getUsers({ role: roleFilter === 'all' ? undefined : roleFilter });
-            const data = Array.isArray(res) ? res : (res?.data || []);
-            const usersWithRoles = data.map(u => ({
+            const res = await adminService.getUsers({
+                page,
+                limit,
+                search: searchTerm.trim() || undefined,
+                role: roleFilter === 'all' ? undefined : roleFilter
+            });
+
+            let rawList: any[] = [];
+            if (Array.isArray(res)) {
+                rawList = res;
+                setTotal(res.length);
+                setTotalPages(Math.ceil(res.length / limit) || 1);
+                setHasNextPage(false);
+                setHasPreviousPage(page > 1);
+            } else if (res && res.data) {
+                rawList = res.data;
+                if (res.pagination) {
+                    setTotal(res.pagination.total);
+                    setTotalPages(res.pagination.totalPages);
+                    setHasNextPage(res.pagination.hasNextPage);
+                    setHasPreviousPage(res.pagination.hasPreviousPage);
+                }
+            }
+
+            const usersWithRoles = rawList.map(u => ({
                 id: u.id,
-                full_name: u.fullName,
-                email: u.email,
-                phone: u.phone,
-                created_at: u.createdAt || '',
-                role: u.role as 'customer' | 'agent' | 'superagent' | 'admin',
+                full_name: u.fullName || u.full_name || '',
+                email: u.email || '',
+                phone: u.phone || '',
+                created_at: u.createdAt || u.created_at || '',
+                role: (u.role || 'customer') as 'customer' | 'agent' | 'superagent' | 'admin',
                 is_verified: true,
-                isActive: u.isActive !== undefined ? u.isActive : true,
+                isActive: u.isActive !== undefined ? u.isActive : (u.is_active !== undefined ? Boolean(u.is_active) : true),
             }));
             setUsers(usersWithRoles);
         } catch (err) {
@@ -113,20 +147,14 @@ export default function AdminUsersPage() {
         } finally {
             setLoading(false);
         }
-    }, [roleFilter, toast]);
+    }, [page, limit, searchTerm, roleFilter, toast]);
 
     useEffect(() => {
         fetchUsers();
     }, [fetchUsers]);
 
-    const filteredUsers = users.filter(user => {
-        const matchesSearch =
-            user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            user.phone.includes(searchTerm);
-        const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-        return matchesSearch && matchesRole;
-    });
+    // For rendering, users array is already paginated from server
+    const filteredUsers = users;
 
     const handleEdit = (user: User) => {
         setSelectedUser(user);
@@ -617,6 +645,26 @@ export default function AdminUsersPage() {
                             </table>
                         </div>
                     )}
+
+                    {/* Server-Side Pagination Controls */}
+                    <div className="border-t border-border/50 px-2 pt-2">
+                        <PaginationControl
+                            meta={{
+                                page,
+                                limit,
+                                total,
+                                totalPages,
+                                hasNextPage,
+                                hasPreviousPage
+                            }}
+                            onPageChange={setPage}
+                            onLimitChange={(newLimit) => {
+                                setLimit(newLimit);
+                                setPage(1);
+                            }}
+                            loading={loading}
+                        />
+                    </div>
                 </CardContent>
             </Card>
 

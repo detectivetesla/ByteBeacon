@@ -119,16 +119,68 @@ exports.getMtnApprovals = async (req, res) => {
 
 /**
  * Get count of unresolved pending MTN approvals for sidebar badge
+ * Distinguishes between total pending and unread/new pending since admin last visited.
  */
 exports.getPendingCount = async (req, res) => {
     try {
-        const [[row]] = await pool.execute(
-            `SELECT COUNT(*)::integer as count FROM mtn_beneficiary_approvals WHERE status IN ('pending', 'submitted')`
+        const adminId = req.user?.id;
+
+        const [[totalRow]] = await pool.execute(
+            `SELECT COUNT(*)::integer as total FROM mtn_beneficiary_approvals WHERE status IN ('pending', 'submitted')`
         );
-        res.json({ success: true, count: row?.count || 0 });
+        const total = totalRow?.total || 0;
+
+        let unreadCount = total;
+
+        if (adminId) {
+            const [profileRows] = await pool.execute(
+                `SELECT last_seen_mtn_at FROM profiles WHERE id = ?::uuid`,
+                [adminId]
+            ).catch(() => [[]]);
+
+            const lastSeenAt = profileRows[0]?.last_seen_mtn_at;
+
+            if (lastSeenAt) {
+                const [[unreadRow]] = await pool.execute(
+                    `SELECT COUNT(*)::integer as unread 
+                     FROM mtn_beneficiary_approvals 
+                     WHERE status IN ('pending', 'submitted') 
+                       AND (last_detected_at > ?::timestamptz OR first_detected_at > ?::timestamptz)`,
+                    [lastSeenAt, lastSeenAt]
+                );
+                unreadCount = unreadRow?.unread || 0;
+            }
+        }
+
+        res.json({
+            success: true,
+            count: unreadCount,
+            total,
+            totalPending: total,
+            unreadCount
+        });
     } catch (error) {
         console.error('Error getting pending count:', error);
         res.status(500).json({ success: false, error: 'Failed to get count' });
+    }
+};
+
+/**
+ * Mark all current pending MTN approvals as seen for the authenticated admin
+ */
+exports.markSeen = async (req, res) => {
+    try {
+        const adminId = req.user?.id;
+        if (adminId) {
+            await pool.execute(
+                `UPDATE profiles SET last_seen_mtn_at = NOW() WHERE id = ?::uuid`,
+                [adminId]
+            );
+        }
+        res.json({ success: true, message: 'Marked pending MTN approvals as seen' });
+    } catch (error) {
+        console.error('Error marking MTN approvals as seen:', error);
+        res.status(500).json({ success: false, error: 'Failed to mark as seen' });
     }
 };
 

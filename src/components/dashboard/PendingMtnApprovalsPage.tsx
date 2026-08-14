@@ -16,8 +16,9 @@ import {
     DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
 import {
-    Loader2, Search, Clock, CheckCircle2, XCircle, AlertCircle, Phone, ShieldAlert, RefreshCw, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, FileCode
+    Loader2, Search, Clock, CheckCircle2, XCircle, AlertCircle, Phone, ShieldAlert, RefreshCw, Download, FileSpreadsheet, FileText, FileCode
 } from 'lucide-react';
+import { PaginationControl, PaginationMeta } from '@/components/common/PaginationControl';
 
 interface MtnApproval {
     id: string;
@@ -50,15 +51,6 @@ interface LinkedOrder {
     created_at: string;
 }
 
-interface PaginationMeta {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-    hasNextPage: boolean;
-    hasPreviousPage: boolean;
-}
-
 const STATUS_FILTERS = [
     { value: 'all', label: 'All' },
     { value: 'pending', label: 'Pending' },
@@ -80,7 +72,7 @@ export const PendingMtnApprovalsPage: React.FC = () => {
 
     // Pagination State
     const [page, setPage] = useState(1);
-    const pageSize = 30;
+    const [pageSize, setPageSize] = useState(25);
     const [total, setTotal] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
     const [hasNextPage, setHasNextPage] = useState(false);
@@ -100,7 +92,7 @@ export const PendingMtnApprovalsPage: React.FC = () => {
     // Reset to page 1 when filters change
     useEffect(() => {
         setPage(1);
-    }, [statusFilter, searchQuery]);
+    }, [statusFilter, searchQuery, pageSize]);
 
     const handleExport = async (format: 'csv' | 'excel' | 'json' = 'csv') => {
         setExporting(true);
@@ -146,11 +138,13 @@ export const PendingMtnApprovalsPage: React.FC = () => {
                     setHasNextPage(res.meta.hasNextPage);
                     setHasPreviousPage(res.meta.hasPreviousPage);
 
-                    // If current page is beyond totalPages (e.g. after records removed), reset to last valid page
                     if (res.meta.page > res.meta.totalPages && res.meta.totalPages > 0) {
                         setPage(res.meta.totalPages);
                     }
                 }
+
+                // Mark current pending items as seen to reset unread badge
+                api.post('/users/mtn-approvals/mark-seen').catch(() => {});
             }
         } catch (err: any) {
             toast({
@@ -473,36 +467,24 @@ export const PendingMtnApprovalsPage: React.FC = () => {
                                 </table>
                             </div>
 
-                            {/* Pagination Controls */}
-                            <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-border/50 gap-3 text-xs text-muted-foreground">
-                                <p className="font-medium">
-                                    Showing <span className="font-bold text-foreground">{total === 0 ? 0 : (page - 1) * pageSize + 1}</span>–<span className="font-bold text-foreground">{Math.min(page * pageSize, total)}</span> of <span className="font-bold text-foreground">{total}</span> records
-                                </p>
-                                <div className="flex items-center gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setPage(p => Math.max(1, p - 1))}
-                                        disabled={!hasPreviousPage || page === 1 || loading}
-                                        className="h-8 border-border hover:bg-accent text-xs font-semibold gap-1"
-                                    >
-                                        <ChevronLeft className="w-4 h-4" />
-                                        Previous
-                                    </Button>
-                                    <span className="px-2 font-semibold text-foreground text-xs">
-                                        Page {page} of {totalPages}
-                                    </span>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                                        disabled={!hasNextPage || page >= totalPages || loading}
-                                        className="h-8 border-border hover:bg-accent text-xs font-semibold gap-1"
-                                    >
-                                        Next
-                                        <ChevronRight className="w-4 h-4" />
-                                    </Button>
-                                </div>
+                            {/* Unified Server-Side Pagination Controls */}
+                            <div className="p-4 border-t border-border/50">
+                                <PaginationControl
+                                    meta={{
+                                        page,
+                                        limit: pageSize,
+                                        total,
+                                        totalPages,
+                                        hasNextPage,
+                                        hasPreviousPage
+                                    }}
+                                    onPageChange={setPage}
+                                    onLimitChange={(newLimit) => {
+                                        setPageSize(newLimit);
+                                        setPage(1);
+                                    }}
+                                    loading={loading}
+                                />
                             </div>
                         </>
                     )}

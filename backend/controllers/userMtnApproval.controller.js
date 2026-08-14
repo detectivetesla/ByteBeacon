@@ -151,37 +151,77 @@ exports.getMyMtnApprovals = async (req, res) => {
 
 /**
  * Get count of unresolved pending MTN approvals for the authenticated user (for sidebar badge)
+ * Distinguishes between total pending and unread/new pending since user last visited.
  */
 exports.getMyPendingCount = async (req, res) => {
     try {
         const userId = req.user.id;
         const userRole = req.user.role;
 
-        let query = `SELECT COUNT(*)::integer as count FROM mtn_beneficiary_approvals a WHERE a.status IN ('pending', 'submitted')`;
+        let baseWhere = ` WHERE a.status IN ('pending', 'submitted')`;
         const params = [];
 
         if (userRole === 'admin') {
             // No filter
         } else if (userRole === 'agent' || userRole === 'superagent') {
-            query += ` AND (
+            baseWhere += ` AND (
                 a.user_id = ?::uuid OR a.agent_id = ?::uuid
                 OR EXISTS (SELECT 1 FROM mtn_beneficiary_approval_orders o WHERE o.approval_id = a.id AND (o.user_id = ?::uuid OR o.agent_id = ?::uuid))
                 OR EXISTS (SELECT 1 FROM mtn_beneficiary_approval_orders o JOIN agent_stores s ON o.agent_store_id = s.id WHERE o.approval_id = a.id AND s.user_id = ?::uuid)
             )`;
             params.push(userId, userId, userId, userId, userId);
         } else {
-            query += ` AND (
+            baseWhere += ` AND (
                 a.user_id = ?::uuid
                 OR EXISTS (SELECT 1 FROM mtn_beneficiary_approval_orders o WHERE o.approval_id = a.id AND o.user_id = ?::uuid)
             )`;
             params.push(userId, userId);
         }
 
-        const [[row]] = await pool.execute(query, params);
-        res.json({ success: true, count: row?.count || 0 });
+        const [[totalRow]] = await pool.execute(`SELECT COUNT(*)::integer as total FROM mtn_beneficiary_approvals a ${baseWhere}`, params);
+        const total = totalRow?.total || 0;
+
+        let unreadCount = total;
+        const [profileRows] = await pool.execute(`SELECT last_seen_mtn_at FROM profiles WHERE id = ?::uuid`, [userId]).catch(() => [[]]);
+        const lastSeenAt = profileRows[0]?.last_seen_mtn_at;
+
+        if (lastSeenAt) {
+            const [[unreadRow]] = await pool.execute(
+                `SELECT COUNT(*)::integer as unread FROM mtn_beneficiary_approvals a ${baseWhere} AND (a.last_detected_at > ?::timestamptz OR a.first_detected_at > ?::timestamptz)`,
+                [...params, lastSeenAt, lastSeenAt]
+            );
+            unreadCount = unreadRow?.unread || 0;
+        }
+
+        res.json({
+            success: true,
+            count: unreadCount,
+            total,
+            totalPending: total,
+            unreadCount
+        });
     } catch (error) {
         console.error('Error getting user pending count:', error);
         res.status(500).json({ success: false, error: 'Failed to get count' });
+    }
+};
+
+/**
+ * Mark all current pending MTN approvals as seen for the authenticated user
+ */
+exports.markMySeen = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (userId) {
+            await pool.execute(
+                `UPDATE profiles SET last_seen_mtn_at = NOW() WHERE id = ?::uuid`,
+                [userId]
+            );
+        }
+        res.json({ success: true, message: 'Marked pending MTN approvals as seen' });
+    } catch (error) {
+        console.error('Error marking MTN approvals as seen:', error);
+        res.status(500).json({ success: false, error: 'Failed to mark as seen' });
     }
 };
 

@@ -172,12 +172,14 @@ const {
     getPendingCount,
     getMtnApprovalOrders,
     syncMtnApprovals,
-    exportMtnApprovals
+    exportMtnApprovals,
+    markSeen
 } = require('../controllers/adminMtnApproval.controller');
 
 router.get('/mtn-approvals/export', exportLimiter, exportMtnApprovals);
 router.get('/mtn-approvals', getMtnApprovals);
 router.get('/mtn-approvals/count', getPendingCount);
+router.post('/mtn-approvals/mark-seen', markSeen);
 router.get('/mtn-approvals/:id/orders', getMtnApprovalOrders);
 router.post('/mtn-approvals/sync', syncMtnApprovals);
 

@@ -1419,9 +1419,9 @@ const getActivityLogs = async (req, res) => {
         }
 
         if (search && search.trim() !== '') {
-            baseFromWhere += ' AND (p.full_name ILIKE ? OR u.name ILIKE ? OR p.email ILIKE ? OR u.email ILIKE ? OR al.description ILIKE ? OR al.action ILIKE ?)';
+            baseFromWhere += ' AND (p.full_name ILIKE ? OR p.email ILIKE ? OR u.email ILIKE ? OR al.description ILIKE ? OR al.action ILIKE ?)';
             const searchPattern = `%${search.trim()}%`;
-            params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+            params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
         }
 
         // Date filtering for per-day tracking
@@ -1443,7 +1443,7 @@ const getActivityLogs = async (req, res) => {
         // 2. Paginated rows
         const dataQuery = `
             SELECT al.*, 
-                   COALESCE(p.full_name, u.name, 'Admin/User') as full_name, 
+                   COALESCE(p.full_name, p.email, u.email, 'Admin/User') as full_name, 
                    COALESCE(p.email, u.email, '') as email,
                    COALESCE(ur.role::text, u.role::text, 'customer') as role
             ${baseFromWhere}
