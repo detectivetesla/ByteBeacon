@@ -90,7 +90,8 @@ export default function AdminUsersPage() {
     const fetchUsers = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await adminService.getUsers({ role: roleFilter === 'all' ? undefined : roleFilter });
+            const res = await adminService.getUsers({ role: roleFilter === 'all' ? undefined : roleFilter });
+            const data = Array.isArray(res) ? res : (res?.data || []);
             const usersWithRoles = data.map(u => ({
                 id: u.id,
                 full_name: u.fullName,

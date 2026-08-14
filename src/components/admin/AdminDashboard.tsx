@@ -123,7 +123,8 @@ export default function AdminDashboard() {
 
     const fetchNewUsers = useCallback(async () => {
         try {
-            const data = await adminService.getUsers({});
+            const res = await adminService.getUsers({});
+            const data = Array.isArray(res) ? res : (res?.data || []);
             const recentUsers = data.slice(0, 5).map(u => ({
                 id: u.id,
                 full_name: u.fullName,

@@ -216,19 +216,22 @@ export default function AdminAgentsPage() {
             let adminData: any[] = [];
 
             try {
-                agentData = await adminService.getUsers({ role: 'agent' });
+                const res = await adminService.getUsers({ role: 'agent' });
+                agentData = Array.isArray(res) ? res : (res?.data || []);
             } catch (err) {
                 console.error('Error fetching agents:', err);
             }
 
             try {
-                superAgentData = await adminService.getUsers({ role: 'superagent' });
+                const res = await adminService.getUsers({ role: 'superagent' });
+                superAgentData = Array.isArray(res) ? res : (res?.data || []);
             } catch (err) {
                 console.error('Error fetching superagents:', err);
             }
 
             try {
-                adminData = await adminService.getUsers({ role: 'admin' });
+                const res = await adminService.getUsers({ role: 'admin' });
+                adminData = Array.isArray(res) ? res : (res?.data || []);
             } catch (err) {
                 console.error('Error fetching admins:', err);
             }

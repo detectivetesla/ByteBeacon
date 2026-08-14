@@ -92,8 +92,9 @@ export default function AdminMessagesPage() {
     const fetchUsers = async () => {
         setSearchingUsers(true);
         try {
-            const data = await adminService.getUsers();
-            setUsers(data);
+            const res = await adminService.getUsers();
+            const data = Array.isArray(res) ? res : (res?.data || []);
+            setUsers(data as AdminUser[]);
         } catch (err) {
             console.error('Failed to fetch users:', err);
         } finally {

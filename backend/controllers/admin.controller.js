@@ -2704,7 +2704,7 @@ const getAllAgentStores = async (req, res) => {
     try {
         const [stores] = await pool.execute(`
             SELECT s.*, 
-                   COALESCE(p.full_name, u.name) as owner_name,
+                   COALESCE(p.full_name, p.email, u.email) as owner_name,
                    COALESCE(p.email, u.email) as owner_email,
                    COALESCE(w.total_profit_earned, 0.00) as total_profit_earned,
                    (SELECT COUNT(*)::integer FROM agent_orders WHERE store_id = s.id) as total_orders
@@ -2881,7 +2881,7 @@ const getAllAgentWithdrawals = async (req, res) => {
         const [withdrawals] = await pool.execute(`
             SELECT w.*, 
                    s.store_name,
-                   COALESCE(p.full_name, u.name) as agent_name,
+                   COALESCE(p.full_name, p.email, u.email) as agent_name,
                    COALESCE(p.email, u.email) as agent_email
             FROM agent_withdrawals w
             LEFT JOIN agent_stores s ON w.store_id = s.id
