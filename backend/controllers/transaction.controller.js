@@ -237,14 +237,24 @@ const purchaseBundle = async (req, res) => {
  */
 const getTransactions = async (req, res) => {
     try {
+        const { parsePagination, buildPaginatedResponse } = require('../utils/pagination');
         const userId = req.user.id;
-        const { status, limit = 50, offset = 0 } = req.query;
+        const { status, network, search } = req.query;
+        const { page, limit, offset, sortSql } = parsePagination(req.query, {
+            defaultPage: 1,
+            defaultLimit: 25,
+            maxLimit: 100,
+            allowedSortFields: {
+                createdAt: 't.created_at',
+                updatedAt: 't.updated_at',
+                amount: 't.amount_ghc',
+                status: 't.status',
+                network: 'd.network'
+            },
+            defaultSort: 't.created_at DESC'
+        });
 
-        let query = `
-            SELECT t.id, t.recipient_phone, t.amount_ghc, t.status, t.created_at, t.updated_at,
-                   t.serial_id, t.balance_before, t.balance_after, t.source, t.paid, t.source_provider,
-                   t.datahouse_order_id, t.reference_code, t.current_datahouse_status, t.last_synced_at,
-                   d.network, d.data_amount
+        let baseFromWhere = `
             FROM transactions t
             LEFT JOIN data_bundles d ON t.bundle_id = d.id::uuid
             WHERE t.user_id = ?::uuid
@@ -252,14 +262,43 @@ const getTransactions = async (req, res) => {
         const params = [userId];
 
         if (status && status !== 'all') {
-            query += ' AND (t.status = ? OR t.current_datahouse_status = ?)';
+            baseFromWhere += ' AND (t.status = ? OR t.current_datahouse_status = ?)';
             params.push(status, status);
         }
 
-        query += ' ORDER BY t.created_at DESC LIMIT ? OFFSET ?';
-        params.push(parseInt(limit, 10) || 50, parseInt(offset, 10) || 0);
+        if (network && network !== 'all') {
+            baseFromWhere += ' AND LOWER(d.network) LIKE ?';
+            params.push(`%${network.toLowerCase()}%`);
+        }
 
-        const [transactions] = await pool.execute(query, params);
+        if (search && search.trim() !== '') {
+            const term = `%${search.trim()}%`;
+            baseFromWhere += ` AND (
+                t.recipient_phone LIKE ?
+                OR t.datahouse_order_id ILIKE ?
+                OR t.reference_code ILIKE ?
+                OR (t.serial_id IS NOT NULL AND t.serial_id::text LIKE ?)
+            )`;
+            params.push(term, term, term, term);
+        }
+
+        // 1. Total Count
+        const countQuery = `SELECT COUNT(*) as total ${baseFromWhere}`;
+        const [countRows] = await pool.execute(countQuery, params);
+        const total = parseInt(countRows[0]?.total || 0, 10);
+
+        // 2. Paginated Data
+        const dataQuery = `
+            SELECT t.id, t.recipient_phone, t.amount_ghc, t.status, t.created_at, t.updated_at,
+                   t.serial_id, t.balance_before, t.balance_after, t.source, t.paid, t.source_provider,
+                   t.datahouse_order_id, t.reference_code, t.current_datahouse_status, t.last_synced_at,
+                   d.network, d.data_amount
+            ${baseFromWhere}
+            ORDER BY ${sortSql}
+            LIMIT ? OFFSET ?
+        `;
+        const dataParams = [...params, limit, offset];
+        const [transactions] = await pool.execute(dataQuery, dataParams);
 
         const formatted = transactions.map(t => ({
             id: t.id,
@@ -281,7 +320,11 @@ const getTransactions = async (req, res) => {
             sourceProvider: 'datahouse'
         }));
 
-        res.json(formatted);
+        if (req.query.legacy === 'true') {
+            return res.json(formatted);
+        }
+
+        res.json(buildPaginatedResponse(formatted, total, page, limit));
     } catch (error) {
         console.error('Get transactions error:', error);
         res.status(500).json({ error: 'Failed to get transactions' });

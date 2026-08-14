@@ -68,6 +68,20 @@ export interface BundleData {
     isActive?: boolean;
 }
 
+export interface PaginationMeta {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+}
+
+export interface PaginatedResponse<T> {
+    data: T[];
+    pagination: PaginationMeta;
+}
+
 export const adminService = {
     // Dashboard
     getStats: async (): Promise<DashboardStats> => {
@@ -125,16 +139,29 @@ export const adminService = {
     },
 
     // Transactions
-    getTransactions: async (params?: { status?: string; limit?: number; offset?: number }): Promise<AdminTransaction[]> => {
+    getTransactions: async (params?: { 
+        status?: string; 
+        network?: string;
+        search?: string;
+        page?: number;
+        limit?: number; 
+        offset?: number;
+        sortBy?: string;
+        sortOrder?: string;
+    }): Promise<PaginatedResponse<AdminTransaction> | AdminTransaction[]> => {
         const queryParams = new URLSearchParams();
         if (params?.status) queryParams.append('status', params.status);
+        if (params?.network) queryParams.append('network', params.network);
+        if (params?.search) queryParams.append('search', params.search);
+        if (params?.page) queryParams.append('page', params.page.toString());
         if (params?.limit) queryParams.append('limit', params.limit.toString());
         if (params?.offset) queryParams.append('offset', params.offset.toString());
+        if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+        if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
         const query = queryParams.toString();
-        return api.get<AdminTransaction[]>(`/admin/transactions${query ? `?${query}` : ''}`);
+        return api.get(`/admin/transactions${query ? `?${query}` : ''}`);
     },
-
 
     updateTransactionStatus: async (id: string, status: string): Promise<{ message: string }> => {
         return api.put(`/admin/transactions/${id}/status`, { status });

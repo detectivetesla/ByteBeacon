@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PremiumIcon } from '@/components/ui/PremiumIcon';
+import PaginationControl, { PaginationMeta } from '@/components/common/PaginationControl';
 
 interface OrderTransaction {
     id: string;
@@ -71,6 +72,18 @@ export default function OrdersPage() {
     const [selectedOrder, setSelectedOrder] = useState<OrderTransaction | null>(null);
     const [exporting, setExporting] = useState(false);
     
+    // Server-Side Pagination state
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(25);
+    const [paginationMeta, setPaginationMeta] = useState<PaginationMeta>({
+        page: 1,
+        limit: 25,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false
+    });
+
     // Sorting state
     const [sortConfig, setSortConfig] = useState<{ key: keyof OrderTransaction; direction: 'ascending' | 'descending' } | null>({
         key: 'createdAt',
@@ -127,14 +140,31 @@ export default function OrdersPage() {
 
         setLoading(true);
         try {
-            const data = await transactionService.getAll();
-            setOrders(data as OrderTransaction[]);
+            const res = await transactionService.getAll({
+                page,
+                limit,
+                status: statusFilter !== 'all' ? statusFilter : undefined,
+                search: searchTerm.trim() !== '' ? searchTerm.trim() : undefined
+            });
+
+            const rawItems = Array.isArray(res) ? res : (res?.data || []);
+            const meta: PaginationMeta = !Array.isArray(res) && res?.pagination ? res.pagination : {
+                page,
+                limit,
+                total: rawItems.length,
+                totalPages: Math.ceil(rawItems.length / limit) || 1,
+                hasNextPage: page < Math.ceil(rawItems.length / limit),
+                hasPreviousPage: page > 1
+            };
+
+            setOrders(rawItems as OrderTransaction[]);
+            setPaginationMeta(meta);
         } catch (err) {
             console.error('Error fetching orders:', err);
         } finally {
             setLoading(false);
         }
-    }, [user]);
+    }, [user, page, limit, statusFilter, searchTerm]);
 
     const { socket } = useSocket();
 
@@ -730,6 +760,20 @@ export default function OrdersPage() {
                                 )}
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* Server-Side Pagination Bar */}
+                    <div className="border-t border-border px-4 py-2">
+                        <PaginationControl
+                            meta={paginationMeta}
+                            onPageChange={(newPage) => setPage(newPage)}
+                            onLimitChange={(newLimit) => {
+                                setLimit(newLimit);
+                                setPage(1);
+                            }}
+                            loading={loading}
+                            pageSizeOptions={[15, 25, 50, 100]}
+                        />
                     </div>
                 </CardContent>
             </Card>

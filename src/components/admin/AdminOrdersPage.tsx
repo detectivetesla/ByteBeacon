@@ -40,11 +40,11 @@ import {
     Download,
     FileSpreadsheet,
     FileText,
-    FileCode,
-    RotateCcw
+    FileCode
 } from 'lucide-react';
 import { exportOrders, exportViaApi } from '@/lib/export';
 import { cn } from '@/lib/utils';
+import PaginationControl, { PaginationMeta } from '@/components/common/PaginationControl';
 
 interface Order {
     id: string;
@@ -221,16 +221,43 @@ export default function AdminOrdersPage() {
         };
     }, [socket]);
 
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(50);
+    const [paginationMeta, setPaginationMeta] = useState<PaginationMeta>({
+        page: 1,
+        limit: 50,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false
+    });
+
     useEffect(() => {
         fetchOrders();
-    }, []);
+    }, [page, limit, activeStatusFilter, activeNetworkFilter, searchTerm]);
 
     const fetchOrders = async () => {
         setLoading(true);
         try {
-            // Fetch all orders with a large limit so no records are omitted
-            const data = await adminService.getTransactions({ limit: 5000 });
-            const ordersFormatted = data.map(order => ({
+            const res = await adminService.getTransactions({ 
+                page, 
+                limit,
+                status: activeStatusFilter !== 'all' ? activeStatusFilter : undefined,
+                network: activeNetworkFilter !== 'all' ? activeNetworkFilter : undefined,
+                search: searchTerm.trim() !== '' ? searchTerm.trim() : undefined
+            });
+
+            const rawItems = Array.isArray(res) ? res : (res?.data || []);
+            const meta: PaginationMeta = !Array.isArray(res) && res?.pagination ? res.pagination : {
+                page,
+                limit,
+                total: rawItems.length,
+                totalPages: Math.ceil(rawItems.length / limit) || 1,
+                hasNextPage: page < Math.ceil(rawItems.length / limit),
+                hasPreviousPage: page > 1
+            };
+
+            const ordersFormatted = rawItems.map(order => ({
                 id: order.id,
                 user_id: '',
                 user_name: order.userName || 'Unknown',
@@ -250,7 +277,9 @@ export default function AdminOrdersPage() {
                 sourceProvider: order.sourceProvider,
                 updatedAt: order.updatedAt
             }));
+
             setOrders(ordersFormatted);
+            setPaginationMeta(meta);
         } catch (err) {
             console.error('Error fetching orders:', err);
             toast({
@@ -939,6 +968,20 @@ export default function AdminOrdersPage() {
                                 )}
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* Server-Side Pagination Bar */}
+                    <div className="border-t border-border px-4 py-2">
+                        <PaginationControl
+                            meta={paginationMeta}
+                            onPageChange={(newPage) => setPage(newPage)}
+                            onLimitChange={(newLimit) => {
+                                setLimit(newLimit);
+                                setPage(1);
+                            }}
+                            loading={loading}
+                            pageSizeOptions={[25, 50, 100]}
+                        />
                     </div>
                 </CardContent>
             </Card>

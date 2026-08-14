@@ -82,16 +82,26 @@ const createUser = async (req, res) => {
     }
 };
 
-// Get all users
+// Get all users (with server-side pagination)
 const getAllUsers = async (req, res) => {
     try {
-        const { role, search, limit = 500, offset = 0 } = req.query;
+        const { parsePagination, buildPaginatedResponse } = require('../utils/pagination');
+        const { role, search } = req.query;
+        const { page, limit, offset, sortSql } = parsePagination(req.query, {
+            defaultPage: 1,
+            defaultLimit: 50,
+            maxLimit: 100,
+            allowedSortFields: {
+                createdAt: 'p.created_at',
+                name: 'p.full_name',
+                email: 'p.email',
+                phone: 'p.phone',
+                balance: 'p.wallet_balance'
+            },
+            defaultSort: 'p.created_at DESC'
+        });
 
-        let query = `
-            SELECT p.id, p.full_name, p.email, p.phone, p.wallet_balance, p.created_at,
-                   COALESCE(ur.role, 'customer') as role,
-                   s.id as store_id, s.store_name, s.slug as store_slug, s.activation_status as store_activation_status, s.review_status as store_review_status, s.is_visible as store_is_visible,
-                   k.id as api_key_id, k.api_key as raw_api_key, k.is_active as api_key_active, k.last_used as api_key_last_used, k.created_at as api_key_created_at
+        let baseFromWhere = `
             FROM profiles p
             LEFT JOIN user_roles ur ON p.id = ur.user_id::uuid
             LEFT JOIN agent_stores s ON p.id = s.user_id::uuid
@@ -102,23 +112,36 @@ const getAllUsers = async (req, res) => {
 
         if (role && role !== 'all') {
             if (role === 'customer') {
-                query += " AND (ur.role IS NULL OR ur.role = 'customer')";
+                baseFromWhere += " AND (ur.role IS NULL OR ur.role = 'customer')";
             } else {
-                query += ' AND ur.role = ?';
+                baseFromWhere += ' AND ur.role = ?';
                 params.push(role);
             }
         }
 
-        if (search) {
-            query += ' AND (p.full_name LIKE ? OR p.email LIKE ? OR p.phone LIKE ? OR s.store_name LIKE ?)';
-            const searchTerm = `%${search}%`;
+        if (search && search.trim() !== '') {
+            baseFromWhere += ' AND (p.full_name ILIKE ? OR p.email ILIKE ? OR p.phone ILIKE ? OR s.store_name ILIKE ?)';
+            const searchTerm = `%${search.trim()}%`;
             params.push(searchTerm, searchTerm, searchTerm, searchTerm);
         }
 
-        query += ' ORDER BY p.created_at DESC LIMIT ? OFFSET ?';
-        params.push(parseInt(limit), parseInt(offset));
+        // 1. Total matching count
+        const countQuery = `SELECT COUNT(*) as total ${baseFromWhere}`;
+        const [countRows] = await pool.execute(countQuery, params);
+        const total = parseInt(countRows[0]?.total || 0, 10);
 
-        const [users] = await pool.execute(query, params);
+        // 2. Paginated rows
+        const dataQuery = `
+            SELECT p.id, p.full_name, p.email, p.phone, p.wallet_balance, p.created_at,
+                   COALESCE(ur.role, 'customer') as role,
+                   s.id as store_id, s.store_name, s.slug as store_slug, s.activation_status as store_activation_status, s.review_status as store_review_status, s.is_visible as store_is_visible,
+                   k.id as api_key_id, k.api_key as raw_api_key, k.is_active as api_key_active, k.last_used as api_key_last_used, k.created_at as api_key_created_at
+            ${baseFromWhere}
+            ORDER BY ${sortSql}
+            LIMIT ? OFFSET ?
+        `;
+        const dataParams = [...params, limit, offset];
+        const [users] = await pool.execute(dataQuery, dataParams);
 
         const formatted = users.map(u => {
             let maskedKey = null;
@@ -156,7 +179,11 @@ const getAllUsers = async (req, res) => {
             };
         });
 
-        res.json(formatted);
+        if (req.query.legacy === 'true') {
+            return res.json(formatted);
+        }
+
+        res.json(buildPaginatedResponse(formatted, total, page, limit));
 
     } catch (error) {
         console.error('Get users error:', error);
@@ -319,13 +346,28 @@ const toggleUserStatus = async (req, res) => {
     }
 };
 
-// Get all transactions (admin - unified view of direct & agent store orders)
+// Get all transactions (admin - unified view of direct & agent store orders with server-side pagination)
 const getAllTransactions = async (req, res) => {
     try {
-        const { status, limit = 100, offset = 0 } = req.query;
+        const { parsePagination, buildPaginatedResponse } = require('../utils/pagination');
+        const { status, network, search } = req.query;
+        const { page, limit, offset, sortSql } = parsePagination(req.query, {
+            defaultPage: 1,
+            defaultLimit: 50,
+            maxLimit: 100,
+            allowedSortFields: {
+                createdAt: 'created_at',
+                updatedAt: 'updated_at',
+                amount: 'amount_ghc',
+                status: 'status',
+                network: 'network',
+                phone: 'recipient_phone'
+            },
+            defaultSort: 'created_at DESC'
+        });
 
-        let query = `
-            SELECT * FROM (
+        let baseFromWhere = `
+            FROM (
                 SELECT 
                     t.id::text as id, 
                     t.recipient_phone, 
@@ -387,14 +429,38 @@ const getAllTransactions = async (req, res) => {
         const params = [];
 
         if (status && status !== 'all') {
-            query += ' AND status = ?';
+            baseFromWhere += ' AND status = ?';
             params.push(status);
         }
 
-        query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-        params.push(parseInt(limit), parseInt(offset));
+        if (network && network !== 'all') {
+            baseFromWhere += ' AND LOWER(network) LIKE ?';
+            params.push(`%${network.toLowerCase()}%`);
+        }
 
-        const [transactions] = await pool.execute(query, params);
+        if (search && search.trim() !== '') {
+            const term = `%${search.trim()}%`;
+            baseFromWhere += ` AND (
+                recipient_phone LIKE ? 
+                OR user_name ILIKE ? 
+                OR user_email ILIKE ? 
+                OR id LIKE ? 
+                OR (serial_id IS NOT NULL AND serial_id::text LIKE ?)
+                OR datahouse_order_id ILIKE ?
+                OR reference_code ILIKE ?
+            )`;
+            params.push(term, term, term, term, term, term, term);
+        }
+
+        // 1. Total matching count
+        const countQuery = `SELECT COUNT(*) as total ${baseFromWhere}`;
+        const [countRows] = await pool.execute(countQuery, params);
+        const total = parseInt(countRows[0]?.total || 0, 10);
+
+        // 2. Paginated rows
+        const dataQuery = `SELECT * ${baseFromWhere} ORDER BY ${sortSql} LIMIT ? OFFSET ?`;
+        const dataParams = [...params, limit, offset];
+        const [transactions] = await pool.execute(dataQuery, dataParams);
 
         const formatted = transactions.map(t => ({
             id: t.id,
@@ -421,7 +487,11 @@ const getAllTransactions = async (req, res) => {
             syncStatus: t.sync_status || 'synced'
         }));
 
-        res.json(formatted);
+        if (req.query.legacy === 'true') {
+            return res.json(formatted);
+        }
+
+        res.json(buildPaginatedResponse(formatted, total, page, limit));
 
     } catch (error) {
         console.error('Get all transactions error:', error);
@@ -1313,16 +1383,23 @@ const updateAgentApplication = async (req, res) => {
         res.status(500).json({ error: 'Failed to update application' });
     }
 };
-// Get all activity logs for admin
+// Get all activity logs for admin (with server-side pagination)
 const getActivityLogs = async (req, res) => {
     try {
-        const { userId, action, search, startDate, endDate, limit = 100, offset = 0 } = req.query;
+        const { parsePagination, buildPaginatedResponse } = require('../utils/pagination');
+        const { userId, action, search, startDate, endDate } = req.query;
+        const { page, limit, offset, sortSql } = parsePagination(req.query, {
+            defaultPage: 1,
+            defaultLimit: 50,
+            maxLimit: 100,
+            allowedSortFields: {
+                createdAt: 'al.created_at',
+                action: 'al.action'
+            },
+            defaultSort: 'al.created_at DESC'
+        });
 
-        let query = `
-            SELECT al.*, 
-                   COALESCE(p.full_name, u.name, 'Admin/User') as full_name, 
-                   COALESCE(p.email, u.email, '') as email,
-                   COALESCE(ur.role::text, u.role::text, 'customer') as role
+        let baseFromWhere = `
             FROM activity_logs al
             LEFT JOIN users u ON al.user_id::text = u.uuid::text
             LEFT JOIN profiles p ON al.user_id::text = p.id::text
@@ -1332,36 +1409,49 @@ const getActivityLogs = async (req, res) => {
         const params = [];
 
         if (userId) {
-            query += ' AND al.user_id = ?::uuid';
+            baseFromWhere += ' AND al.user_id = ?::uuid';
             params.push(userId);
         }
 
         if (action && action !== 'all') {
-            query += ' AND al.action = ?';
+            baseFromWhere += ' AND al.action = ?';
             params.push(action);
         }
 
-        if (search) {
-            query += ' AND (p.full_name ILIKE ? OR u.name ILIKE ? OR p.email ILIKE ? OR u.email ILIKE ? OR al.description ILIKE ? OR al.action ILIKE ?)';
-            const searchPattern = `%${search}%`;
+        if (search && search.trim() !== '') {
+            baseFromWhere += ' AND (p.full_name ILIKE ? OR u.name ILIKE ? OR p.email ILIKE ? OR u.email ILIKE ? OR al.description ILIKE ? OR al.action ILIKE ?)';
+            const searchPattern = `%${search.trim()}%`;
             params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
         }
 
         // Date filtering for per-day tracking
         if (startDate) {
-            query += ' AND al.created_at::date >= ?::date';
+            baseFromWhere += ' AND al.created_at::date >= ?::date';
             params.push(startDate);
         }
 
         if (endDate) {
-            query += ' AND al.created_at::date <= ?::date';
+            baseFromWhere += ' AND al.created_at::date <= ?::date';
             params.push(endDate);
         }
 
-        query += ' ORDER BY al.created_at DESC LIMIT (?::INTEGER) OFFSET (?::INTEGER)';
-        params.push(parseInt(limit), parseInt(offset));
+        // 1. Total matching count
+        const countQuery = `SELECT COUNT(*) as total ${baseFromWhere}`;
+        const [countRows] = await pool.execute(countQuery, params);
+        const total = parseInt(countRows[0]?.total || 0, 10);
 
-        const [logs] = await pool.execute(query, params);
+        // 2. Paginated rows
+        const dataQuery = `
+            SELECT al.*, 
+                   COALESCE(p.full_name, u.name, 'Admin/User') as full_name, 
+                   COALESCE(p.email, u.email, '') as email,
+                   COALESCE(ur.role::text, u.role::text, 'customer') as role
+            ${baseFromWhere}
+            ORDER BY ${sortSql}
+            LIMIT ? OFFSET ?
+        `;
+        const dataParams = [...params, limit, offset];
+        const [logs] = await pool.execute(dataQuery, dataParams);
 
         const formatted = logs.map(log => {
             let parsedMetadata = log.metadata;
@@ -1382,7 +1472,11 @@ const getActivityLogs = async (req, res) => {
             };
         });
 
-        res.json(formatted);
+        if (req.query.legacy === 'true') {
+            return res.json(formatted);
+        }
+
+        res.json(buildPaginatedResponse(formatted, total, page, limit));
     } catch (error) {
         console.error('Get activity logs error:', error);
         res.status(500).json({ error: 'Failed to get activity logs' });

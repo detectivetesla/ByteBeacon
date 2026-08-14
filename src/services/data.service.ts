@@ -86,15 +86,29 @@ export const transactionService = {
         return api.post<PurchaseResponse>('/transactions/purchase', data);
     },
 
-    // Get user transactions
-    getAll: async (params?: { status?: string; limit?: number; offset?: number }): Promise<Transaction[]> => {
+    // Get user transactions with server-side pagination
+    getAll: async (params?: { 
+        status?: string; 
+        network?: string;
+        search?: string;
+        page?: number;
+        limit?: number; 
+        offset?: number;
+        sortBy?: string;
+        sortOrder?: string;
+    }): Promise<{ data: Transaction[]; pagination: any } | Transaction[]> => {
         const queryParams = new URLSearchParams();
         if (params?.status) queryParams.append('status', params.status);
+        if (params?.network) queryParams.append('network', params.network);
+        if (params?.search) queryParams.append('search', params.search);
+        if (params?.page) queryParams.append('page', params.page.toString());
         if (params?.limit) queryParams.append('limit', params.limit.toString());
         if (params?.offset) queryParams.append('offset', params.offset.toString());
+        if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+        if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
         const query = queryParams.toString();
-        return api.get<Transaction[]>(`/transactions${query ? `?${query}` : ''}`);
+        return api.get(`/transactions${query ? `?${query}` : ''}`);
     },
 
     // Get single transaction
