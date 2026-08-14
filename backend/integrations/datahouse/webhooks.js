@@ -134,7 +134,7 @@ async function recordWebhookEvent({ deliveryId, eventType, orderId, referenceCod
             `INSERT INTO datahouse_webhook_logs (event_id, event_type, datahouse_order_id, reference_code, payload, processed, created_at)
              VALUES (?, ?, ?, ?, ?::jsonb, true, CURRENT_TIMESTAMP)
              ON CONFLICT (event_id) DO UPDATE 
-             SET processed = true, updated_at = CURRENT_TIMESTAMP`,
+             SET processed = true`,
             [
                 deliveryId,
                 eventType,

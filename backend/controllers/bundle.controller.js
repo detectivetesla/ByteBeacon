@@ -295,4 +295,4 @@ const getBundleById = async (req, res) => {
     }
 };
 
-module.exports = { getAllBundles, getBundlesByNetwork, getBundleById };
+module.exports = { getAllBundles, getBundlesByNetwork, getBundleById, getUserCustomPricingMap };

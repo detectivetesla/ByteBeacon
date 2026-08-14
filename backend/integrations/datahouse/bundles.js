@@ -75,8 +75,8 @@ async function getBundles(params = {}) {
     }
 
     const queryParts = [];
-    if (network) queryParts.push(`network=${encodeURIComponent(network.toUpperCase())}`);
-    if (type) queryParts.push(`type=${encodeURIComponent(type)}`);
+    if (network && network !== 'ALL') queryParts.push(`network=${encodeURIComponent(network.toUpperCase())}`);
+    if (type) queryParts.push(`type=${encodeURIComponent(type.toLowerCase())}`);
     if (search) queryParts.push(`search=${encodeURIComponent(search)}`);
     if (page) queryParts.push(`page=${encodeURIComponent(page)}`);
     if (limit) queryParts.push(`limit=${encodeURIComponent(limit)}`);
@@ -142,16 +142,42 @@ async function getBundles(params = {}) {
 }
 
 /**
- * Retrieve a specific bundle by its DataHouse bundle ID
+ * Retrieve a specific bundle by its DataHouse bundle ID or local mapped bundle ID
  *
  * @param {string} bundleId
  * @returns {Promise<Object|null>}
  */
 async function getBundleById(bundleId) {
     if (!bundleId) return null;
+    const cleanId = String(bundleId).trim();
     const all = await getBundles({ limit: 100 });
-    if (!all.ok) return null;
-    return all.bundles.find(b => b.id === bundleId || String(b.id) === String(bundleId)) || null;
+    if (!all.ok || !Array.isArray(all.bundles)) return null;
+
+    // 1. Direct match on DataHouse bundle ID
+    const directMatch = all.bundles.find(b => b.id === cleanId || String(b.id) === cleanId);
+    if (directMatch) return directMatch;
+
+    // 2. Fallback: match via local database network + data amount mapping
+    try {
+        const pool = require('../../config/database');
+        const [dbRows] = await pool.execute(
+            'SELECT network, data_amount FROM data_bundles WHERE id::text = ? LIMIT 1',
+            [cleanId]
+        );
+        if (dbRows.length > 0) {
+            const net = (dbRows[0].network || '').toUpperCase();
+            const sizeGb = parseBundleSizeInGb({ dataVolume: dbRows[0].data_amount, dataSizeGb: dbRows[0].data_amount });
+            const matchedBySpec = all.bundles.find(b => 
+                (b.network || '').toUpperCase() === net && 
+                (b.dataSizeGb === sizeGb || (b.dataVolume && b.dataVolume.toUpperCase() === dbRows[0].data_amount.toUpperCase()))
+            );
+            if (matchedBySpec) return matchedBySpec;
+        }
+    } catch (e) {
+        // Continue
+    }
+
+    return null;
 }
 
 module.exports = {

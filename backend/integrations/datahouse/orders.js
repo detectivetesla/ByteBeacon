@@ -109,7 +109,7 @@ async function createBulkOrder({ network, recipients, idempotencyKey, confirmedP
 }
 
 /**
- * Fetch authoritative order details by DataHouse public order ID (GET /agent/orders/:id)
+ * Fetch authoritative order details by DataHouse public order ID or reference code
  *
  * @param {string} orderId - DataHouse public ID (ord_01J...) or referenceCode (TXN-...)
  * @returns {Promise<{ ok: boolean, status: number, data?: any, error?: any }>}
@@ -119,12 +119,38 @@ async function getOrderById(orderId) {
         return { ok: false, status: 400, error: { code: 'INVALID_REQUEST', message: 'Order ID is required' } };
     }
 
-    const res = await request({
-        method: 'GET',
-        path: `/agent/orders/${encodeURIComponent(orderId)}`
-    });
+    const cleanId = String(orderId).trim();
 
-    return res;
+    // 1. Direct fetch if it's a DataHouse public ID
+    if (cleanId.startsWith('ord_')) {
+        const res = await request({
+            method: 'GET',
+            path: `/agent/orders/${encodeURIComponent(cleanId)}`
+        });
+        if (res.ok) return res;
+    }
+
+    // 2. Search fallback by reference code or transaction reference
+    const searchRes = await listOrders({ search: cleanId, limit: 1 });
+    if (searchRes.ok) {
+        const items = searchRes.data?.data || searchRes.data?.items || searchRes.data?.orders || (Array.isArray(searchRes.data) ? searchRes.data : []);
+        if (items.length > 0) {
+            return {
+                ok: true,
+                status: 200,
+                data: items[0],
+                message: 'OK',
+                correlationId: searchRes.correlationId
+            };
+        }
+    }
+
+    return {
+        ok: false,
+        status: 404,
+        error: { code: 'NOT_FOUND', message: `Order ${cleanId} not found on DataHouse` },
+        data: null
+    };
 }
 
 /**

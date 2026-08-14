@@ -37,6 +37,7 @@ import {
     Loader2
 } from 'lucide-react';
 import { exportAgents, exportViaApi } from '@/lib/export';
+import { PaginationControl, PaginationMeta } from '@/components/common/PaginationControl';
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -89,6 +90,14 @@ export default function AdminAgentsPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState<'all' | 'agent' | 'superagent' | 'admin'>('all');
+    const [meta, setMeta] = useState<PaginationMeta>({
+        page: 1,
+        limit: 24,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false
+    });
 
     const [showEditModal, setShowEditModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -207,36 +216,28 @@ export default function AdminAgentsPage() {
         }
     };
 
-    const fetchAgents = useCallback(async () => {
+    const fetchAgents = useCallback(async (pageToFetch = 1) => {
         setLoading(true);
         try {
-            // Fetch users with agent, superagent, or admin roles
-            let agentData: any[] = [];
-            let superAgentData: any[] = [];
-            let adminData: any[] = [];
+            const role = roleFilter === 'all' ? 'resellers' : roleFilter;
+            const res = await adminService.getUsers({
+                role,
+                search: searchTerm,
+                page: pageToFetch,
+                limit: meta.limit
+            });
 
-            try {
-                const res = await adminService.getUsers({ role: 'agent' });
-                agentData = Array.isArray(res) ? res : (res?.data || []);
-            } catch (err) {
-                console.error('Error fetching agents:', err);
-            }
+            const usersList = Array.isArray(res) ? res : (res?.data || []);
+            const pagination = res?.pagination || {
+                page: pageToFetch,
+                limit: meta.limit,
+                total: usersList.length,
+                totalPages: Math.max(1, Math.ceil(usersList.length / meta.limit)),
+                hasNextPage: false,
+                hasPreviousPage: false
+            };
 
-            try {
-                const res = await adminService.getUsers({ role: 'superagent' });
-                superAgentData = Array.isArray(res) ? res : (res?.data || []);
-            } catch (err) {
-                console.error('Error fetching superagents:', err);
-            }
-
-            try {
-                const res = await adminService.getUsers({ role: 'admin' });
-                adminData = Array.isArray(res) ? res : (res?.data || []);
-            } catch (err) {
-                console.error('Error fetching admins:', err);
-            }
-
-            const allAgents = [...agentData, ...superAgentData, ...adminData].map(u => ({
+            const allAgents = usersList.map((u: any) => ({
                 id: u.id,
                 full_name: u.fullName,
                 email: u.email,
@@ -251,32 +252,25 @@ export default function AdminAgentsPage() {
             }));
 
             setAgents(allAgents);
-
-            if (allAgents.length === 0 && (agentData.length === 0 && superAgentData.length === 0 && adminData.length === 0)) {
-                // Only show error if all calls failed
-                toast({ title: 'Note', description: 'No resellers or agents found. Make sure the backend server is running on port 5000.', variant: 'default' });
-            }
+            setMeta(pagination);
         } catch (err) {
             console.error('Error fetching agents:', err);
             toast({ title: 'Error', description: 'Failed to fetch agents. Is the backend server running?', variant: 'destructive' });
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [roleFilter, searchTerm, meta.limit, toast]);
 
     useEffect(() => {
-        fetchAgents();
+        fetchAgents(1);
+    }, [roleFilter, searchTerm]);
+
+    useEffect(() => {
         fetchApplications();
         fetchCreditRequests();
-    }, [fetchAgents, fetchApplications, fetchCreditRequests]);
+    }, [fetchApplications, fetchCreditRequests]);
 
-    const filteredAgents = agents.filter(agent => {
-        const matchesSearch =
-            agent.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            agent.email.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesRole = roleFilter === 'all' || agent.role === roleFilter;
-        return matchesSearch && matchesRole;
-    });
+    const filteredAgents = agents;
 
     const handleEdit = (agent: Agent) => {
         setSelectedAgent(agent);
@@ -822,6 +816,22 @@ export default function AdminAgentsPage() {
                             </CardContent>
                         </Card>
                     ))}
+                </div>
+            )}
+
+            {/* Pagination Controls */}
+            {!loading && agents.length > 0 && (
+                <div className="pt-2">
+                    <PaginationControl
+                        meta={meta}
+                        onPageChange={(p) => fetchAgents(p)}
+                        onLimitChange={(lim) => {
+                            setMeta(prev => ({ ...prev, limit: lim, page: 1 }));
+                            fetchAgents(1);
+                        }}
+                        disabled={loading}
+                        pageSizeOptions={[12, 24, 48, 96]}
+                    />
                 </div>
             )}
 

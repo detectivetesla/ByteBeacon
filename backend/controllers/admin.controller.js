@@ -113,6 +113,8 @@ const getAllUsers = async (req, res) => {
         if (role && role !== 'all') {
             if (role === 'customer') {
                 baseFromWhere += " AND (ur.role IS NULL OR ur.role = 'customer')";
+            } else if (role === 'resellers' || role === 'agents') {
+                baseFromWhere += " AND ur.role IN ('agent', 'superagent', 'admin')";
             } else {
                 baseFromWhere += ' AND ur.role = ?';
                 params.push(role);
