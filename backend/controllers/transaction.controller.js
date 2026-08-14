@@ -61,8 +61,13 @@ const purchaseBundle = async (req, res) => {
 
         // Check for custom pricing override if set by admin
         const [customPricing] = await pool.execute(
-            'SELECT custom_price FROM agent_pricing WHERE agent_id = ?::uuid AND bundle_id::text = ?',
-            [userId, bundleId]
+            `SELECT ap.custom_price 
+             FROM agent_pricing ap 
+             LEFT JOIN data_bundles db ON ap.bundle_id = db.id 
+             WHERE ap.agent_id = ?::uuid 
+               AND (ap.bundle_id::text = ? OR (LOWER(TRIM(db.network)) = LOWER(TRIM(?)) AND LOWER(TRIM(db.data_amount)) = LOWER(TRIM(?))))
+             LIMIT 1`,
+            [userId, String(bundleId), network || '', dataAmount || '']
         ).catch(() => [[]]);
 
         if (customPricing.length > 0) {

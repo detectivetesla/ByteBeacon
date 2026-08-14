@@ -336,8 +336,12 @@ export const adminService = {
         return api.post(`/admin/agents/${agentId}/pricing`, { bundleId, customPrice });
     },
 
-    bulkSetAgentPricing: async (agentId: string, pricing: Array<{ bundleId: string; customPrice: number }>): Promise<{ message: string }> => {
-        return api.put(`/admin/agents/${agentId}/pricing/bulk`, { pricing });
+    bulkSetAgentPricing: async (
+        agentId: string, 
+        pricing: Array<{ bundleId: string; customPrice: number }>,
+        deletedBundleIds?: string[]
+    ): Promise<{ message: string }> => {
+        return api.put(`/admin/agents/${agentId}/pricing/bulk`, { pricing, deletedBundleIds });
     },
 
     deleteAgentPricing: async (agentId: string, bundleId: string): Promise<{ message: string }> => {

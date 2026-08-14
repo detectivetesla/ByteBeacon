@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminService, AgentPricing } from '@/services/admin.service';
-import { bundleService, Bundle } from '@/services/data.service';
+import { Bundle } from '@/services/data.service';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     Dialog,
@@ -13,7 +12,7 @@ import {
     DialogTitle,
     DialogFooter,
 } from '@/components/ui/dialog';
-import { DollarSign, Save, Loader2, X, RefreshCcw } from 'lucide-react';
+import { DollarSign, Save, Loader2, X } from 'lucide-react';
 
 interface AgentPricingModalProps {
     isOpen: boolean;
@@ -35,23 +34,23 @@ export default function AgentPricingModal({ isOpen, onClose, agentId, agentName 
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            // Fetch all bundles and existing custom pricing in parallel
+            // Fetch all admin bundles and existing custom pricing in parallel
             const [bundlesData, pricingData] = await Promise.all([
-                bundleService.getAll(),
+                adminService.getAllBundles(),
                 adminService.getAgentPricing(agentId)
             ]);
 
-            setBundles(bundlesData);
-            setExistingPricing(pricingData);
+            setBundles(bundlesData || []);
+            setExistingPricing(pricingData || []);
 
             // Pre-populate input fields with existing custom prices
             const priceMap: Record<string, string> = {};
-            pricingData.forEach(p => {
+            (pricingData || []).forEach(p => {
                 priceMap[p.bundleId] = p.customPrice.toFixed(2);
             });
             setCustomPrices(priceMap);
         } catch (error) {
-            console.error('Error fetching data:', error);
+            console.error('Error fetching pricing data:', error);
             toast({
                 title: 'Error',
                 description: 'Failed to load pricing data.',
@@ -78,23 +77,27 @@ export default function AgentPricingModal({ isOpen, onClose, agentId, agentName 
     const handleSave = async () => {
         setSaving(true);
         try {
-            // Filter only bundles with custom prices set
-            const pricing = Object.entries(customPrices)
-                .filter(([_, price]) => price && price.trim() !== '')
-                .map(([bundleId, price]) => ({
-                    bundleId,
-                    customPrice: parseFloat(price)
-                }));
+            const pricing: Array<{ bundleId: string; customPrice: number }> = [];
+            const deletedBundleIds: string[] = [];
 
-            if (pricing.length === 0) {
-                toast({
-                    title: 'No changes',
-                    description: 'No custom prices were set.',
-                });
-                return;
-            }
+            bundles.forEach(b => {
+                const val = customPrices[b.id];
+                const wasExisting = existingPricing.some(p => p.bundleId === b.id);
 
-            await adminService.bulkSetAgentPricing(agentId, pricing);
+                if (val !== undefined && val !== null && val.trim() !== '') {
+                    const parsed = parseFloat(val);
+                    if (!isNaN(parsed) && parsed >= 0) {
+                        pricing.push({
+                            bundleId: b.id,
+                            customPrice: parsed
+                        });
+                    }
+                } else if (wasExisting) {
+                    deletedBundleIds.push(b.id);
+                }
+            });
+
+            await adminService.bulkSetAgentPricing(agentId, pricing, deletedBundleIds);
 
             toast({
                 title: 'Success',
@@ -137,7 +140,7 @@ export default function AgentPricingModal({ isOpen, onClose, agentId, agentName 
     };
 
     const getBundlesByNetwork = (network: string) => {
-        return bundles.filter(b => b.network.toLowerCase() === network.toLowerCase());
+        return bundles.filter(b => (b.network || '').toLowerCase() === network.toLowerCase());
     };
 
     return (
@@ -146,7 +149,7 @@ export default function AgentPricingModal({ isOpen, onClose, agentId, agentName 
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <DollarSign className="w-5 h-5 text-primary" />
-                        Custom Agent Pricing for {agentName}
+                        Custom Individual Pricing for {agentName}
                     </DialogTitle>
                 </DialogHeader>
 
@@ -179,9 +182,9 @@ export default function AgentPricingModal({ isOpen, onClose, agentId, agentName 
                                             return (
                                                 <div key={bundle.id} className="grid grid-cols-4 gap-2 items-center p-2 rounded-lg bg-muted/30 hover:bg-muted/50">
                                                     <span className="font-medium">{bundle.dataAmount}</span>
-                                                    <span className="text-sm">GH₵ {bundle.priceGhc.toFixed(2)}</span>
+                                                    <span className="text-sm">GH₵ {Number(bundle.priceGhc || 0).toFixed(2)}</span>
                                                     <span className="text-sm text-muted-foreground">
-                                                        {bundle.agentPriceGhc ? `GH₵ ${bundle.agentPriceGhc.toFixed(2)}` : '-'}
+                                                        {bundle.agentPriceGhc ? `GH₵ ${Number(bundle.agentPriceGhc).toFixed(2)}` : '-'}
                                                     </span>
                                                     <div className="flex items-center gap-1">
                                                         <Input

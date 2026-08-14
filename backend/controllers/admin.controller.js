@@ -1843,7 +1843,7 @@ const deleteAgentPricing = async (req, res) => {
 const bulkSetAgentPricing = async (req, res) => {
     try {
         const { agentId } = req.params;
-        const { pricing } = req.body; // Array of { bundleId, customPrice }
+        const { pricing = [], deletedBundleIds = [] } = req.body; // Array of { bundleId, customPrice }
 
         if (!Array.isArray(pricing)) {
             return res.status(400).json({ error: 'Pricing must be an array' });
@@ -1853,8 +1853,20 @@ const bulkSetAgentPricing = async (req, res) => {
         await connection.beginTransaction();
 
         try {
+            // 1. Process deletions
+            if (Array.isArray(deletedBundleIds) && deletedBundleIds.length > 0) {
+                for (const delBundleId of deletedBundleIds) {
+                    if (!delBundleId) continue;
+                    await connection.execute(
+                        'DELETE FROM agent_pricing WHERE agent_id = ?::uuid AND bundle_id = ?::uuid',
+                        [agentId, delBundleId]
+                    );
+                }
+            }
+
+            // 2. Process upserts
             for (const item of pricing) {
-                if (!item.bundleId || item.customPrice === undefined) continue;
+                if (!item.bundleId || item.customPrice === undefined || item.customPrice === null) continue;
 
                 const [existing] = await connection.execute(
                     'SELECT id FROM agent_pricing WHERE agent_id = ?::uuid AND bundle_id = ?::uuid',
@@ -1863,13 +1875,13 @@ const bulkSetAgentPricing = async (req, res) => {
 
                 if (existing.length > 0) {
                     await connection.execute(
-                        'UPDATE agent_pricing SET custom_price = ? WHERE agent_id = ?::uuid AND bundle_id = ?::uuid',
+                        'UPDATE agent_pricing SET custom_price = ?, updated_at = NOW() WHERE agent_id = ?::uuid AND bundle_id = ?::uuid',
                         [item.customPrice, agentId, item.bundleId]
                     );
                 } else {
                     const id = require('uuid').v4();
                     await connection.execute(
-                        'INSERT INTO agent_pricing (id, agent_id, bundle_id, custom_price) VALUES (?::uuid, ?::uuid, ?::uuid, ?)',
+                        'INSERT INTO agent_pricing (id, agent_id, bundle_id, custom_price, created_at, updated_at) VALUES (?::uuid, ?::uuid, ?::uuid, ?, NOW(), NOW())',
                         [id, agentId, item.bundleId, item.customPrice]
                     );
                 }
