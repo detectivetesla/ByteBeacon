@@ -36,11 +36,11 @@ const datahouseWebhook = async (req, res) => {
         }
 
         const eventData = req.body;
-        if (!eventData || !eventData.type) {
+        if (!eventData || (!eventData.type && !eventData.event)) {
             return res.status(400).json({ error: 'Missing event payload or event type' });
         }
 
-        const eventType = eventData.type;
+        const eventType = eventData.type || eventData.event;
         const payloadData = eventData.data || {};
         const deliveryId = extractDeliveryId(req.headers, eventData);
 
@@ -110,6 +110,20 @@ const datahouseWebhook = async (req, res) => {
         if (txRows.length > 0) {
             const tx = txRows[0];
             const previousStatus = tx.status;
+
+            // Stale update protection: Terminal provider states must never be regressed by out-of-order non-terminal events
+            const terminalStatuses = ['approved', 'completed', 'fulfilled', 'rejected', 'failed', 'refunded'];
+            const isIncomingNonTerminal = ['received', 'processing'].includes(finalStatus);
+            const isPreviousTerminal = terminalStatuses.includes(previousStatus);
+
+            if (isPreviousTerminal && isIncomingNonTerminal) {
+                console.warn(`⚠️ [DataHouse Webhook] Stale out-of-order event ${eventType} (${finalStatus}) ignored for terminal order ${tx.id} (${previousStatus})`);
+                return res.status(200).json({ 
+                    success: true, 
+                    message: 'Stale webhook ignored - order already in terminal state',
+                    currentStatus: previousStatus 
+                });
+            }
 
             // Update synchronized order record
             await pool.execute(

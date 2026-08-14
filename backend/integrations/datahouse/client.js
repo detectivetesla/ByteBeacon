@@ -12,7 +12,7 @@ const http = require('http');
 const DEFAULT_BASE_URL = 'https://api.getmorepaylessdatahouse.net/api/v1';
 
 function getBaseUrl() {
-    return process.env.DATAHOUSE_API_BASE_URL || DEFAULT_BASE_URL;
+    return process.env.DATAHOUSE_API_BASE_URL || process.env.DATAHOUSE_BASE_URL || DEFAULT_BASE_URL;
 }
 
 let cachedDbApiKey = null;

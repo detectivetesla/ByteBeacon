@@ -460,49 +460,13 @@ const getTransactionStats = async (req, res) => {
     }
 };
 
-// Update transaction status
+// Update transaction status - DEPRECATED: Disallow direct manual status mutations; redirect to authoritative DataHouse sync
 const updateTransactionStatus = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { status } = req.body;
-
-        if (!['processing', 'completed', 'failed'].includes(status)) {
-            return res.status(400).json({ error: 'Invalid status' });
-        }
-
-        // Get transaction details for refund check
-        const [tx] = await pool.execute('SELECT user_id, amount_ghc, status FROM transactions WHERE id = ?::uuid', [id]);
-        if (tx.length === 0) return res.status(404).json({ error: 'Transaction not found' });
-        const transaction = tx[0];
-
-        await pool.execute(
-            'UPDATE transactions SET status = ?, updated_at = NOW() WHERE id = ?::uuid',
-            [status, id]
-        );
-
-        // Trigger partner webhook if applicable
-        triggerTransactionWebhook(id, status).catch(() => {});
-
-        // Robustness: Automatic refund if status changed to failed
-        if (status === 'failed' && transaction.status !== 'failed') {
-            const { processAutomatedRefund } = require('../utils/refundHelper');
-            console.log(`💰 Admin: Automated refund triggered for failed transaction ${id}. Amount: ₵${transaction.amount_ghc}`);
-            await processAutomatedRefund({
-                transactionId: id,
-                userId: transaction.user_id,
-                amountGhc: transaction.amount_ghc,
-                reason: 'Admin manual status update to failed'
-            });
-        }
-
-        logActivity(req.user?.id, 'ORDER_STATUS_CHANGED', `Updated order ${id.slice(0, 8)} status to ${status}`, { transactionId: id, status, amount: transaction.amount_ghc }, req.ip);
-
-        res.json({ message: `Transaction status updated to ${status}` });
-
-    } catch (error) {
-        console.error('Update transaction error:', error);
-        res.status(500).json({ error: 'Failed to update transaction' });
-    }
+    return res.status(405).json({
+        success: false,
+        error: 'MANUAL_STATUS_MUTATION_DISALLOWED',
+        message: 'Direct telecom status mutation is disabled. Telecom orders are strictly governed by DataHouse. Use /api/transactions/:id/sync to reconcile with DataHouse.'
+    });
 };
 
 // CRUD for bundles
